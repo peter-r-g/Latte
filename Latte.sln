@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33723.286
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.TestBed", "Latte.TestBed\Latte.TestBed.csproj", "{AC36EE20-F167-4844-AAE9-B61B8501E1AF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.Windowing", "Latte.Windowing\Latte.Windowing.csproj", "{A4CE5584-C40A-4246-8297-2DE8FFEAE0D4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AC36EE20-F167-4844-AAE9-B61B8501E1AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC36EE20-F167-4844-AAE9-B61B8501E1AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC36EE20-F167-4844-AAE9-B61B8501E1AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC36EE20-F167-4844-AAE9-B61B8501E1AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4CE5584-C40A-4246-8297-2DE8FFEAE0D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4CE5584-C40A-4246-8297-2DE8FFEAE0D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4CE5584-C40A-4246-8297-2DE8FFEAE0D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4CE5584-C40A-4246-8297-2DE8FFEAE0D4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {45C5CD34-4BD5-434B-9205-A05AFBF64BC2}
+	EndGlobalSection
+EndGlobal
