@@ -11,8 +11,6 @@ using Silk.NET.Windowing;
 using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.IO;
