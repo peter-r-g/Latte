@@ -41,23 +41,22 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private static Vk Vk => Apis.Vk;
 	private static ExtDebugUtils? DebugUtils { get; set; } = null!;
-	private static KhrSurface KhrSurface { get; set; } = null!;
-	private static KhrSwapchain KhrSwapchain { get; set; } = null!;
 
 	private IWindow Window { get; }
 	private Instance Instance { get; set; }
 	private Gpu Gpu { get; set; } = null!;
 	private DebugUtilsMessengerEXT DebugMessenger { get; set; }
+	private KhrSurface KhrSurface { get; set; } = null!;
 	private SurfaceKHR Surface { get; set; }
 
-	private Device LogicalDevice { get; set; }
-	private Queue GraphicsQueue { get; set; }
-	private Queue PresentQueue { get; set; }
-	private SwapchainKHR Swapchain { get; set; }
-	private Image[] SwapchainImages { get; set; } = Array.Empty<Image>();
-	private ImageView[] SwapchainImageViews { get; set; } = Array.Empty<ImageView>();
-	private Format SwapchainImageFormat { get; set; }
-	private Extent2D SwapchainExtent { get; set; }
+	private LogicalGpu LogicalGpu { get; set; } = null!;
+	private SwapchainKHR Swapchain => LogicalGpu.Swapchain;
+	private Image[] SwapchainImages => LogicalGpu.SwapchainImages;
+	private ImageView[] SwapchainImageViews => LogicalGpu.SwapchainImageViews;
+	private Format SwapchainImageFormat => LogicalGpu.SwapchainImageFormat;
+	private Extent2D SwapchainExtent => LogicalGpu.SwapchainExtent;
+	private KhrSwapchain KhrSwapchain => LogicalGpu.SwapchainExtension;
+
 	private RenderPass RenderPass { get; set; }
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
 	private PipelineLayout PipelineLayout { get; set; }
@@ -138,7 +137,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		PickPhysicalDevice();
 		CreateLogicalDevice();
 		CreateSwapChain();
-		CreateImageViews();
 		CreateRenderPass();
 		CreateDescriptorSetLayout();
 		CreateGraphicsPipeline();
@@ -175,11 +173,11 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	public void DrawFrame( double dt )
 	{
-		if ( Vk.WaitForFences( LogicalDevice, 1, InFlightFences[CurrentFrame], Vk.True, ulong.MaxValue ) != Result.Success )
+		if ( Vk.WaitForFences( LogicalGpu, 1, InFlightFences[CurrentFrame], Vk.True, ulong.MaxValue ) != Result.Success )
 			throw new ApplicationException( "Failed to wait for in flight fence" );
 
 		uint imageIndex;
-		var result = KhrSwapchain.AcquireNextImage( LogicalDevice, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
+		var result = KhrSwapchain.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -193,7 +191,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				throw new ApplicationException( "Failed to acquire next image in the swap chain" );
 		}
 
-		if ( Vk.ResetFences( LogicalDevice, 1, InFlightFences[CurrentFrame] ) != Result.Success )
+		if ( Vk.ResetFences( LogicalGpu, 1, InFlightFences[CurrentFrame] ) != Result.Success )
 			throw new ApplicationException( "Failed to reset in flight fence" );
 
 		if ( Vk.ResetCommandBuffer( CommandBuffers[CurrentFrame], 0 ) != Result.Success )
@@ -228,7 +226,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		submitInfo.SignalSemaphoreCount = (uint)signalSemaphoreCount;
 		submitInfo.PSignalSemaphores = signalSemaphores;
 
-		if ( Vk.QueueSubmit( GraphicsQueue, 1, submitInfo, InFlightFences[CurrentFrame] ) != Result.Success )
+		if ( Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, InFlightFences[CurrentFrame] ) != Result.Success )
 			throw new ApplicationException( "Failed to submit command buffers to graphics queue" );
 
 		var swapchainCount = 1;
@@ -245,7 +243,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PImageIndices = &imageIndex
 		};
 
-		result = KhrSwapchain.QueuePresent( PresentQueue, presentInfo );
+		result = KhrSwapchain.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -264,7 +262,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	public void WaitForIdle()
 	{
-		Vk.DeviceWaitIdle( LogicalDevice );
+		Vk.DeviceWaitIdle( LogicalGpu );
 	}
 
 	public void DrawModel( Model model ) => DrawModel( model, Vector3.Zero );
@@ -370,84 +368,84 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			out var stagingBuffer, out var stagingBufferMemory );
 
 		void* dataPtr;
-		if ( Vk.MapMemory( LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &dataPtr ) != Result.Success )
+		if ( Vk.MapMemory( LogicalGpu, stagingBufferMemory, 0, bufferSize, 0, &dataPtr ) != Result.Success )
 			throw new ApplicationException( "Failed to map staging buffer memory" );
 
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
-		Vk.UnmapMemory( LogicalDevice, stagingBufferMemory );
+		Vk.UnmapMemory( LogicalGpu, stagingBufferMemory );
 
 		CopyBuffer( stagingBuffer, buffer, bufferSize );
 
-		Vk.DestroyBuffer( LogicalDevice, stagingBuffer, null );
-		Vk.FreeMemory( LogicalDevice, stagingBufferMemory, null );
+		Vk.DestroyBuffer( LogicalGpu, stagingBuffer, null );
+		Vk.FreeMemory( LogicalGpu, stagingBufferMemory, null );
 	}
 	#endregion
 
 	#region Internal
 	private void CleanupSwapChain()
 	{
-		Vk.DestroyImageView( LogicalDevice, ColorImageView, null );
-		Vk.DestroyImage( LogicalDevice, ColorImage, null );
-		Vk.FreeMemory( LogicalDevice, ColorImageMemory, null );
+		Vk.DestroyImageView( LogicalGpu, ColorImageView, null );
+		Vk.DestroyImage( LogicalGpu, ColorImage, null );
+		Vk.FreeMemory( LogicalGpu, ColorImageMemory, null );
 
-		Vk.DestroyImageView( LogicalDevice, DepthImageView, null );
-		Vk.DestroyImage( LogicalDevice, DepthImage, null );
-		Vk.FreeMemory( LogicalDevice, DepthImageMemory, null );
+		Vk.DestroyImageView( LogicalGpu, DepthImageView, null );
+		Vk.DestroyImage( LogicalGpu, DepthImage, null );
+		Vk.FreeMemory( LogicalGpu, DepthImageMemory, null );
 
 		foreach ( var frameBuffer in SwapchainFrameBuffers )
-			Vk.DestroyFramebuffer( LogicalDevice, frameBuffer, null );
+			Vk.DestroyFramebuffer( LogicalGpu, frameBuffer, null );
 
 		foreach ( var imageView in SwapchainImageViews )
-			Vk.DestroyImageView( LogicalDevice, imageView, null );
+			Vk.DestroyImageView( LogicalGpu, imageView, null );
 
-		KhrSwapchain.DestroySwapchain( LogicalDevice, Swapchain, null );
+		KhrSwapchain.DestroySwapchain( LogicalGpu, Swapchain, null );
 	}
 
 	private void CleanupLogicalDevice()
 	{
 		CleanupSwapChain();
 
-		Vk.DestroyDescriptorPool( LogicalDevice, DescriptorPool, null );
-		Vk.DestroyDescriptorSetLayout( LogicalDevice, DescriptorSetLayout, null );
-		Vk.DestroyPipeline( LogicalDevice, GraphicsPipeline, null );
-		Vk.DestroyPipelineLayout( LogicalDevice, PipelineLayout, null );
-		Vk.DestroyRenderPass( LogicalDevice, RenderPass, null );
+		Vk.DestroyDescriptorPool( LogicalGpu, DescriptorPool, null );
+		Vk.DestroyDescriptorSetLayout( LogicalGpu, DescriptorSetLayout, null );
+		Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
+		Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
+		Vk.DestroyRenderPass( LogicalGpu, RenderPass, null );
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			Vk.DestroySemaphore( LogicalDevice, ImageAvailableSemaphores[i], null );
-			Vk.DestroySemaphore( LogicalDevice, RenderFinishedSemaphores[i], null );
-			Vk.DestroyFence( LogicalDevice, InFlightFences[i], null );
+			Vk.DestroySemaphore( LogicalGpu, ImageAvailableSemaphores[i], null );
+			Vk.DestroySemaphore( LogicalGpu, RenderFinishedSemaphores[i], null );
+			Vk.DestroyFence( LogicalGpu, InFlightFences[i], null );
 		}
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			Vk.DestroyBuffer( LogicalDevice, UniformBuffers[i], null );
-			Vk.FreeMemory( LogicalDevice, UniformBuffersMemory[i], null );
+			Vk.DestroyBuffer( LogicalGpu, UniformBuffers[i], null );
+			Vk.FreeMemory( LogicalGpu, UniformBuffersMemory[i], null );
 		}
 
 		foreach ( var (_, buffers) in GpuBuffers )
 		{
 			for ( var i = 0; i < buffers.Count; i++ )
-				Vk.DestroyBuffer( LogicalDevice, buffers[i], null );
+				Vk.DestroyBuffer( LogicalGpu, buffers[i], null );
 		}
 		GpuBuffers.Clear();
 
 		foreach ( var (_, buffersMemory) in GpuBuffersMemory )
 		{
 			for ( var i = 0; i < buffersMemory.Count; i++ )
-				Vk.FreeMemory( LogicalDevice, buffersMemory[i], null );
+				Vk.FreeMemory( LogicalGpu, buffersMemory[i], null );
 		}
 		GpuBuffersMemory.Clear();
 		GpuBuffersOffsets.Clear();
 
-		Vk.DestroySampler( LogicalDevice, TextureSampler, null );
-		Vk.DestroyImageView( LogicalDevice, TextureImageView, null );
-		Vk.DestroyImage( LogicalDevice, TextureImage, null );
-		Vk.FreeMemory( LogicalDevice, TextureImageMemory, null );
+		Vk.DestroySampler( LogicalGpu, TextureSampler, null );
+		Vk.DestroyImageView( LogicalGpu, TextureImageView, null );
+		Vk.DestroyImage( LogicalGpu, TextureImage, null );
+		Vk.FreeMemory( LogicalGpu, TextureImageMemory, null );
 
-		Vk.DestroyCommandPool( LogicalDevice, CommandPool, null );
-		Vk.DestroyDevice( LogicalDevice, null );
+		Vk.DestroyCommandPool( LogicalGpu, CommandPool, null );
+		Vk.DestroyDevice( LogicalGpu, null );
 	}
 
 	private void RecreateSwapChain()
@@ -462,7 +460,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		CleanupSwapChain();
 
 		CreateSwapChain();
-		CreateImageViews();
 		CreateColorResources();
 		CreateDepthResources();
 		CreateFrameBuffers();
@@ -476,7 +473,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		CreateLogicalDevice();
 		CreateSwapChain();
-		CreateImageViews();
 		CreateRenderPass();
 		CreateDescriptorSetLayout();
 		CreateGraphicsPipeline();
@@ -508,12 +504,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var ubo = new UniformBufferObject( view, projection );
 
 		void* data;
-		if ( Vk.MapMemory( LogicalDevice, UniformBuffersMemory[currentImage], 0, (ulong)sizeof( UniformBufferObject ), 0, &data ) != Result.Success )
+		if ( Vk.MapMemory( LogicalGpu, UniformBuffersMemory[currentImage], 0, (ulong)sizeof( UniformBufferObject ), 0, &data ) != Result.Success )
 			throw new ApplicationException( "Failed to map memory of the UBO" );
 
 		new Span<UniformBufferObject>( data, 1 )[0] = ubo;
 
-		Vk.UnmapMemory( LogicalDevice, UniformBuffersMemory[currentImage] );
+		Vk.UnmapMemory( LogicalGpu, UniformBuffersMemory[currentImage] );
 	}
 
 	private void RecordCommandBuffer( in CommandBuffer commandBuffer, uint imageIndex, double dt )
@@ -670,145 +666,29 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void PickPhysicalDevice()
 	{
-		var chosenGpu = AllGpus.GetBestGpu( out var deviceScore, IsDeviceSuitable );
-		Gpu = chosenGpu;
-		if ( chosenGpu.PhysicalDevice.Handle == nint.Zero || deviceScore <= 0 )
+		Gpu = AllGpus.GetBestGpu( out var deviceScore, IsDeviceSuitable );
+		if ( Gpu.PhysicalDevice.Handle == nint.Zero || deviceScore <= 0 )
 			throw new ApplicationException( "Failed to find a suitable device" );
 	}
 
 	private void CreateLogicalDevice()
 	{
 		var indices = Gpu.GetQueueFamilyIndices( KhrSurface, Surface );
-		if ( !indices.IsComplete() )
-			throw new ApplicationException( "Attempted to create a logical device from indices that are not complete" );
 
-		var queuePriority = 1f;
-		var uniqueIndices = indices.GetUniqueFamilies();
-
-		DeviceQueueCreateInfo* queueCreateInfos = stackalloc DeviceQueueCreateInfo[uniqueIndices.Count];
-		var i = 0;
-		foreach ( var index in uniqueIndices )
-		{
-			queueCreateInfos[i] = new DeviceQueueCreateInfo
-			{
-				SType = StructureType.DeviceQueueCreateInfo,
-				QueueFamilyIndex = index,
-				QueueCount = 1,
-				PQueuePriorities = &queuePriority
-			};
-
-			i++;
-		}
-
-		var deviceFeatures = new PhysicalDeviceFeatures()
+		var features = new PhysicalDeviceFeatures
 		{
 			SamplerAnisotropy = Options.Msaa != MsaaOption.One ? Vk.True : Vk.False,
 			SampleRateShading = Vk.True,
 			FillModeNonSolid = Options.WireframeEnabled ? Vk.True : Vk.False
 		};
 
-		var deviceCreateInfo = new DeviceCreateInfo
-		{
-			SType = StructureType.DeviceCreateInfo,
-			QueueCreateInfoCount = (uint)uniqueIndices.Count,
-			PQueueCreateInfos = queueCreateInfos,
-			PEnabledFeatures = &deviceFeatures,
-			EnabledExtensionCount = (uint)DeviceExtensions.Length,
-			PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( DeviceExtensions )
-		};
-
-		if ( EnableValidationLayers )
-		{
-			deviceCreateInfo.EnabledLayerCount = (uint)ValidationLayers.Length;
-			deviceCreateInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr( ValidationLayers );
-		}
-		else
-			deviceCreateInfo.EnabledLayerCount = 0;
-
-		if ( Vk.CreateDevice( Gpu, deviceCreateInfo, null, out var logicalDevice ) != Result.Success )
-			throw new ApplicationException( "Failed to create logical Vulkan device" );
-
-		LogicalDevice = logicalDevice;
-		GraphicsQueue = Vk.GetDeviceQueue( LogicalDevice, indices.GraphicsFamily.Value, 0 );
-		PresentQueue = Vk.GetDeviceQueue( LogicalDevice, indices.PresentFamily.Value, 0 );
-
-		if ( EnableValidationLayers )
-			SilkMarshal.Free( (nint)deviceCreateInfo.PpEnabledLayerNames );
+		LogicalGpu = Gpu.CreateLogicalDevice( KhrSurface, Surface, indices, features,
+			DeviceExtensions, EnableValidationLayers, ValidationLayers );
 	}
 
 	private void CreateSwapChain()
 	{
-		var swapChainSupport = Gpu.GetSwapChainSupport( KhrSurface, Surface );
-
-		var surfaceFormat = ChooseSwapSurfaceFormat( swapChainSupport.Formats );
-		var presentMode = ChooseSwapPresentMode( swapChainSupport.PresentModes );
-		var extent = ChooseSwapExtent( Window, swapChainSupport.Capabilities );
-
-		var imageCount = swapChainSupport.Capabilities.MinImageCount + ExtraSwapImages;
-		if ( swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount )
-			imageCount = swapChainSupport.Capabilities.MaxImageCount;
-
-		var createInfo = new SwapchainCreateInfoKHR
-		{
-			SType = StructureType.SwapchainCreateInfoKhr,
-			Surface = Surface,
-			MinImageCount = imageCount,
-			ImageFormat = surfaceFormat.Format,
-			ImageColorSpace = surfaceFormat.ColorSpace,
-			ImageExtent = extent,
-			ImageArrayLayers = 1,
-			ImageUsage = ImageUsageFlags.ColorAttachmentBit
-		};
-
-		var indices = Gpu.GetQueueFamilyIndices( KhrSurface, Surface );
-		if ( !indices.IsComplete() )
-			throw new ApplicationException( "Attempted to create a swap chain from indices that are not complete" );
-
-		uint* queueFamilyIndices = stackalloc uint[2];
-		queueFamilyIndices[0] = indices.GraphicsFamily.Value;
-		queueFamilyIndices[1] = indices.PresentFamily.Value;
-
-		if ( indices.GraphicsFamily != indices.PresentFamily )
-		{
-			createInfo.ImageSharingMode = SharingMode.Concurrent;
-			createInfo.QueueFamilyIndexCount = 2;
-			createInfo.PQueueFamilyIndices = queueFamilyIndices;
-		}
-		else
-			createInfo.ImageSharingMode = SharingMode.Exclusive;
-
-		createInfo.PreTransform = swapChainSupport.Capabilities.CurrentTransform;
-		createInfo.CompositeAlpha = CompositeAlphaFlagsKHR.OpaqueBitKhr;
-		createInfo.PresentMode = presentMode;
-		createInfo.Clipped = Vk.True;
-
-		if ( !Vk.TryGetDeviceExtension<KhrSwapchain>( Instance, LogicalDevice, out var khrSwapchain ) )
-			throw new ApplicationException( "Failed to get KHR_swapchain extension" );
-
-		KhrSwapchain = khrSwapchain;
-
-		if ( KhrSwapchain.CreateSwapchain( LogicalDevice, createInfo, null, out var swapchain ) != Result.Success )
-			throw new ApplicationException( "Failed to create swap chain" );
-
-		Swapchain = swapchain;
-
-		if ( KhrSwapchain.GetSwapchainImages( LogicalDevice, Swapchain, &imageCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to get swap chain images (1)" );
-
-		SwapchainImages = new Image[imageCount];
-		if ( KhrSwapchain.GetSwapchainImages( LogicalDevice, Swapchain, &imageCount, SwapchainImages ) != Result.Success )
-			throw new ApplicationException( "Failed to get swap chain images (2)" );
-
-		SwapchainImageFormat = surfaceFormat.Format;
-		SwapchainExtent = extent;
-	}
-
-	private void CreateImageViews()
-	{
-		SwapchainImageViews = new ImageView[SwapchainImages.Length];
-
-		for ( var i = 0; i < SwapchainImages.Length; i++ )
-			SwapchainImageViews[i] = CreateImageView( SwapchainImages[i], SwapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
+		LogicalGpu.CreateSwapchain( Window, Instance, KhrSurface, Surface );
 	}
 
 	private void CreateRenderPass()
@@ -907,7 +787,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PDependencies = &subpassDependency
 		};
 
-		if ( Vk.CreateRenderPass( LogicalDevice, renderPassInfo, null, out var renderPass ) != Result.Success )
+		if ( Vk.CreateRenderPass( LogicalGpu, renderPassInfo, null, out var renderPass ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan render pass" );
 
 		RenderPass = renderPass;
@@ -944,7 +824,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PBindings = bindings
 		};
 
-		if ( Vk.CreateDescriptorSetLayout( LogicalDevice, layoutInfo, null, out var descriptorSetLayout ) != Result.Success )
+		if ( Vk.CreateDescriptorSetLayout( LogicalGpu, layoutInfo, null, out var descriptorSetLayout ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan descriptor set layout" );
 
 		DescriptorSetLayout = descriptorSetLayout;
@@ -1116,7 +996,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				PPushConstantRanges = pushConstants
 			};
 
-			if ( Vk.CreatePipelineLayout( LogicalDevice, pipelineLayoutInfo, null, out var pipelineLayout ) != Result.Success )
+			if ( Vk.CreatePipelineLayout( LogicalGpu, pipelineLayoutInfo, null, out var pipelineLayout ) != Result.Success )
 				throw new ApplicationException( "Failed to create Vulkan pipeline layout" );
 
 			PipelineLayout = pipelineLayout;
@@ -1139,7 +1019,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				Subpass = 0
 			};
 
-			if ( Vk.CreateGraphicsPipelines( LogicalDevice, default, 1, &pipelineInfo, null, out var graphicsPipeline ) != Result.Success )
+			if ( Vk.CreateGraphicsPipelines( LogicalGpu, default, 1, &pipelineInfo, null, out var graphicsPipeline ) != Result.Success )
 				throw new ApplicationException( "Failed to create Vulkan graphics pipeline" );
 
 			GraphicsPipeline = graphicsPipeline;
@@ -1147,8 +1027,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		Marshal.FreeHGlobal( (nint)vertShaderStageInfo.PName );
 		Marshal.FreeHGlobal( (nint)fragShaderStageInfo.PName );
-		Vk.DestroyShaderModule( LogicalDevice, vertShaderModule, null );
-		Vk.DestroyShaderModule( LogicalDevice, fragShaderModule, null );
+		Vk.DestroyShaderModule( LogicalGpu, vertShaderModule, null );
+		Vk.DestroyShaderModule( LogicalGpu, fragShaderModule, null );
 	}
 
 	private void CreateCommandPool()
@@ -1164,7 +1044,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			QueueFamilyIndex = indices.GraphicsFamily.Value
 		};
 
-		if ( Vk.CreateCommandPool( LogicalDevice, poolInfo, null, out var commandPool ) != Result.Success )
+		if ( Vk.CreateCommandPool( LogicalGpu, poolInfo, null, out var commandPool ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan command pool" );
 
 		CommandPool = commandPool;
@@ -1223,7 +1103,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				Layers = 1
 			};
 
-			if ( Vk.CreateFramebuffer( LogicalDevice, frameBufferInfo, null, out var frameBuffer ) != Result.Success )
+			if ( Vk.CreateFramebuffer( LogicalGpu, frameBufferInfo, null, out var frameBuffer ) != Result.Success )
 				throw new ApplicationException( $"Failed to create Vulkan frame buffer [{i}]" );
 
 			SwapchainFrameBuffers[i] = frameBuffer;
@@ -1242,12 +1122,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			out var stagingBuffer, out var stagingBufferMemory );
 
 		void* data;
-		if ( Vk.MapMemory( LogicalDevice, stagingBufferMemory, 0, imageSize, 0, &data ) != Result.Success )
+		if ( Vk.MapMemory( LogicalGpu, stagingBufferMemory, 0, imageSize, 0, &data ) != Result.Success )
 			throw new ApplicationException( "Failed to map memory for texture loading" );
 
 		image.CopyPixelDataTo( new Span<Rgba32>( data, (int)imageSize ) );
 
-		Vk.UnmapMemory( LogicalDevice, stagingBufferMemory );
+		Vk.UnmapMemory( LogicalGpu, stagingBufferMemory );
 
 		CreateImage( (uint)image.Width, (uint)image.Height, MipLevels, SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb,
 			ImageTiling.Optimal, ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
@@ -1261,8 +1141,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		CopyBufferToImage( stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height );
 		GenerateMipMaps( textureImage, Format.R8G8B8A8Srgb, (uint)image.Width, (uint)image.Height, MipLevels );
 
-		Vk.DestroyBuffer( LogicalDevice, stagingBuffer, null );
-		Vk.FreeMemory( LogicalDevice, stagingBufferMemory, null );
+		Vk.DestroyBuffer( LogicalGpu, stagingBuffer, null );
+		Vk.FreeMemory( LogicalGpu, stagingBufferMemory, null );
 	}
 
 	private void CreateTextureImageView()
@@ -1292,7 +1172,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			MaxLod = MipLevels
 		};
 
-		if ( Vk.CreateSampler( LogicalDevice, samplerInfo, null, out var textureSampler ) != Result.Success )
+		if ( Vk.CreateSampler( LogicalGpu, samplerInfo, null, out var textureSampler ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan texture sampler" );
 
 		TextureSampler = textureSampler;
@@ -1337,7 +1217,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			MaxSets = MaxFramesInFlight
 		};
 
-		if ( Vk.CreateDescriptorPool( LogicalDevice, poolInfo, null, out var descriptorPool ) != Result.Success )
+		if ( Vk.CreateDescriptorPool( LogicalGpu, poolInfo, null, out var descriptorPool ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan descriptor pool" );
 
 		DescriptorPool = descriptorPool;
@@ -1359,7 +1239,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PSetLayouts = layouts
 		};
 
-		if ( Vk.AllocateDescriptorSets( LogicalDevice, allocateInfo, descriptorSets ) != Result.Success )
+		if ( Vk.AllocateDescriptorSets( LogicalGpu, allocateInfo, descriptorSets ) != Result.Success )
 			throw new ApplicationException( "Failed to allocate Vulkan descriptor sets" );
 
 		DescriptorSets = new DescriptorSet[MaxFramesInFlight];
@@ -1407,7 +1287,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			};
 			descriptorWrites[1] = imageWrite;
 
-			Vk.UpdateDescriptorSets( LogicalDevice, 2, descriptorWrites, 0, null );
+			Vk.UpdateDescriptorSets( LogicalGpu, 2, descriptorWrites, 0, null );
 		}
 	}
 
@@ -1423,7 +1303,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			CommandBufferCount = MaxFramesInFlight
 		};
 
-		if ( Vk.AllocateCommandBuffers( LogicalDevice, allocateInfo, commandBuffers ) != Result.Success )
+		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, commandBuffers ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan command buffers" );
 
 		CommandBuffers = new CommandBuffer[MaxFramesInFlight];
@@ -1450,9 +1330,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			if ( Vk.CreateSemaphore( LogicalDevice, semaphoreCreateInfo, null, out var imageAvailableSemaphore ) != Result.Success ||
-				Vk.CreateSemaphore( LogicalDevice, semaphoreCreateInfo, null, out var renderFinishedSemaphore ) != Result.Success ||
-				Vk.CreateFence( LogicalDevice, fenceInfo, null, out var inFlightFence ) != Result.Success )
+			if ( Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var imageAvailableSemaphore ) != Result.Success ||
+				Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var renderFinishedSemaphore ) != Result.Success ||
+				Vk.CreateFence( LogicalGpu, fenceInfo, null, out var inFlightFence ) != Result.Success )
 				throw new ApplicationException( "Failed to create Vulkan synchronization objects" );
 
 			ImageAvailableSemaphores[i] = imageAvailableSemaphore;
@@ -1525,7 +1405,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			CommandPool = CommandPool
 		};
 
-		if ( Vk.AllocateCommandBuffers( LogicalDevice, allocateInfo, out var commandBuffer ) != Result.Success )
+		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ) != Result.Success )
 			throw new ApplicationException( "Failed to allocate command buffer for one time use" );
 
 		var beginInfo = new CommandBufferBeginInfo()
@@ -1556,13 +1436,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PCommandBuffers = commandBuffers
 		};
 
-		if ( Vk.QueueSubmit( GraphicsQueue, 1, submitInfo, default ) != Result.Success )
+		if ( Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ) != Result.Success )
 			throw new ApplicationException( "Failed to submit command buffer to queue for one time use" );
 
-		if ( Vk.QueueWaitIdle( GraphicsQueue ) != Result.Success )
+		if ( Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ) != Result.Success )
 			throw new ApplicationException( "Failed to wait for queue to idle for one time use" );
 
-		Vk.FreeCommandBuffers( LogicalDevice, CommandPool, 1, commandBuffer );
+		Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
 	}
 
 	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
@@ -1622,7 +1502,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			createInfo.PCode = (uint*)shaderCodePtr;
 
-			if ( Vk.CreateShaderModule( LogicalDevice, createInfo, null, out shaderModule ) != Result.Success )
+			if ( Vk.CreateShaderModule( LogicalGpu, createInfo, null, out shaderModule ) != Result.Success )
 				throw new ApplicationException( "Failed to create Vulkan shader module" );
 		}
 
@@ -1659,10 +1539,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			SharingMode = SharingMode.Exclusive
 		};
 
-		if ( Vk.CreateBuffer( LogicalDevice, bufferInfo, null, out buffer ) != Result.Success )
+		if ( Vk.CreateBuffer( LogicalGpu, bufferInfo, null, out buffer ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan buffer" );
 
-		var requirements = Vk.GetBufferMemoryRequirements( LogicalDevice, buffer );
+		var requirements = Vk.GetBufferMemoryRequirements( LogicalGpu, buffer );
 
 		var allocateInfo = new MemoryAllocateInfo
 		{
@@ -1671,10 +1551,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
 		};
 
-		if ( Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out bufferMemory ) != Result.Success )
+		if ( Vk.AllocateMemory( LogicalGpu, allocateInfo, null, out bufferMemory ) != Result.Success )
 			throw new ApplicationException( "Failed to allocate Vulkan buffer memory" );
 
-		if ( Vk.BindBufferMemory( LogicalDevice, buffer, bufferMemory, 0 ) != Result.Success )
+		if ( Vk.BindBufferMemory( LogicalGpu, buffer, bufferMemory, 0 ) != Result.Success )
 			throw new ApplicationException( "Failed to bind buffer memory to buffer" );
 	}
 
@@ -1702,10 +1582,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			Samples = numSamples
 		};
 
-		if ( Vk.CreateImage( LogicalDevice, imageInfo, null, out image ) != Result.Success )
+		if ( Vk.CreateImage( LogicalGpu, imageInfo, null, out image ) != Result.Success )
 			throw new ApplicationException( "Failed to create image" );
 
-		var requirements = Vk.GetImageMemoryRequirements( LogicalDevice, image );
+		var requirements = Vk.GetImageMemoryRequirements( LogicalGpu, image );
 
 		var allocateInfo = new MemoryAllocateInfo()
 		{
@@ -1714,10 +1594,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
 		};
 
-		if ( Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out imageMemory ) != Result.Success )
+		if ( Vk.AllocateMemory( LogicalGpu, allocateInfo, null, out imageMemory ) != Result.Success )
 			throw new ApplicationException( "Failed to allocate image memory" );
 
-		if ( Vk.BindImageMemory( LogicalDevice, image, imageMemory, 0 ) != Result.Success )
+		if ( Vk.BindImageMemory( LogicalGpu, image, imageMemory, 0 ) != Result.Success )
 			throw new ApplicationException( "Failed to bind image memory" );
 	}
 
@@ -1739,7 +1619,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			}
 		};
 
-		if ( Vk.CreateImageView( LogicalDevice, viewInfo, null, out var imageView ) != Result.Success )
+		if ( Vk.CreateImageView( LogicalGpu, viewInfo, null, out var imageView ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan texture image view" );
 
 		return imageView;

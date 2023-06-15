@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿using Silk.NET.Core.Native;
+using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using System;
 using System.Collections.Generic;
@@ -24,6 +25,63 @@ internal sealed class Gpu
 		Features = Apis.Vk.GetPhysicalDeviceFeatures( physicalDevice );
 		Properties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );
 		MemoryProperties = Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice );
+	}
+
+	internal unsafe LogicalGpu CreateLogicalDevice( KhrSurface surfaceExtension, in SurfaceKHR surface,
+		in QueueFamilyIndices familyIndices, in PhysicalDeviceFeatures features, string[] extensions,
+		bool enableValidationLayers = false, string[]? validationLayers = null )
+	{
+		if ( enableValidationLayers && (validationLayers is null || validationLayers.Length == 0) )
+			throw new ArgumentException( "No validation layers were passed", nameof( validationLayers ) );
+
+		if ( !familyIndices.IsComplete() )
+			throw new ApplicationException( "Attempted to create a logical device from indices that are not complete" );
+
+		var queuePriority = 1f;
+		var uniqueIndices = familyIndices.GetUniqueFamilies();
+
+		var queueCreateInfos = stackalloc DeviceQueueCreateInfo[uniqueIndices.Count];
+		for ( uint i = 0; i < uniqueIndices.Count; i++ )
+		{
+			queueCreateInfos[i] = new DeviceQueueCreateInfo
+			{
+				SType = StructureType.DeviceQueueCreateInfo,
+				QueueFamilyIndex = i,
+				QueueCount = 1,
+				PQueuePriorities = &queuePriority
+			};
+		}
+
+		fixed( PhysicalDeviceFeatures* featuresPtr = &features )
+		{
+			var deviceCreateInfo = new DeviceCreateInfo
+			{
+				SType = StructureType.DeviceCreateInfo,
+				QueueCreateInfoCount = (uint)uniqueIndices.Count,
+				PQueueCreateInfos = queueCreateInfos,
+				PEnabledFeatures = featuresPtr,
+				EnabledExtensionCount = (uint)extensions.Length,
+				PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions )
+			};
+
+			if ( enableValidationLayers )
+			{
+				deviceCreateInfo.EnabledLayerCount = (uint)validationLayers!.Length;
+				deviceCreateInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr( validationLayers );
+			}
+			else
+				deviceCreateInfo.EnabledLayerCount = 0;
+
+			if ( Apis.Vk.CreateDevice( PhysicalDevice, deviceCreateInfo, null, out var logicalDevice ) != Result.Success )
+				throw new ApplicationException( "Failed to create logical Vulkan device" );
+
+			var logicalGpu = new LogicalGpu( this, logicalDevice, familyIndices );
+			
+			if ( enableValidationLayers )
+				SilkMarshal.Free( (nint)deviceCreateInfo.PpEnabledLayerNames );
+
+			return logicalGpu;
+		}
 	}
 
 	internal unsafe bool SupportsExtensions( params string[] extensions )
