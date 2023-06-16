@@ -649,39 +649,26 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateDescriptorSetLayout()
 	{
-		var uboLayoutBinding = new DescriptorSetLayoutBinding()
+		var bindings = new DescriptorSetLayoutBinding[]
 		{
-			Binding = 0,
-			DescriptorType = DescriptorType.UniformBuffer,
-			DescriptorCount = 1,
-			StageFlags = ShaderStageFlags.VertexBit
+			new DescriptorSetLayoutBinding
+			{
+				Binding = 0,
+				DescriptorType = DescriptorType.UniformBuffer,
+				DescriptorCount = 1,
+				StageFlags = ShaderStageFlags.VertexBit
+			},
+			new DescriptorSetLayoutBinding
+			{
+				Binding = 1,
+				DescriptorType = DescriptorType.CombinedImageSampler,
+				DescriptorCount = 1,
+				PImmutableSamplers = null,
+				StageFlags = ShaderStageFlags.FragmentBit
+			}
 		};
 
-		var samplerLayoutBinding = new DescriptorSetLayoutBinding()
-		{
-			Binding = 1,
-			DescriptorCount = 1,
-			DescriptorType = DescriptorType.CombinedImageSampler,
-			PImmutableSamplers = null,
-			StageFlags = ShaderStageFlags.FragmentBit
-		};
-
-		var bindings = stackalloc DescriptorSetLayoutBinding[]
-		{
-			uboLayoutBinding,
-			samplerLayoutBinding
-		};
-		var layoutInfo = new DescriptorSetLayoutCreateInfo()
-		{
-			SType = StructureType.DescriptorSetLayoutCreateInfo,
-			BindingCount = 2,
-			PBindings = bindings
-		};
-
-		if ( Vk.CreateDescriptorSetLayout( LogicalGpu, layoutInfo, null, out var descriptorSetLayout ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan descriptor set layout" );
-
-		DescriptorSetLayout = descriptorSetLayout;
+		DescriptorSetLayout = LogicalGpu.CreateDescriptorSetLayout( bindings );
 	}
 
 	private void CreateGraphicsPipeline()

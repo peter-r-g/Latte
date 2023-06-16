@@ -305,6 +305,24 @@ internal sealed class LogicalGpu : IDisposable
 		return graphicsPipeline;
 	}
 
+	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( DescriptorSetLayoutBinding[] bindings )
+	{
+		fixed( DescriptorSetLayoutBinding* bindingsPtr = bindings )
+		{
+			var layoutInfo = new DescriptorSetLayoutCreateInfo()
+			{
+				SType = StructureType.DescriptorSetLayoutCreateInfo,
+				BindingCount = (uint)bindings.Length,
+				PBindings = bindingsPtr
+			};
+
+			if ( Apis.Vk.CreateDescriptorSetLayout( LogicalDevice, layoutInfo, null, out var descriptorSetLayout ) != Result.Success )
+				throw new ApplicationException( "Failed to create Vulkan descriptor set layout" );
+
+			return descriptorSetLayout;
+		}
+	}
+
 	internal unsafe RenderPass CreateRenderPass( SampleCountFlags msaaSamples )
 	{
 		var useMsaa = msaaSamples != SampleCountFlags.Count1Bit;
