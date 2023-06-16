@@ -124,6 +124,107 @@ internal sealed class LogicalGpu : IDisposable
 			SwapchainImageViews[i] = CreateImageView( SwapchainImages[i], SwapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
 	}
 
+	internal unsafe RenderPass CreateRenderPass( SampleCountFlags msaaSamples )
+	{
+		var useMsaa = msaaSamples != SampleCountFlags.Count1Bit;
+		var colorAttachment = new AttachmentDescription()
+		{
+			Format = SwapchainImageFormat,
+			Samples = msaaSamples,
+			LoadOp = AttachmentLoadOp.Clear,
+			StoreOp = AttachmentStoreOp.Store,
+			InitialLayout = ImageLayout.Undefined,
+			FinalLayout = useMsaa
+				? ImageLayout.ColorAttachmentOptimal
+				: ImageLayout.PresentSrcKhr
+		};
+
+		var colorAttachmentRef = new AttachmentReference
+		{
+			Attachment = 0,
+			Layout = ImageLayout.AttachmentOptimal
+		};
+
+		var depthAttachment = new AttachmentDescription()
+		{
+			Format = FindDepthFormat(),
+			Samples = msaaSamples,
+			LoadOp = AttachmentLoadOp.Clear,
+			StoreOp = AttachmentStoreOp.DontCare,
+			StencilLoadOp = AttachmentLoadOp.DontCare,
+			StencilStoreOp = AttachmentStoreOp.DontCare,
+			InitialLayout = ImageLayout.Undefined,
+			FinalLayout = ImageLayout.DepthStencilAttachmentOptimal
+		};
+
+		var depthAttachmentRef = new AttachmentReference()
+		{
+			Attachment = 1,
+			Layout = ImageLayout.DepthStencilAttachmentOptimal
+		};
+
+		var colorAttachmentResolve = new AttachmentDescription()
+		{
+			Format = SwapchainImageFormat,
+			Samples = SampleCountFlags.Count1Bit,
+			LoadOp = AttachmentLoadOp.DontCare,
+			StoreOp = AttachmentStoreOp.DontCare,
+			StencilLoadOp = AttachmentLoadOp.DontCare,
+			StencilStoreOp = AttachmentStoreOp.DontCare,
+			InitialLayout = ImageLayout.Undefined,
+			FinalLayout = ImageLayout.PresentSrcKhr
+		};
+
+		var colorAttachmentResolveRef = new AttachmentReference()
+		{
+			Attachment = 2,
+			Layout = ImageLayout.ColorAttachmentOptimal
+		};
+
+		var subpassDescription = new SubpassDescription
+		{
+			PipelineBindPoint = PipelineBindPoint.Graphics,
+			ColorAttachmentCount = 1,
+			PColorAttachments = &colorAttachmentRef,
+			PDepthStencilAttachment = &depthAttachmentRef,
+			PResolveAttachments = useMsaa
+				? &colorAttachmentResolveRef
+				: null
+		};
+
+		var subpassDependency = new SubpassDependency()
+		{
+			SrcSubpass = Vk.SubpassExternal,
+			DstSubpass = 0,
+			SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+			SrcAccessMask = 0,
+			DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+			DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit
+		};
+
+		var attachments = stackalloc AttachmentDescription[useMsaa ? 3 : 2];
+		attachments[0] = colorAttachment;
+		attachments[1] = depthAttachment;
+		if ( useMsaa )
+			attachments[2] = colorAttachmentResolve;
+
+		var renderPassInfo = new RenderPassCreateInfo
+		{
+			SType = StructureType.RenderPassCreateInfo,
+			AttachmentCount = (uint)(useMsaa ? 3 : 2),
+			PAttachments = attachments,
+			SubpassCount = 1,
+			PSubpasses = &subpassDescription,
+			DependencyCount = 1,
+			PDependencies = &subpassDependency
+		};
+
+		if ( Apis.Vk.CreateRenderPass( LogicalDevice, renderPassInfo, null, out var renderPass ) != Result.Success )
+			throw new ApplicationException( "Failed to create Vulkan render pass" );
+
+		return renderPass;
+	}
+
 	private unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
 	{
 		var viewInfo = new ImageViewCreateInfo()
@@ -146,6 +247,33 @@ internal sealed class LogicalGpu : IDisposable
 			throw new ApplicationException( "Failed to create Vulkan texture image view" );
 
 		return imageView;
+	}
+
+	private Format FindSupportedFormat( IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features )
+	{
+		foreach ( var format in candidates )
+		{
+			var properties = Gpu.GetFormatProperties( format );
+
+			if ( tiling == ImageTiling.Linear && (properties.LinearTilingFeatures & features) == features )
+				return format;
+			else if ( tiling == ImageTiling.Optimal && (properties.OptimalTilingFeatures & features) == features )
+				return format;
+		}
+
+		throw new ApplicationException( "Failed to find a suitable format" );
+	}
+
+	private Format FindDepthFormat()
+	{
+		var formats = new Format[]
+		{
+			Format.D32Sfloat,
+			Format.D32SfloatS8Uint,
+			Format.D24UnormS8Uint
+		};
+
+		return FindSupportedFormat( formats, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit );
 	}
 
 	private static SurfaceFormatKHR ChooseSwapSurfaceFormat( SurfaceFormatKHR[] formats )

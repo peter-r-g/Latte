@@ -624,105 +624,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateRenderPass()
 	{
-		var msaaSamples = Options.Msaa.ToVulkan();
-		var useMsaa = msaaSamples != SampleCountFlags.Count1Bit;
-		var colorAttachment = new AttachmentDescription()
-		{
-			Format = SwapchainImageFormat,
-			Samples = msaaSamples,
-			LoadOp = AttachmentLoadOp.Clear,
-			StoreOp = AttachmentStoreOp.Store,
-			InitialLayout = ImageLayout.Undefined,
-			FinalLayout = useMsaa
-				? ImageLayout.ColorAttachmentOptimal
-				: ImageLayout.PresentSrcKhr
-		};
-
-		var colorAttachmentRef = new AttachmentReference
-		{
-			Attachment = 0,
-			Layout = ImageLayout.AttachmentOptimal
-		};
-
-		var depthAttachment = new AttachmentDescription()
-		{
-			Format = FindDepthFormat(),
-			Samples = msaaSamples,
-			LoadOp = AttachmentLoadOp.Clear,
-			StoreOp = AttachmentStoreOp.DontCare,
-			StencilLoadOp = AttachmentLoadOp.DontCare,
-			StencilStoreOp = AttachmentStoreOp.DontCare,
-			InitialLayout = ImageLayout.Undefined,
-			FinalLayout = ImageLayout.DepthStencilAttachmentOptimal
-		};
-
-		var depthAttachmentRef = new AttachmentReference()
-		{
-			Attachment = 1,
-			Layout = ImageLayout.DepthStencilAttachmentOptimal
-		};
-
-		var colorAttachmentResolve = new AttachmentDescription()
-		{
-			Format = SwapchainImageFormat,
-			Samples = SampleCountFlags.Count1Bit,
-			LoadOp = AttachmentLoadOp.DontCare,
-			StoreOp = AttachmentStoreOp.DontCare,
-			StencilLoadOp = AttachmentLoadOp.DontCare,
-			StencilStoreOp = AttachmentStoreOp.DontCare,
-			InitialLayout = ImageLayout.Undefined,
-			FinalLayout = ImageLayout.PresentSrcKhr
-		};
-
-		var colorAttachmentResolveRef = new AttachmentReference()
-		{
-			Attachment = 2,
-			Layout = ImageLayout.ColorAttachmentOptimal
-		};
-
-		var subpassDescription = new SubpassDescription
-		{
-			PipelineBindPoint = PipelineBindPoint.Graphics,
-			ColorAttachmentCount = 1,
-			PColorAttachments = &colorAttachmentRef,
-			PDepthStencilAttachment = &depthAttachmentRef,
-			PResolveAttachments = useMsaa
-				? &colorAttachmentResolveRef
-				: null
-		};
+		RenderPass = LogicalGpu.CreateRenderPass( Options.Msaa.ToVulkan() );
+	}
 
 		var subpassDependency = new SubpassDependency()
 		{
-			SrcSubpass = Vk.SubpassExternal,
-			DstSubpass = 0,
-			SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
-			SrcAccessMask = 0,
-			DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
-			DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit
 		};
 
-		var attachments = stackalloc AttachmentDescription[useMsaa ? 3 : 2];
-		attachments[0] = colorAttachment;
-		attachments[1] = depthAttachment;
-		if ( useMsaa )
-			attachments[2] = colorAttachmentResolve;
-
-		var renderPassInfo = new RenderPassCreateInfo
-		{
-			SType = StructureType.RenderPassCreateInfo,
-			AttachmentCount = (uint)(useMsaa ? 3 : 2),
-			PAttachments = attachments,
-			SubpassCount = 1,
-			PSubpasses = &subpassDescription,
-			DependencyCount = 1,
-			PDependencies = &subpassDependency
-		};
-
-		if ( Vk.CreateRenderPass( LogicalGpu, renderPassInfo, null, out var renderPass ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan render pass" );
-
-		RenderPass = renderPass;
-	}
 
 	private void CreateDescriptorSetLayout()
 	{
