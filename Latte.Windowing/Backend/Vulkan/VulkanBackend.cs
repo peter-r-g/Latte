@@ -58,8 +58,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private RenderPass RenderPass { get; set; }
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
-	private PipelineLayout PipelineLayout { get; set; }
-	private Pipeline GraphicsPipeline { get; set; }
+	private GraphicsPipeline GraphicsPipeline { get; set; } = null!;
+	private PipelineLayout PipelineLayout => GraphicsPipeline.Layout;
 	private Framebuffer[] SwapchainFrameBuffers { get; set; } = Array.Empty<Framebuffer>();
 	private CommandPool CommandPool { get; set; }
 	private Buffer[] UniformBuffers { get; set; } = Array.Empty<Buffer>();
@@ -386,6 +386,26 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Vk.DestroyBuffer( LogicalGpu, stagingBuffer, null );
 		Vk.FreeMemory( LogicalGpu, stagingBufferMemory, null );
 	}
+
+	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
+	{
+		var createInfo = new ShaderModuleCreateInfo
+		{
+			SType = StructureType.ShaderModuleCreateInfo,
+			CodeSize = (nuint)shaderCode.Length
+		};
+
+		ShaderModule shaderModule;
+		fixed ( byte* shaderCodePtr = shaderCode )
+		{
+			createInfo.PCode = (uint*)shaderCodePtr;
+
+			if ( Vk.CreateShaderModule( LogicalGpu, createInfo, null, out shaderModule ) != Result.Success )
+				throw new ApplicationException( "Failed to create Vulkan shader module" );
+		}
+
+		return shaderModule;
+	}
 	#endregion
 
 	#region Internal
@@ -627,7 +647,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		RenderPass = LogicalGpu.CreateRenderPass( Options.Msaa.ToVulkan() );
 	}
 
-		var subpassDependency = new SubpassDependency()
 		{
 		};
 
@@ -671,7 +690,37 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateGraphicsPipeline()
 	{
-		// FIXME: Remove this
+		var shader = Shader.FromPath(
+			Path.Combine( "Assets", "Shaders", "vert.spv" ),
+			Path.Combine( "Assets", "Shaders", "frag.spv" )
+			);
+		shader.Initialize( this );
+		var bindingDescriptions = Vertex.GetBindingDescriptions();
+		var attributeDescriptions = Vertex.GetAttributeDescriptions();
+		var dynamicStates = new DynamicState[]
+		{
+			DynamicState.Viewport,
+			DynamicState.Scissor
+		};
+		var descriptorSetLayouts = new DescriptorSetLayout[]
+		{
+			DescriptorSetLayout
+		};
+		var pushConstantRanges = new PushConstantRange[]
+		{
+			new PushConstantRange
+			{
+				Offset = 0,
+				Size = (uint)sizeof( PushConstants ),
+				StageFlags = ShaderStageFlags.VertexBit
+			}
+		};
+
+		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, shader, RenderPass,
+			bindingDescriptions, attributeDescriptions, dynamicStates,
+			descriptorSetLayouts, pushConstantRanges );
+
+		/*// FIXME: Remove this
 		var vertShader = System.IO.File.ReadAllBytes( Path.Combine( "Assets", "Shaders", "vert.spv" ) );
 		var fragShader = System.IO.File.ReadAllBytes( Path.Combine( "Assets", "Shaders", "frag.spv" ) );
 
@@ -867,7 +916,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Marshal.FreeHGlobal( (nint)vertShaderStageInfo.PName );
 		Marshal.FreeHGlobal( (nint)fragShaderStageInfo.PName );
 		Vk.DestroyShaderModule( LogicalGpu, vertShaderModule, null );
-		Vk.DestroyShaderModule( LogicalGpu, fragShaderModule, null );
+		Vk.DestroyShaderModule( LogicalGpu, fragShaderModule, null );*/
 	}
 
 	private void CreateCommandPool()
@@ -1289,26 +1338,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private static bool HasStencilComponent( Format format )
 	{
 		return format == Format.D32Sfloat || format == Format.D24UnormS8Uint;
-	}
-
-	private ShaderModule CreateShaderModule( byte[] shaderCode )
-	{
-		var createInfo = new ShaderModuleCreateInfo
-		{
-			SType = StructureType.ShaderModuleCreateInfo,
-			CodeSize = (nuint)shaderCode.Length
-		};
-
-		ShaderModule shaderModule;
-		fixed ( byte* shaderCodePtr = shaderCode )
-		{
-			createInfo.PCode = (uint*)shaderCodePtr;
-
-			if ( Vk.CreateShaderModule( LogicalGpu, createInfo, null, out shaderModule ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan shader module" );
-		}
-
-		return shaderModule;
 	}
 
 	private void CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,

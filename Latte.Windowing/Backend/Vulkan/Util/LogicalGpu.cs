@@ -1,8 +1,12 @@
-﻿using Latte.Windowing.Options;
+﻿using Latte.Windowing.Assets;
+using Latte.Windowing.Extensions;
+using Latte.Windowing.Options;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -122,6 +126,183 @@ internal sealed class LogicalGpu : IDisposable
 
 		for ( var i = 0; i < SwapchainImages.Length; i++ )
 			SwapchainImageViews[i] = CreateImageView( SwapchainImages[i], SwapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
+	}
+
+	internal unsafe GraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in RenderPass renderPass,
+		VertexInputBindingDescription[] bindingDescriptions, VertexInputAttributeDescription[] attributeDescriptions,
+		DynamicState[] dynamicStates, DescriptorSetLayout[] descriptorSetLayouts, PushConstantRange[] pushConstantRanges )
+	{
+		var vertShaderStageInfo = new PipelineShaderStageCreateInfo
+		{
+			SType = StructureType.PipelineShaderStageCreateInfo,
+			Stage = ShaderStageFlags.VertexBit,
+			Module = shader.VertexShaderModule,
+			PName = (byte*)Marshal.StringToHGlobalAnsi( shader.VertexShaderEntryPoint )
+		};
+
+		var fragShaderStageInfo = new PipelineShaderStageCreateInfo
+		{
+			SType = StructureType.PipelineShaderStageCreateInfo,
+			Stage = ShaderStageFlags.FragmentBit,
+			Module = shader.FragmentShaderModule,
+			PName = (byte*)Marshal.StringToHGlobalAnsi( shader.FragmentShaderEntryPoint )
+		};
+
+		var shaderStages = stackalloc PipelineShaderStageCreateInfo[]
+		{
+			vertShaderStageInfo,
+			fragShaderStageInfo
+		};
+
+		GraphicsPipeline graphicsPipeline;
+
+		fixed ( VertexInputAttributeDescription* attributeDescriptionsPtr = attributeDescriptions )
+		fixed( VertexInputBindingDescription* bindingDescriptionsPtr = bindingDescriptions )
+		fixed( DynamicState* dynamicStatesPtr = dynamicStates )
+		fixed ( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
+		fixed ( PushConstantRange* pushConstantRangesPtr = pushConstantRanges )
+		{
+			var vertexInputInfo = new PipelineVertexInputStateCreateInfo
+			{
+				SType = StructureType.PipelineVertexInputStateCreateInfo,
+				VertexBindingDescriptionCount = (uint)bindingDescriptions.Length,
+				PVertexBindingDescriptions = bindingDescriptionsPtr,
+				VertexAttributeDescriptionCount = (uint)attributeDescriptions.Length,
+				PVertexAttributeDescriptions = attributeDescriptionsPtr
+			};
+
+			var inputAssembly = new PipelineInputAssemblyStateCreateInfo
+			{
+				SType = StructureType.PipelineInputAssemblyStateCreateInfo,
+				Topology = PrimitiveTopology.TriangleList,
+				PrimitiveRestartEnable = Vk.False
+			};
+
+			var viewport = new Viewport
+			{
+				X = 0,
+				Y = 0,
+				Width = SwapchainExtent.Width,
+				Height = SwapchainExtent.Height,
+				MinDepth = 0,
+				MaxDepth = 0
+			};
+
+			var scissor = new Rect2D
+			{
+				Offset = new Offset2D( 0, 0 ),
+				Extent = SwapchainExtent
+			};
+
+			var dynamicState = new PipelineDynamicStateCreateInfo
+			{
+				SType = StructureType.PipelineDynamicStateCreateInfo,
+				DynamicStateCount = (uint)dynamicStates.Length,
+				PDynamicStates = dynamicStatesPtr
+			};
+
+			var viewportState = new PipelineViewportStateCreateInfo
+			{
+				SType = StructureType.PipelineViewportStateCreateInfo,
+				ViewportCount = 1,
+				PViewports = &viewport,
+				ScissorCount = 1,
+				PScissors = &scissor
+			};
+
+			var rasterizer = new PipelineRasterizationStateCreateInfo
+			{
+				SType = StructureType.PipelineRasterizationStateCreateInfo,
+				DepthClampEnable = Vk.False,
+				RasterizerDiscardEnable = Vk.False,
+				PolygonMode = options.WireframeEnabled ? PolygonMode.Line : PolygonMode.Fill,
+				LineWidth = 1,
+				CullMode = CullModeFlags.BackBit,
+				FrontFace = FrontFace.CounterClockwise,
+				DepthBiasEnable = Vk.False,
+			};
+
+			var multisampling = new PipelineMultisampleStateCreateInfo
+			{
+				SType = StructureType.PipelineMultisampleStateCreateInfo,
+				SampleShadingEnable = Vk.True,
+				MinSampleShading = 0.2f,
+				RasterizationSamples = options.Msaa.ToVulkan()
+			};
+
+			var colorBlendAttachment = new PipelineColorBlendAttachmentState
+			{
+				ColorWriteMask = ColorComponentFlags.RBit |
+					ColorComponentFlags.GBit |
+					ColorComponentFlags.BBit |
+					ColorComponentFlags.ABit,
+				BlendEnable = Vk.True,
+				SrcColorBlendFactor = BlendFactor.SrcAlpha,
+				DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
+				ColorBlendOp = BlendOp.Add,
+				SrcAlphaBlendFactor = BlendFactor.One,
+				DstAlphaBlendFactor = BlendFactor.Zero,
+				AlphaBlendOp = BlendOp.Add
+			};
+
+			var colorBlending = new PipelineColorBlendStateCreateInfo
+			{
+				SType = StructureType.PipelineColorBlendStateCreateInfo,
+				LogicOpEnable = Vk.False,
+				AttachmentCount = 1,
+				PAttachments = &colorBlendAttachment
+			};
+
+			var depthStencil = new PipelineDepthStencilStateCreateInfo()
+			{
+				SType = StructureType.PipelineDepthStencilStateCreateInfo,
+				DepthTestEnable = Vk.True,
+				DepthWriteEnable = Vk.True,
+				DepthCompareOp = CompareOp.Less,
+				DepthBoundsTestEnable = Vk.False,
+				StencilTestEnable = Vk.False
+			};
+
+			var pipelineLayoutInfo = new PipelineLayoutCreateInfo
+			{
+				SType = StructureType.PipelineLayoutCreateInfo,
+				SetLayoutCount = (uint)descriptorSetLayouts.Length,
+				PSetLayouts = descriptorSetLayoutsPtr,
+				PushConstantRangeCount = (uint)pushConstantRanges.Length,
+				PPushConstantRanges = pushConstantRangesPtr
+			};
+
+			if ( Apis.Vk.CreatePipelineLayout( LogicalDevice, pipelineLayoutInfo, null, out var pipelineLayout ) != Result.Success )
+				throw new ApplicationException( "Failed to create Vulkan pipeline layout" );
+
+			var pipelineInfo = new GraphicsPipelineCreateInfo
+			{
+				SType = StructureType.GraphicsPipelineCreateInfo,
+				StageCount = 2,
+				PStages = shaderStages,
+				PVertexInputState = &vertexInputInfo,
+				PInputAssemblyState = &inputAssembly,
+				PViewportState = &viewportState,
+				PRasterizationState = &rasterizer,
+				PMultisampleState = &multisampling,
+				PColorBlendState = &colorBlending,
+				PDepthStencilState = &depthStencil,
+				PDynamicState = &dynamicState,
+				Layout = pipelineLayout,
+				RenderPass = renderPass,
+				Subpass = 0
+			};
+
+			if ( Apis.Vk.CreateGraphicsPipelines( LogicalDevice, default, 1, &pipelineInfo, null, out var pipeline ) != Result.Success )
+				throw new ApplicationException( "Failed to create Vulkan graphics pipeline" );
+
+			graphicsPipeline = new GraphicsPipeline( pipeline, pipelineLayout );
+		}
+
+		Marshal.FreeHGlobal( (nint)vertShaderStageInfo.PName );
+		Marshal.FreeHGlobal( (nint)fragShaderStageInfo.PName );
+
+		return graphicsPipeline;
 	}
 
 	internal unsafe RenderPass CreateRenderPass( SampleCountFlags msaaSamples )
