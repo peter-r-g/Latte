@@ -424,6 +424,21 @@ internal sealed class LogicalGpu : IDisposable
 		return renderPass;
 	}
 
+	internal unsafe CommandPool CreateCommandPool( uint queueFamilyIndex )
+	{
+		var poolInfo = new CommandPoolCreateInfo
+		{
+			SType = StructureType.CommandPoolCreateInfo,
+			Flags = CommandPoolCreateFlags.ResetCommandBufferBit,
+			QueueFamilyIndex = queueFamilyIndex
+		};
+
+		if ( Apis.Vk.CreateCommandPool( LogicalDevice, poolInfo, null, out var commandPool ) != Result.Success )
+			throw new ApplicationException( "Failed to create Vulkan command pool" );
+
+		return commandPool;
+	}
+
 	private unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
 	{
 		var viewInfo = new ImageViewCreateInfo()

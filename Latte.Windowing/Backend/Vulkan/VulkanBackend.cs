@@ -710,17 +710,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( !indices.IsComplete() )
 			throw new ApplicationException( "Attempted to create a command pool from indices that are not complete" );
 
-		var poolInfo = new CommandPoolCreateInfo
-		{
-			SType = StructureType.CommandPoolCreateInfo,
-			Flags = CommandPoolCreateFlags.ResetCommandBufferBit,
-			QueueFamilyIndex = indices.GraphicsFamily.Value
-		};
-
-		if ( Vk.CreateCommandPool( LogicalGpu, poolInfo, null, out var commandPool ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan command pool" );
-
-		CommandPool = commandPool;
+		CommandPool = LogicalGpu.CreateCommandPool( indices.GraphicsFamily.Value );
 	}
 
 	private void CreateColorResources()
