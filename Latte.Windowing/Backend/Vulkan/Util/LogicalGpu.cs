@@ -1,16 +1,18 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Options;
+using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class LogicalGpu
+internal sealed class LogicalGpu : IDisposable
 {
 	internal const int ExtraSwapImages = 1;
 
 	internal Gpu Gpu { get; }
 	internal Device LogicalDevice { get; }
+
 	internal Queue GraphicsQueue { get; }
 	internal Queue PresentQueue { get; }
 
@@ -21,24 +23,40 @@ internal sealed class LogicalGpu
 	internal Extent2D SwapchainExtent { get; private set; }
 	internal KhrSwapchain SwapchainExtension { get; private set; } = null!;
 
-	public LogicalGpu( Gpu gpu, in Device logicalDevice, in QueueFamilyIndices familyIndices )
+	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
 	{
 		if ( !familyIndices.IsComplete() )
 			throw new ArgumentException( $"Cannot create {nameof( LogicalGpu )} with an incomplete {nameof( QueueFamilyIndices )}", nameof( familyIndices ) );
 
-		Gpu = gpu;
 		LogicalDevice = logicalDevice;
+		Gpu = gpu;
 		GraphicsQueue = Apis.Vk.GetDeviceQueue( LogicalDevice, familyIndices.GraphicsFamily.Value, 0 );
 		PresentQueue = Apis.Vk.GetDeviceQueue( LogicalDevice, familyIndices.PresentFamily.Value, 0 );
 	}
 
-	internal unsafe void CreateSwapchain( IWindow window, in Instance instance, KhrSurface surfaceExtension, in SurfaceKHR surface )
+	~LogicalGpu()
 	{
-		var swapChainSupport = Gpu.GetSwapChainSupport( surfaceExtension, surface );
+		Dispose();
+	}
+
+	public unsafe void Dispose()
+	{
+		foreach ( var imageView in SwapchainImageViews )
+			Apis.Vk.DestroyImageView( LogicalDevice, imageView, null );
+
+		SwapchainExtension.DestroySwapchain( LogicalDevice, Swapchain, null );
+		Apis.Vk.DestroyDevice( LogicalDevice, null );
+		GC.SuppressFinalize( this );
+	}
+
+	internal unsafe void CreateSwapchain()
+	{
+		var instance = Gpu.Instance;
+		var swapChainSupport = Gpu.SwapchainSupportDetails;
 
 		var surfaceFormat = ChooseSwapSurfaceFormat( swapChainSupport.Formats );
 		var presentMode = ChooseSwapPresentMode( swapChainSupport.PresentModes );
-		var extent = ChooseSwapExtent( window, swapChainSupport.Capabilities );
+		var extent = ChooseSwapExtent( Gpu.Instance.Window, swapChainSupport.Capabilities );
 
 		var imageCount = swapChainSupport.Capabilities.MinImageCount + ExtraSwapImages;
 		if ( swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount )
@@ -47,7 +65,7 @@ internal sealed class LogicalGpu
 		var createInfo = new SwapchainCreateInfoKHR
 		{
 			SType = StructureType.SwapchainCreateInfoKhr,
-			Surface = surface,
+			Surface = instance.Surface,
 			MinImageCount = imageCount,
 			ImageFormat = surfaceFormat.Format,
 			ImageColorSpace = surfaceFormat.ColorSpace,
@@ -56,7 +74,7 @@ internal sealed class LogicalGpu
 			ImageUsage = ImageUsageFlags.ColorAttachmentBit
 		};
 
-		var indices = Gpu.GetQueueFamilyIndices( surfaceExtension, surface );
+		var indices = Gpu.GetQueueFamilyIndices();
 		if ( !indices.IsComplete() )
 			throw new ApplicationException( "Attempted to create a swap chain from indices that are not complete" );
 

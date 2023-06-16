@@ -1,7 +1,6 @@
 ﻿using Latte.Windowing.Assets;
 using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
-using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
@@ -26,28 +25,28 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	public event IInternalRenderingBackend.RenderHandler? Render;
 	public event IRenderingBackend.OptionsAppliedHandler? OptionsApplied;
 
-	internal bool EnableValidationLayers { get; }
-
-	private static readonly string[] ValidationLayers = new[]
+	private bool EnableValidationLayers { get; set; }
+	private readonly string[] ValidationLayers = new[]
 	{
 		"VK_LAYER_KHRONOS_validation"
 	};
-	private static readonly string[] DeviceExtensions = new[]
+	private readonly string[] DeviceExtensions = new[]
 	{
 		KhrSwapchain.ExtensionName
 	};
-	private const int ExtraSwapImages = 1;
-	private const int MaxFramesInFlight = 2;
+	private const uint ExtraSwapImages = 1;
+	private const uint MaxFramesInFlight = 2;
 
 	private static Vk Vk => Apis.Vk;
-	private static ExtDebugUtils? DebugUtils { get; set; } = null!;
+	private static bool StaticInitialized { get; set; }
+	private VulkanInstance Instance { get; set; } = null!;
+	private ExtDebugUtils? DebugUtilsExtension => Instance.DebugUtilsExtension;
+	private DebugUtilsMessengerEXT DebugMessenger => Instance.DebugMessenger;
+	private KhrSurface SurfaceExtension => Instance.SurfaceExtension;
+	private SurfaceKHR Surface => Instance.Surface;
 
 	private IWindow Window { get; }
-	private Instance Instance { get; set; }
 	private Gpu Gpu { get; set; } = null!;
-	private DebugUtilsMessengerEXT DebugMessenger { get; set; }
-	private KhrSurface KhrSurface { get; set; } = null!;
-	private SurfaceKHR Surface { get; set; }
 
 	private LogicalGpu LogicalGpu { get; set; } = null!;
 	private SwapchainKHR Swapchain => LogicalGpu.Swapchain;
@@ -55,7 +54,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private ImageView[] SwapchainImageViews => LogicalGpu.SwapchainImageViews;
 	private Format SwapchainImageFormat => LogicalGpu.SwapchainImageFormat;
 	private Extent2D SwapchainExtent => LogicalGpu.SwapchainExtent;
-	private KhrSwapchain KhrSwapchain => LogicalGpu.SwapchainExtension;
+	private KhrSwapchain SwapchainExtension => LogicalGpu.SwapchainExtension;
 
 	private RenderPass RenderPass { get; set; }
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
@@ -115,7 +114,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 			var gpus = new Gpu[(int)deviceCount];
 			for ( var i = 0; i < deviceCount; i++ )
-				gpus[i] = new Gpu( devices[i] );
+				gpus[i] = new Gpu( devices[i], Instance );
 
 			return gpus;
 		}
@@ -129,11 +128,19 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	}
 
 	#region API
+	public void StaticInitialize()
+	{
+		if ( StaticInitialized )
+			return;
+
+		StaticInitialized = true;
+		Instance = new VulkanInstance( Window, EnableValidationLayers, ValidationLayers );
+	}
+
 	public void Inititalize()
 	{
-		CreateInstance();
-		SetupDebugMessenger();
-		CreateSurface();
+		StaticInitialize();
+
 		PickPhysicalDevice();
 		CreateLogicalDevice();
 		CreateSwapChain();
@@ -163,10 +170,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		CleanupLogicalDevice();
 
-		if ( EnableValidationLayers && DebugUtils is not null )
-			DebugUtils.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null );
+		if ( EnableValidationLayers && DebugUtilsExtension is not null )
+			DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null );
 
-		KhrSurface.DestroySurface( Instance, Surface, null );
+		SurfaceExtension.DestroySurface( Instance, Surface, null );
 		Vk.DestroyInstance( Instance, null );
 		Vk.Dispose();
 	}
@@ -177,7 +184,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			throw new ApplicationException( "Failed to wait for in flight fence" );
 
 		uint imageIndex;
-		var result = KhrSwapchain.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
+		var result = SwapchainExtension.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -243,7 +250,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PImageIndices = &imageIndex
 		};
 
-		result = KhrSwapchain.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
+		result = SwapchainExtension.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -398,7 +405,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		foreach ( var imageView in SwapchainImageViews )
 			Vk.DestroyImageView( LogicalGpu, imageView, null );
 
-		KhrSwapchain.DestroySwapchain( LogicalGpu, Swapchain, null );
+		SwapchainExtension.DestroySwapchain( LogicalGpu, Swapchain, null );
 	}
 
 	private void CleanupLogicalDevice()
@@ -588,82 +595,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	}
 
 	#region Initialization stages
-	private void CreateInstance()
-	{
-		if ( EnableValidationLayers && !CheckValidationLayerSupport() )
-			throw new ApplicationException( "Failed to find all requested Vulkan validation layers" );
-
-		var appInfo = new ApplicationInfo()
-		{
-			SType = StructureType.ApplicationInfo,
-			PApplicationName = (byte*)Marshal.StringToHGlobalAnsi( "Latte Game" ),
-			ApplicationVersion = new Version32( 1, 0, 0 ),
-			PEngineName = (byte*)Marshal.StringToHGlobalAnsi( "Latte" ),
-			EngineVersion = new Version32( 1, 0, 0 ),
-			ApiVersion = Vk.Version13
-		};
-
-		var createInfo = new InstanceCreateInfo()
-		{
-			SType = StructureType.InstanceCreateInfo,
-			PApplicationInfo = &appInfo
-		};
-
-		var extensions = GetRequiredExtensions( Window );
-		createInfo.EnabledExtensionCount = (uint)extensions.Length;
-		createInfo.PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions );
-
-		if ( EnableValidationLayers )
-		{
-			createInfo.EnabledLayerCount = (uint)ValidationLayers.Length;
-			createInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr( ValidationLayers );
-
-			var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
-			PopulateDebugMessengerCreateInfo( ref debugCreateInfo );
-			createInfo.PNext = &debugCreateInfo;
-		}
-		else
-			createInfo.EnabledLayerCount = 0;
-
-		if ( Vk.CreateInstance( createInfo, null, out var instance ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan instance" );
-
-		Instance = instance;
-
-		Marshal.FreeHGlobal( (nint)appInfo.PApplicationName );
-		Marshal.FreeHGlobal( (nint)appInfo.PEngineName );
-		SilkMarshal.Free( (nint)createInfo.PpEnabledExtensionNames );
-		if ( EnableValidationLayers )
-			SilkMarshal.Free( (nint)createInfo.PpEnabledLayerNames );
-	}
-
-	private void SetupDebugMessenger()
-	{
-		if ( !EnableValidationLayers )
-			return;
-
-		if ( !Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtils ) )
-			return;
-
-		var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
-		PopulateDebugMessengerCreateInfo( ref debugCreateInfo );
-
-		if ( debugUtils.CreateDebugUtilsMessenger( Instance, debugCreateInfo, null, out var debugMessenger ) != Result.Success )
-			throw new ApplicationException( "Failed to setup Vulkan debug messenger" );
-
-		DebugUtils = debugUtils;
-		DebugMessenger = debugMessenger;
-	}
-
-	private void CreateSurface()
-	{
-		if ( !Vk.TryGetInstanceExtension<KhrSurface>( Instance, out var khrSurface ) )
-			throw new ApplicationException( "Failed to get KHR_surface extension" );
-
-		KhrSurface = khrSurface;
-		Surface = Window.VkSurface!.Create<AllocationCallbacks>( Instance.ToHandle(), null ).ToSurface();
-	}
-
 	private void PickPhysicalDevice()
 	{
 		Gpu = AllGpus.GetBestGpu( out var deviceScore, IsDeviceSuitable );
@@ -673,7 +604,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateLogicalDevice()
 	{
-		var indices = Gpu.GetQueueFamilyIndices( KhrSurface, Surface );
+		var indices = Gpu.GetQueueFamilyIndices();
 
 		var features = new PhysicalDeviceFeatures
 		{
@@ -682,13 +613,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			FillModeNonSolid = Options.WireframeEnabled ? Vk.True : Vk.False
 		};
 
-		LogicalGpu = Gpu.CreateLogicalDevice( KhrSurface, Surface, indices, features,
-			DeviceExtensions, EnableValidationLayers, ValidationLayers );
+		LogicalGpu = Gpu.CreateLogicalGpu( indices, features, DeviceExtensions,
+			EnableValidationLayers, ValidationLayers );
 	}
 
 	private void CreateSwapChain()
 	{
-		LogicalGpu.CreateSwapchain( Window, Instance, KhrSurface, Surface );
+		LogicalGpu.CreateSwapchain();
 	}
 
 	private void CreateRenderPass()
@@ -1033,7 +964,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateCommandPool()
 	{
-		var indices = Gpu.GetQueueFamilyIndices( KhrSurface, Surface );
+		var indices = Gpu.GetQueueFamilyIndices();
 		if ( !indices.IsComplete() )
 			throw new ApplicationException( "Attempted to create a command pool from indices that are not complete" );
 
@@ -1225,9 +1156,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateDescriptorSets()
 	{
-		var descriptorSets = stackalloc DescriptorSet[MaxFramesInFlight];
+		var descriptorSets = stackalloc DescriptorSet[(int)MaxFramesInFlight];
 
-		var layouts = stackalloc DescriptorSetLayout[MaxFramesInFlight];
+		var layouts = stackalloc DescriptorSetLayout[(int)MaxFramesInFlight];
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 			layouts[i] = DescriptorSetLayout;
 
@@ -1293,7 +1224,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateCommandBuffer()
 	{
-		CommandBuffer* commandBuffers = stackalloc CommandBuffer[MaxFramesInFlight];
+		CommandBuffer* commandBuffers = stackalloc CommandBuffer[(int)MaxFramesInFlight];
 
 		var allocateInfo = new CommandBufferAllocateInfo
 		{
@@ -1343,52 +1274,15 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	#endregion
 
 	#region Utilities
-	private static bool CheckValidationLayerSupport()
-	{
-		uint layerCount = 0;
-		if ( Vk.EnumerateInstanceLayerProperties( &layerCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan layer properties (1)" );
-
-		var availableLayers = new LayerProperties[layerCount];
-		fixed ( LayerProperties* availableLayersPtr = availableLayers )
-		{
-			if ( Vk.EnumerateInstanceLayerProperties( &layerCount, availableLayersPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to enumerate Vulkan layer properties (2)" );
-		}
-
-		foreach ( var layerName in ValidationLayers )
-		{
-			var layerFound = false;
-
-			foreach ( var availableLayer in availableLayers )
-			{
-				var availableLayerName = Marshal.PtrToStringAnsi( (nint)availableLayer.LayerName );
-				if ( availableLayerName != layerName )
-					continue;
-
-				layerFound = true;
-				break;
-			}
-
-			if ( layerFound )
-				continue;
-
-			Console.WriteLine( $"ERROR: Failed to find Vulkan validation layer \"{layerName}\"" );
-			return false;
-		}
-
-		return true;
-	}
-
 	private bool IsDeviceSuitable( Gpu gpu )
 	{
-		var indices = gpu.GetQueueFamilyIndices( KhrSurface, Surface );
+		var indices = gpu.GetQueueFamilyIndices();
 		var extensionsSupported = gpu.SupportsExtensions( DeviceExtensions );
 
 		var swapChainAdequate = false;
 		if ( extensionsSupported )
 		{
-			var swapChainSupport = gpu.GetSwapChainSupport( KhrSurface, Surface );
+			var swapChainSupport = gpu.SwapchainSupportDetails;
 			swapChainAdequate = swapChainSupport.Formats.Length > 0 && swapChainSupport.PresentModes.Length > 0;
 		}
 
@@ -1507,25 +1401,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		}
 
 		return shaderModule;
-	}
-
-	private string[] GetRequiredExtensions( IWindow window )
-	{
-		if ( window.VkSurface is null )
-			throw new ApplicationException( "Window platform does not support Vulkan" );
-
-		var extensions = window.VkSurface.GetRequiredExtensions( out var requiredExtensionCount );
-		var extensionCount = requiredExtensionCount;
-		if ( EnableValidationLayers )
-			extensionCount++;
-
-		var requiredExtensions = new string[extensionCount];
-		SilkMarshal.CopyPtrToStringArray( (nint)extensions, requiredExtensions );
-
-		if ( EnableValidationLayers )
-			requiredExtensions[^1] = ExtDebugUtils.ExtensionName;
-
-		return requiredExtensions;
 	}
 
 	private void CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
@@ -1838,72 +1713,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			1, barrier );
 
 		EndOneTimeCommands( commandBuffer );
-	}
-
-	private static SurfaceFormatKHR ChooseSwapSurfaceFormat( SurfaceFormatKHR[] formats )
-	{
-		if ( formats.Length == 0 )
-			throw new ArgumentException( "No formats were provided", nameof( formats ) );
-
-		foreach ( var format in formats )
-		{
-			if ( format.Format != Format.B8G8R8A8Srgb )
-				continue;
-
-			if ( format.ColorSpace != ColorSpaceKHR.SpaceSrgbNonlinearKhr )
-				continue;
-
-			return format;
-		}
-
-		return formats[0];
-	}
-
-	private static PresentModeKHR ChooseSwapPresentMode( PresentModeKHR[] presentModes )
-	{
-		foreach ( var presentMode in presentModes )
-		{
-			if ( presentMode == PresentModeKHR.MailboxKhr )
-				return presentMode;
-		}
-
-		return PresentModeKHR.FifoKhr;
-	}
-
-	private static Extent2D ChooseSwapExtent( IWindow window, in SurfaceCapabilitiesKHR capabilities )
-	{
-		if ( capabilities.CurrentExtent.Width != uint.MaxValue )
-			return capabilities.CurrentExtent;
-
-		var frameBufferSize = window.FramebufferSize;
-		var extent = new Extent2D( (uint)frameBufferSize.X, (uint)frameBufferSize.Y );
-		extent.Width = Math.Clamp( extent.Width, capabilities.MinImageExtent.Width, capabilities.MaxImageExtent.Width );
-		extent.Height = Math.Clamp( extent.Height, capabilities.MinImageExtent.Height, capabilities.MaxImageExtent.Height );
-
-		return extent;
-	}
-
-	private static void PopulateDebugMessengerCreateInfo( ref DebugUtilsMessengerCreateInfoEXT debugCreateInfo )
-	{
-		debugCreateInfo.SType = StructureType.DebugUtilsMessengerCreateInfoExt;
-		debugCreateInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt
-			| DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt
-			| DebugUtilsMessageSeverityFlagsEXT.WarningBitExt
-			| DebugUtilsMessageSeverityFlagsEXT.InfoBitExt;
-		debugCreateInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt |
-			DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt |
-			DebugUtilsMessageTypeFlagsEXT.ValidationBitExt;
-		debugCreateInfo.PfnUserCallback = (PfnDebugUtilsMessengerCallbackEXT)DebugCallback;
-	}
-
-	private static uint DebugCallback( DebugUtilsMessageSeverityFlagsEXT messageSeverity,
-		DebugUtilsMessageTypeFlagsEXT messageTypes,
-		DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-		void* pUserData )
-	{
-		Console.WriteLine( $"VULKAN: {Marshal.PtrToStringAnsi( (nint)pCallbackData->PMessage )}" );
-
-		return Vk.False;
 	}
 	#endregion
 	#endregion
