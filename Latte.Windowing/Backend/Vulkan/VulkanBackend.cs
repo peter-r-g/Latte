@@ -647,10 +647,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		RenderPass = LogicalGpu.CreateRenderPass( Options.Msaa.ToVulkan() );
 	}
 
-		{
-		};
-
-
 	private void CreateDescriptorSetLayout()
 	{
 		var uboLayoutBinding = new DescriptorSetLayoutBinding()
