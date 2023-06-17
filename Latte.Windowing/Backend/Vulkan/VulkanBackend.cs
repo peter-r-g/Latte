@@ -175,6 +175,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		SurfaceExtension.DestroySurface( Instance, Surface, null );
 		Vk.DestroyInstance( Instance, null );
+		// TODO: Don't dispose of the API here, dispose when whole program is exiting.
 		Vk.Dispose();
 	}
 
