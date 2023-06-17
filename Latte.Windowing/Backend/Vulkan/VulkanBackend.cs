@@ -61,10 +61,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private PipelineLayout PipelineLayout => GraphicsPipeline.Layout;
 	private Framebuffer[] SwapchainFrameBuffers { get; set; } = Array.Empty<Framebuffer>();
 	private CommandPool CommandPool { get; set; }
-	private Buffer[] UniformBuffers { get; set; } = Array.Empty<Buffer>();
-	private DeviceMemory[] UniformBuffersMemory { get; set; } = Array.Empty<DeviceMemory>();
-	private Dictionary<BufferUsageFlags, List<Buffer>> GpuBuffers { get; } = new();
-	private Dictionary<BufferUsageFlags, List<DeviceMemory>> GpuBuffersMemory { get; } = new();
+	private VulkanBuffer[] UniformBuffers { get; set; } = Array.Empty<VulkanBuffer>();
+	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
 	private Dictionary<BufferUsageFlags, List<ulong>> GpuBuffersOffsets { get; } = new();
 	private DescriptorPool DescriptorPool { get; set; }
 	private DescriptorSet[] DescriptorSets { get; set; } = Array.Empty<DescriptorSet>();
@@ -343,23 +341,20 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		OptionsApplied?.Invoke( this );
 	}
 	
-	internal Buffer GetGPUBuffer( ulong size, BufferUsageFlags usage, out ulong offset )
+	internal VulkanBuffer GetGPUBuffer( ulong size, BufferUsageFlags usage, out ulong offset )
 	{
 		const ulong requestSize = 1024000;
 
 		if ( !GpuBuffers.TryGetValue( usage, out var buffers ) )
 		{
-			buffers = new List<Buffer>();
+			buffers = new List<VulkanBuffer>();
 			GpuBuffers.Add( usage, buffers );
-			GpuBuffersMemory.Add( usage, new List<DeviceMemory>() );
 			GpuBuffersOffsets.Add( usage, new List<ulong>() );
 		}
-
-		var buffersMemory = GpuBuffersMemory[usage];
 		var buffersOffsets = GpuBuffersOffsets[usage];
 
 		var bufferIndex = 0;
-		var chosenBuffer = default( Buffer );
+		VulkanBuffer? chosenBuffer = null;
 		var bufferOffset = 0ul;
 		for ( var i = 0; i < buffers.Count; i++ )
 		{
@@ -375,13 +370,11 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			break;
 		}
 
-		if ( chosenBuffer.Handle == default( Buffer ).Handle )
+		if ( chosenBuffer is null )
 		{
-			CreateBuffer( requestSize, BufferUsageFlags.TransferDstBit | usage, MemoryPropertyFlags.DeviceLocalBit,
-				out var runtimeBuffer, out var runtimeBufferMemory );
+			var runtimeBuffer = LogicalGpu.CreateBuffer( requestSize, BufferUsageFlags.TransferDstBit | usage, MemoryPropertyFlags.DeviceLocalBit );
 
 			buffers.Add( runtimeBuffer );
-			buffersMemory.Add( runtimeBufferMemory );
 			buffersOffsets.Add( 0 );
 
 			bufferIndex = buffers.Count - 1;
@@ -397,21 +390,17 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	internal void UploadToBuffer<T>( in Buffer buffer, in ReadOnlySpan<T> data ) where T : unmanaged
 	{
 		var bufferSize = (ulong)sizeof( T ) * (ulong)data.Length;
-		CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit,
-			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
-			out var stagingBuffer, out var stagingBufferMemory );
+		using var stagingBuffer = LogicalGpu.CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit,
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
 
 		void* dataPtr;
-		if ( Vk.MapMemory( LogicalGpu, stagingBufferMemory, 0, bufferSize, 0, &dataPtr ) != Result.Success )
+		if ( Vk.MapMemory( LogicalGpu, stagingBuffer.Memory, 0, bufferSize, 0, &dataPtr ) != Result.Success )
 			throw new ApplicationException( "Failed to map staging buffer memory" );
 
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
-		Vk.UnmapMemory( LogicalGpu, stagingBufferMemory );
+		Vk.UnmapMemory( LogicalGpu, stagingBuffer.Memory );
 
 		CopyBuffer( stagingBuffer, buffer, bufferSize );
-
-		Vk.DestroyBuffer( LogicalGpu, stagingBuffer, null );
-		Vk.FreeMemory( LogicalGpu, stagingBufferMemory, null );
 	}
 
 	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
@@ -473,10 +462,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		}
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
-		{
 			Vk.DestroyBuffer( LogicalGpu, UniformBuffers[i], null );
-			Vk.FreeMemory( LogicalGpu, UniformBuffersMemory[i], null );
-		}
 
 		foreach ( var (_, buffers) in GpuBuffers )
 		{
@@ -484,13 +470,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				Vk.DestroyBuffer( LogicalGpu, buffers[i], null );
 		}
 		GpuBuffers.Clear();
-
-		foreach ( var (_, buffersMemory) in GpuBuffersMemory )
-		{
-			for ( var i = 0; i < buffersMemory.Count; i++ )
-				Vk.FreeMemory( LogicalGpu, buffersMemory[i], null );
-		}
-		GpuBuffersMemory.Clear();
 		GpuBuffersOffsets.Clear();
 
 		Vk.DestroySampler( LogicalGpu, TextureSampler, null );
@@ -535,12 +514,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var ubo = new UniformBufferObject( view, projection );
 
 		void* data;
-		if ( Vk.MapMemory( LogicalGpu, UniformBuffersMemory[currentImage], 0, (ulong)sizeof( UniformBufferObject ), 0, &data ) != Result.Success )
+		if ( Vk.MapMemory( LogicalGpu, UniformBuffers[currentImage].Memory, 0, (ulong)sizeof( UniformBufferObject ), 0, &data ) != Result.Success )
 			throw new ApplicationException( "Failed to map memory of the UBO" );
 
 		new Span<UniformBufferObject>( data, 1 )[0] = ubo;
 
-		Vk.UnmapMemory( LogicalGpu, UniformBuffersMemory[currentImage] );
+		Vk.UnmapMemory( LogicalGpu, UniformBuffers[currentImage].Memory );
 	}
 
 	private void RecordCommandBuffer( in CommandBuffer commandBuffer, uint imageIndex, double dt )
@@ -783,17 +762,16 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var imageSize = (ulong)(image.Width * image.Height * image.PixelType.BitsPerPixel / 8);
 		MipLevels = (uint)MathF.Floor( MathF.Log2( Math.Max( image.Width, image.Height ) ) ) + 1;
 
-		CreateBuffer( imageSize, BufferUsageFlags.TransferSrcBit,
-			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
-			out var stagingBuffer, out var stagingBufferMemory );
+		using var stagingBuffer = LogicalGpu.CreateBuffer( imageSize, BufferUsageFlags.TransferSrcBit,
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
 
 		void* data;
-		if ( Vk.MapMemory( LogicalGpu, stagingBufferMemory, 0, imageSize, 0, &data ) != Result.Success )
+		if ( Vk.MapMemory( LogicalGpu, stagingBuffer.Memory, 0, imageSize, 0, &data ) != Result.Success )
 			throw new ApplicationException( "Failed to map memory for texture loading" );
 
 		image.CopyPixelDataTo( new Span<Rgba32>( data, (int)imageSize ) );
 
-		Vk.UnmapMemory( LogicalGpu, stagingBufferMemory );
+		Vk.UnmapMemory( LogicalGpu, stagingBuffer.Memory );
 
 		CreateImage( (uint)image.Width, (uint)image.Height, MipLevels, SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb,
 			ImageTiling.Optimal, ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
@@ -806,9 +784,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		TransitionImageLayout( textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, MipLevels );
 		CopyBufferToImage( stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height );
 		GenerateMipMaps( textureImage, Format.R8G8B8A8Srgb, (uint)image.Width, (uint)image.Height, MipLevels );
-
-		Vk.DestroyBuffer( LogicalGpu, stagingBuffer, null );
-		Vk.FreeMemory( LogicalGpu, stagingBufferMemory, null );
 	}
 
 	private void CreateTextureImageView()
@@ -848,14 +823,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var bufferSize = (ulong)sizeof( UniformBufferObject );
 
-		UniformBuffers = new Buffer[MaxFramesInFlight];
-		UniformBuffersMemory = new DeviceMemory[MaxFramesInFlight];
+		UniformBuffers = new VulkanBuffer[MaxFramesInFlight];
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			CreateBuffer( bufferSize, BufferUsageFlags.UniformBufferBit,
-				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
-				out UniformBuffers[i], out UniformBuffersMemory[i] );
+			UniformBuffers[i] = LogicalGpu.CreateBuffer( bufferSize, BufferUsageFlags.UniformBufferBit,
+				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
 		}
 	}
 
@@ -1116,36 +1089,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private static bool HasStencilComponent( Format format )
 	{
 		return format == Format.D32Sfloat || format == Format.D24UnormS8Uint;
-	}
-
-	private void CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
-		out Buffer buffer, out DeviceMemory bufferMemory )
-	{
-		var bufferInfo = new BufferCreateInfo
-		{
-			SType = StructureType.BufferCreateInfo,
-			Size = size,
-			Usage = usageFlags,
-			SharingMode = SharingMode.Exclusive
-		};
-
-		if ( Vk.CreateBuffer( LogicalGpu, bufferInfo, null, out buffer ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan buffer" );
-
-		var requirements = Vk.GetBufferMemoryRequirements( LogicalGpu, buffer );
-
-		var allocateInfo = new MemoryAllocateInfo
-		{
-			SType = StructureType.MemoryAllocateInfo,
-			AllocationSize = requirements.Size,
-			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
-		};
-
-		if ( Vk.AllocateMemory( LogicalGpu, allocateInfo, null, out bufferMemory ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate Vulkan buffer memory" );
-
-		if ( Vk.BindBufferMemory( LogicalGpu, buffer, bufferMemory, 0 ) != Result.Success )
-			throw new ApplicationException( "Failed to bind buffer memory to buffer" );
 	}
 
 	private void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,

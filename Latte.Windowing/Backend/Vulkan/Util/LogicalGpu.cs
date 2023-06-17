@@ -449,6 +449,39 @@ internal sealed class LogicalGpu : IDisposable
 		return commandPool;
 	}
 
+	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags )
+	{
+		var bufferInfo = new BufferCreateInfo
+		{
+			SType = StructureType.BufferCreateInfo,
+			Size = size,
+			Usage = usageFlags,
+			SharingMode = SharingMode.Exclusive
+		};
+
+		if ( Apis.Vk.CreateBuffer( LogicalDevice, bufferInfo, null, out var buffer ) != Result.Success )
+			throw new ApplicationException( "Failed to create Vulkan buffer" );
+
+		var requirements = Apis.Vk.GetBufferMemoryRequirements( LogicalDevice, buffer );
+
+		var allocateInfo = new MemoryAllocateInfo
+		{
+			SType = StructureType.MemoryAllocateInfo,
+			AllocationSize = requirements.Size,
+			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
+		};
+
+		if ( Apis.Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out var bufferMemory ) != Result.Success )
+			throw new ApplicationException( "Failed to allocate Vulkan buffer memory" );
+
+		if ( Apis.Vk.BindBufferMemory( LogicalDevice, buffer, bufferMemory, 0 ) != Result.Success )
+			throw new ApplicationException( "Failed to bind buffer memory to buffer" );
+
+		var vulkanBuffer = new VulkanBuffer( buffer, bufferMemory, this );
+		DisposeQueue.Enqueue( vulkanBuffer.Dispose );
+		return vulkanBuffer;
+	}
+
 	internal unsafe VulkanImage CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
 		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags, ImageAspectFlags aspectFlags )
 	{
