@@ -7,6 +7,7 @@ using Silk.NET.Windowing;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace Latte.Windowing.Backend.Vulkan;
@@ -135,8 +136,9 @@ internal sealed class LogicalGpu : IDisposable
 	}
 
 	internal unsafe GraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in RenderPass renderPass,
-		VertexInputBindingDescription[] bindingDescriptions, VertexInputAttributeDescription[] attributeDescriptions,
-		DynamicState[] dynamicStates, DescriptorSetLayout[] descriptorSetLayouts, PushConstantRange[] pushConstantRanges )
+		ReadOnlySpan<VertexInputBindingDescription> bindingDescriptions, ReadOnlySpan<VertexInputAttributeDescription> attributeDescriptions,
+		ReadOnlySpan<DynamicState> dynamicStates, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts,
+		ReadOnlySpan<PushConstantRange> pushConstantRanges )
 	{
 		var vertShaderStageInfo = new PipelineShaderStageCreateInfo
 		{
@@ -312,7 +314,7 @@ internal sealed class LogicalGpu : IDisposable
 		return graphicsPipeline;
 	}
 
-	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( DescriptorSetLayoutBinding[] bindings )
+	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
 	{
 		fixed( DescriptorSetLayoutBinding* bindingsPtr = bindings )
 		{
@@ -602,9 +604,9 @@ internal sealed class LogicalGpu : IDisposable
 		return FindSupportedFormat( formats, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit );
 	}
 
-	private static SurfaceFormatKHR ChooseSwapSurfaceFormat( SurfaceFormatKHR[] formats )
+	private static SurfaceFormatKHR ChooseSwapSurfaceFormat( IEnumerable<SurfaceFormatKHR> formats )
 	{
-		if ( formats.Length == 0 )
+		if ( !formats.Any() )
 			throw new ArgumentException( "No formats were provided", nameof( formats ) );
 
 		foreach ( var format in formats )
@@ -618,10 +620,10 @@ internal sealed class LogicalGpu : IDisposable
 			return format;
 		}
 
-		return formats[0];
+		return formats.First();
 	}
 
-	private static PresentModeKHR ChooseSwapPresentMode( PresentModeKHR[] presentModes )
+	private static PresentModeKHR ChooseSwapPresentMode( IEnumerable<PresentModeKHR> presentModes )
 	{
 		foreach ( var presentMode in presentModes )
 		{

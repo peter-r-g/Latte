@@ -6,6 +6,7 @@ using Silk.NET.Vulkan.Extensions.KHR;
 using System.Runtime.InteropServices;
 using System;
 using Silk.NET.Windowing;
+using System.Collections.Generic;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -93,7 +94,7 @@ internal unsafe sealed class VulkanInstance
 			SilkMarshal.Free( (nint)createInfo.PpEnabledLayerNames );
 	}
 
-	private bool CheckValidationLayerSupport( string[] validationLayers )
+	private bool CheckValidationLayerSupport( IEnumerable<string> validationLayers )
 	{
 		uint layerCount = 0;
 		if ( Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, null ) != Result.Success )
