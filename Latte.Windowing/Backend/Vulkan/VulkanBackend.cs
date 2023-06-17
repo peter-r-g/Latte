@@ -168,7 +168,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		WaitForIdle();
 		Window.FramebufferResize -= OnFrameBufferResize;
 
-		CleanupLogicalDevice();
+		Gpu.Dispose();
 
 		if ( EnableValidationLayers && DebugUtilsExtension is not null )
 			DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null );

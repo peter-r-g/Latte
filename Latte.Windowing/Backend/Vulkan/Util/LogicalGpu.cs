@@ -5,6 +5,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
@@ -27,6 +28,8 @@ internal sealed class LogicalGpu : IDisposable
 	internal Extent2D SwapchainExtent { get; private set; }
 	internal KhrSwapchain SwapchainExtension { get; private set; } = null!;
 
+	private ConcurrentQueue<Action> DisposeQueue = new();
+
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
 	{
 		if ( !familyIndices.IsComplete() )
@@ -45,6 +48,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	public unsafe void Dispose()
 	{
+		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
+			disposeCb();
+
 		foreach ( var imageView in SwapchainImageViews )
 			Apis.Vk.DestroyImageView( LogicalDevice, imageView, null );
 
@@ -296,12 +302,13 @@ internal sealed class LogicalGpu : IDisposable
 			if ( Apis.Vk.CreateGraphicsPipelines( LogicalDevice, default, 1, &pipelineInfo, null, out var pipeline ) != Result.Success )
 				throw new ApplicationException( "Failed to create Vulkan graphics pipeline" );
 
-			graphicsPipeline = new GraphicsPipeline( pipeline, pipelineLayout );
+			graphicsPipeline = new GraphicsPipeline( pipeline, pipelineLayout, this );
 		}
 
 		Marshal.FreeHGlobal( (nint)vertShaderStageInfo.PName );
 		Marshal.FreeHGlobal( (nint)fragShaderStageInfo.PName );
 
+		DisposeQueue.Enqueue( graphicsPipeline.Dispose );
 		return graphicsPipeline;
 	}
 
@@ -319,6 +326,7 @@ internal sealed class LogicalGpu : IDisposable
 			if ( Apis.Vk.CreateDescriptorSetLayout( LogicalDevice, layoutInfo, null, out var descriptorSetLayout ) != Result.Success )
 				throw new ApplicationException( "Failed to create Vulkan descriptor set layout" );
 
+			DisposeQueue.Enqueue( () => Apis.Vk.DestroyDescriptorSetLayout( LogicalDevice, descriptorSetLayout, null ) );
 			return descriptorSetLayout;
 		}
 	}
@@ -421,6 +429,7 @@ internal sealed class LogicalGpu : IDisposable
 		if ( Apis.Vk.CreateRenderPass( LogicalDevice, renderPassInfo, null, out var renderPass ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan render pass" );
 
+		DisposeQueue.Enqueue( () => Apis.Vk.DestroyRenderPass( LogicalDevice, renderPass, null ) );
 		return renderPass;
 	}
 
@@ -436,6 +445,7 @@ internal sealed class LogicalGpu : IDisposable
 		if ( Apis.Vk.CreateCommandPool( LogicalDevice, poolInfo, null, out var commandPool ) != Result.Success )
 			throw new ApplicationException( "Failed to create Vulkan command pool" );
 
+		DisposeQueue.Enqueue( () => Apis.Vk.DestroyCommandPool( LogicalDevice, commandPool, null ) );
 		return commandPool;
 	}
 
@@ -447,8 +457,10 @@ internal sealed class LogicalGpu : IDisposable
 			out var image, out var imageMemory );
 
 		var imageView = CreateImageView( image, format, aspectFlags, 1 );
+		var vulkanImage = new VulkanImage( image, imageMemory, imageView, this );
 
-		return new VulkanImage( image, imageMemory, imageView );
+		DisposeQueue.Enqueue( vulkanImage.Dispose );
+		return vulkanImage;
 	}
 
 	private unsafe void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
@@ -493,7 +505,6 @@ internal sealed class LogicalGpu : IDisposable
 		if ( Apis.Vk.BindImageMemory( LogicalDevice, image, imageMemory, 0 ) != Result.Success )
 			throw new ApplicationException( "Failed to bind image memory" );
 	}
-
 
 	private unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
 	{
