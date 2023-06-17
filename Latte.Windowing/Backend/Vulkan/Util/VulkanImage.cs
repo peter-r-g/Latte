@@ -11,6 +11,8 @@ internal sealed class VulkanImage : IDisposable
 	internal DeviceMemory Memory { get; set; }
 	internal ImageView View { get; set; }
 
+	private bool disposed;
+
 	internal VulkanImage( in Image image, in DeviceMemory memory, in ImageView view, LogicalGpu owner )
 	{
 		Image = image;
@@ -19,11 +21,22 @@ internal sealed class VulkanImage : IDisposable
 		Owner = owner;
 	}
 
+	~VulkanImage()
+	{
+		Dispose();
+	}
+
 	public unsafe void Dispose()
 	{
+		if ( disposed )
+			return;
+
+		disposed = true;
 		Apis.Vk.DestroyImageView( Owner, View, null );
 		Apis.Vk.DestroyImage( Owner, Image, null );
 		Apis.Vk.FreeMemory( Owner, Memory, null );
+
+		GC.SuppressFinalize( this );
 	}
 
 	internal unsafe void TransitionImageLayout( in CommandBuffer commandBuffer, Format format,
