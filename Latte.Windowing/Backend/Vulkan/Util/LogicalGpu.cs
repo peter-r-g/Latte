@@ -28,7 +28,7 @@ internal sealed class LogicalGpu : IDisposable
 	internal Extent2D SwapchainExtent { get; private set; }
 	internal KhrSwapchain SwapchainExtension { get; private set; } = null!;
 
-	private ConcurrentQueue<Action> DisposeQueue = new();
+	private ConcurrentQueue<Action> DisposeQueue { get; } = new();
 
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
 	{
