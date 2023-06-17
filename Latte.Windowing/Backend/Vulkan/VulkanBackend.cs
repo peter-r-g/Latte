@@ -53,6 +53,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private Extent2D SwapchainExtent => LogicalGpu.SwapchainExtent;
 	private KhrSwapchain SwapchainExtension => LogicalGpu.SwapchainExtension;
 
+	private Shader DefaultShader { get; set; } = null!;
+
 	private RenderPass RenderPass { get; set; }
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
 	private GraphicsPipeline GraphicsPipeline { get; set; } = null!;
@@ -140,6 +142,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		PickPhysicalDevice();
 		CreateLogicalDevice();
+		CreateDefaultShader();
 		CreateSwapChain();
 		CreateRenderPass();
 		CreateDescriptorSetLayout();
@@ -495,6 +498,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Vk.FreeMemory( LogicalGpu, TextureImageMemory, null );
 
 		Vk.DestroyCommandPool( LogicalGpu, CommandPool, null );
+		Vk.DestroyShaderModule( LogicalGpu, DefaultShader.VertexShaderModule, null );
+		Vk.DestroyShaderModule( LogicalGpu, DefaultShader.FragmentShaderModule, null );
 		Vk.DestroyDevice( LogicalGpu, null );
 	}
 
@@ -635,6 +640,15 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			EnableValidationLayers, ValidationLayers );
 	}
 
+	private void CreateDefaultShader()
+	{
+		DefaultShader = Shader.FromPath(
+			Path.Combine( "Assets", "Shaders", "vert.spv" ),
+			Path.Combine( "Assets", "Shaders", "frag.spv" )
+			);
+		DefaultShader.Initialize( this );
+	}
+
 	private void CreateSwapChain()
 	{
 		LogicalGpu.CreateSwapchain();
@@ -671,11 +685,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateGraphicsPipeline()
 	{
-		var shader = Shader.FromPath(
-			Path.Combine( "Assets", "Shaders", "vert.spv" ),
-			Path.Combine( "Assets", "Shaders", "frag.spv" )
-			);
-		shader.Initialize( this );
 		var bindingDescriptions = Vertex.GetBindingDescriptions();
 		var attributeDescriptions = Vertex.GetAttributeDescriptions();
 		var dynamicStates = new DynamicState[]
@@ -697,7 +706,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			}
 		};
 
-		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, shader, RenderPass,
+		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, DefaultShader, RenderPass,
 			bindingDescriptions, attributeDescriptions, dynamicStates,
 			descriptorSetLayouts, pushConstantRanges );
 	}
