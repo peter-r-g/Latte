@@ -439,6 +439,62 @@ internal sealed class LogicalGpu : IDisposable
 		return commandPool;
 	}
 
+	internal unsafe VulkanImage CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
+		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags, ImageAspectFlags aspectFlags )
+	{
+		CreateImage( width, height, mipLevels, numSamples,
+			format, tiling, usageFlags, memoryPropertyFlags,
+			out var image, out var imageMemory );
+
+		var imageView = CreateImageView( image, format, aspectFlags, 1 );
+
+		return new VulkanImage( image, imageMemory, imageView );
+	}
+
+	private unsafe void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
+		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
+		out Image image, out DeviceMemory imageMemory )
+	{
+		var imageInfo = new ImageCreateInfo()
+		{
+			SType = StructureType.ImageCreateInfo,
+			ImageType = ImageType.Type2D,
+			Extent =
+			{
+				Width = width,
+				Height = height,
+				Depth = 1
+			},
+			MipLevels = mipLevels,
+			ArrayLayers = 1,
+			Format = format,
+			Tiling = tiling,
+			InitialLayout = ImageLayout.Undefined,
+			Usage = usageFlags,
+			SharingMode = SharingMode.Exclusive,
+			Samples = numSamples
+		};
+
+		if ( Apis.Vk.CreateImage( LogicalDevice, imageInfo, null, out image ) != Result.Success )
+			throw new ApplicationException( "Failed to create image" );
+
+		var requirements = Apis.Vk.GetImageMemoryRequirements( LogicalDevice, image );
+
+		var allocateInfo = new MemoryAllocateInfo()
+		{
+			SType = StructureType.MemoryAllocateInfo,
+			AllocationSize = requirements.Size,
+			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
+		};
+
+		if ( Apis.Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out imageMemory ) != Result.Success )
+			throw new ApplicationException( "Failed to allocate image memory" );
+
+		if ( Apis.Vk.BindImageMemory( LogicalDevice, image, imageMemory, 0 ) != Result.Success )
+			throw new ApplicationException( "Failed to bind image memory" );
+	}
+
+
 	private unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
 	{
 		var viewInfo = new ImageViewCreateInfo()
@@ -461,6 +517,18 @@ internal sealed class LogicalGpu : IDisposable
 			throw new ApplicationException( "Failed to create Vulkan texture image view" );
 
 		return imageView;
+	}
+
+	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
+	{
+		var memoryProperties = Gpu.MemoryProperties;
+		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
+		{
+			if ( (typeFilter & (1 << i)) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
+				return (uint)i;
+		}
+
+		throw new ApplicationException( "Failed to find suitable memory type" );
 	}
 
 	private Format FindSupportedFormat( IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features )

@@ -77,13 +77,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private ImageView TextureImageView { get; set; }
 	private Sampler TextureSampler { get; set; }
 
-	private Image DepthImage { get; set; }
-	private DeviceMemory DepthImageMemory { get; set; }
-	private ImageView DepthImageView { get; set; }
+	private VulkanImage DepthImage { get; set; } = null!;
+	private DeviceMemory DepthImageMemory => DepthImage.Memory;
+	private ImageView DepthImageView => DepthImage.View;
 
-	private Image ColorImage { get; set; }
-	private DeviceMemory ColorImageMemory { get; set; }
-	private ImageView ColorImageView { get; set; }
+	private VulkanImage ColorImage { get; set; } = null!;
+	private DeviceMemory ColorImageMemory => ColorImage.Memory;
+	private ImageView ColorImageView => ColorImage.View;
 
 	private Semaphore[] ImageAvailableSemaphores { get; set; } = Array.Empty<Semaphore>();
 	private Semaphore[] RenderFinishedSemaphores { get; set; } = Array.Empty<Semaphore>();
@@ -715,29 +715,24 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateColorResources()
 	{
-		CreateImage( SwapchainExtent.Width, SwapchainExtent.Height, 1, Options.Msaa.ToVulkan(), SwapchainImageFormat,
-			ImageTiling.Optimal, ImageUsageFlags.TransientAttachmentBit | ImageUsageFlags.ColorAttachmentBit,
-			MemoryPropertyFlags.DeviceLocalBit,
-			out var colorImage, out var colorImageMemory );
-
-		ColorImage = colorImage;
-		ColorImageMemory = colorImageMemory;
-		ColorImageView = CreateImageView( ColorImage, SwapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
+		ColorImage = LogicalGpu.CreateImage( SwapchainExtent.Width, SwapchainExtent.Height, 1, Options.Msaa.ToVulkan(),
+			SwapchainImageFormat, ImageTiling.Optimal, ImageUsageFlags.TransientAttachmentBit | ImageUsageFlags.ColorAttachmentBit,
+			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
 	}
 
 	private void CreateDepthResources()
 	{
 		var depthFormat = FindDepthFormat();
+		DepthImage = LogicalGpu.CreateImage( SwapchainExtent.Width, SwapchainExtent.Height, 1, Options.Msaa.ToVulkan(),
+			depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit,
+			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.DepthBit );
 
-		CreateImage( SwapchainExtent.Width, SwapchainExtent.Height, 1, Options.Msaa.ToVulkan(), depthFormat,
-			ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit,
-			out var depthImage, out var depthImageMemory );
+		var commandBuffer = BeginOneTimeCommands();
 
-		DepthImage = depthImage;
-		DepthImageMemory = depthImageMemory;
-		DepthImageView = CreateImageView( depthImage, depthFormat, ImageAspectFlags.DepthBit, 1 );
+		DepthImage.TransitionImageLayout( commandBuffer, depthFormat,
+			ImageLayout.Undefined, ImageLayout.DepthStencilAttachmentOptimal, 1 );
 
-		TransitionImageLayout( DepthImage, depthFormat, ImageLayout.Undefined, ImageLayout.DepthStencilAttachmentOptimal, 1 );
+		EndOneTimeCommands( commandBuffer );
 	}
 
 	private void CreateFrameBuffers()
