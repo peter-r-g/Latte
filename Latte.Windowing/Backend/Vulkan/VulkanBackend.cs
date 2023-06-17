@@ -307,8 +307,34 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( !Options.HasOptionsChanged() )
 			return;
 
-		if ( Options.HasOptionsChanged( nameof( Options.Msaa ), nameof( Options.WireframeEnabled ) ) )
-			RecreateLogicalDevice();
+		WaitForIdle();
+
+		if ( Options.HasOptionsChanged( nameof( Options.Msaa ) ) )
+		{
+			Vk.DestroyDescriptorPool( LogicalGpu, DescriptorPool, null );
+			Vk.DestroySampler( LogicalGpu, TextureSampler, null );
+			Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
+			Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
+			Vk.DestroyRenderPass( LogicalGpu, RenderPass, null );
+			CleanupSwapChain();
+
+			CreateSwapChain();
+			CreateRenderPass();
+			CreateGraphicsPipeline();
+			CreateColorResources();
+			CreateDepthResources();
+			CreateFrameBuffers();
+			CreateTextureSampler();
+			CreateDescriptorPool();
+			CreateDescriptorSets();
+		}
+		else if ( Options.HasOptionsChanged( nameof( Options.WireframeEnabled ) ) )
+		{
+			Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
+			Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
+
+			CreateGraphicsPipeline();
+		}
 
 		OptionsApplied?.Invoke( this );
 	}
@@ -489,31 +515,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		CreateFrameBuffers();
 	}
 
-	private void RecreateLogicalDevice()
-	{
-		WaitForIdle();
-
-		CleanupLogicalDevice();
-
-		CreateLogicalDevice();
-		CreateSwapChain();
-		CreateRenderPass();
-		CreateDescriptorSetLayout();
-		CreateGraphicsPipeline();
-		CreateCommandPool();
-		CreateColorResources();
-		CreateDepthResources();
-		CreateFrameBuffers();
-		CreateTextureImage();
-		CreateTextureImageView();
-		CreateTextureSampler();
-		CreateUniformBuffers();
-		CreateDescriptorPool();
-		CreateDescriptorSets();
-		CreateCommandBuffer();
-		CreateSyncObjects();
-	}
-
 	private void OnFrameBufferResize( Vector2D<int> newSize )
 	{
 		HasFrameBufferResized = true;
@@ -625,9 +626,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		var features = new PhysicalDeviceFeatures
 		{
-			SamplerAnisotropy = Options.Msaa != MsaaOption.One ? Vk.True : Vk.False,
+			SamplerAnisotropy = Vk.True,
 			SampleRateShading = Vk.True,
-			FillModeNonSolid = Options.WireframeEnabled ? Vk.True : Vk.False
+			FillModeNonSolid = Vk.True
 		};
 
 		LogicalGpu = Gpu.CreateLogicalGpu( indices, features, DeviceExtensions,
