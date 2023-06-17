@@ -1,7 +1,6 @@
 ﻿using Latte.Windowing.Assets;
 using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
-using Silk.NET.Core.Native;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
@@ -11,9 +10,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.IO;
-using BlendFactor = Silk.NET.Vulkan.BlendFactor;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 
