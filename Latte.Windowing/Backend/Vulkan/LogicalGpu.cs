@@ -22,13 +22,6 @@ internal sealed class LogicalGpu : IDisposable
 	internal Queue GraphicsQueue { get; }
 	internal Queue PresentQueue { get; }
 
-	internal SwapchainKHR Swapchain { get; private set; }
-	internal Image[] SwapchainImages { get; private set; } = Array.Empty<Image>();
-	internal ImageView[] SwapchainImageViews { get; private set; } = Array.Empty<ImageView>();
-	internal Format SwapchainImageFormat { get; private set; }
-	internal Extent2D SwapchainExtent { get; private set; }
-	internal KhrSwapchain SwapchainExtension { get; private set; } = null!;
-
 	private ConcurrentQueue<Action> DisposeQueue { get; } = new();
 
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
@@ -52,15 +45,11 @@ internal sealed class LogicalGpu : IDisposable
 		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
 			disposeCb();
 
-		foreach ( var imageView in SwapchainImageViews )
-			Apis.Vk.DestroyImageView( LogicalDevice, imageView, null );
-
-		SwapchainExtension.DestroySwapchain( LogicalDevice, Swapchain, null );
 		Apis.Vk.DestroyDevice( LogicalDevice, null );
 		GC.SuppressFinalize( this );
 	}
 
-	internal unsafe void CreateSwapchain()
+	internal unsafe VulkanSwapchain CreateSwapchain()
 	{
 		var instance = Gpu.Instance;
 		var swapChainSupport = Gpu.SwapchainSupportDetails;
@@ -112,30 +101,31 @@ internal sealed class LogicalGpu : IDisposable
 		if ( !Apis.Vk.TryGetDeviceExtension<KhrSwapchain>( instance, LogicalDevice, out var swapchainExtension ) )
 			throw new ApplicationException( "Failed to get KHR_swapchain extension" );
 
-		SwapchainExtension = swapchainExtension;
-
 		if ( swapchainExtension.CreateSwapchain( LogicalDevice, createInfo, null, out var swapchain ) != Result.Success )
 			throw new ApplicationException( "Failed to create swap chain" );
 
-		Swapchain = swapchain;
-
-		if ( swapchainExtension.GetSwapchainImages( LogicalDevice, Swapchain, &imageCount, null ) != Result.Success )
+		if ( swapchainExtension.GetSwapchainImages( LogicalDevice, swapchain, &imageCount, null ) != Result.Success )
 			throw new ApplicationException( "Failed to get swap chain images (1)" );
 
-		SwapchainImages = new Image[imageCount];
-		if ( swapchainExtension.GetSwapchainImages( LogicalDevice, Swapchain, &imageCount, SwapchainImages ) != Result.Success )
+		var swapchainImages = new Image[imageCount];
+		if ( swapchainExtension.GetSwapchainImages( LogicalDevice, swapchain, &imageCount, swapchainImages ) != Result.Success )
 			throw new ApplicationException( "Failed to get swap chain images (2)" );
 
-		SwapchainImageFormat = surfaceFormat.Format;
-		SwapchainExtent = extent;
+		var swapchainImageFormat = surfaceFormat.Format;
+		var swapchainExtent = extent;
 
-		SwapchainImageViews = new ImageView[imageCount];
+		var swapchainImageViews = new ImageView[imageCount];
 
-		for ( var i = 0; i < SwapchainImages.Length; i++ )
-			SwapchainImageViews[i] = CreateImageView( SwapchainImages[i], SwapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
+		for ( var i = 0; i < swapchainImages.Length; i++ )
+			swapchainImageViews[i] = CreateImageView( swapchainImages[i], swapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
+
+		var vulkanSwapchain = new VulkanSwapchain( swapchain, swapchainImages, swapchainImageViews,
+			swapchainImageFormat, swapchainExtent, swapchainExtension, this );
+		DisposeQueue.Enqueue( vulkanSwapchain.Dispose );
+		return vulkanSwapchain;
 	}
 
-	internal unsafe GraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in RenderPass renderPass,
+	internal unsafe GraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in Extent2D swapchainExtent, in RenderPass renderPass,
 		ReadOnlySpan<VertexInputBindingDescription> bindingDescriptions, ReadOnlySpan<VertexInputAttributeDescription> attributeDescriptions,
 		ReadOnlySpan<DynamicState> dynamicStates, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts,
 		ReadOnlySpan<PushConstantRange> pushConstantRanges )
@@ -190,8 +180,8 @@ internal sealed class LogicalGpu : IDisposable
 			{
 				X = 0,
 				Y = 0,
-				Width = SwapchainExtent.Width,
-				Height = SwapchainExtent.Height,
+				Width = swapchainExtent.Width,
+				Height = swapchainExtent.Height,
 				MinDepth = 0,
 				MaxDepth = 0
 			};
@@ -199,7 +189,7 @@ internal sealed class LogicalGpu : IDisposable
 			var scissor = new Rect2D
 			{
 				Offset = new Offset2D( 0, 0 ),
-				Extent = SwapchainExtent
+				Extent = swapchainExtent
 			};
 
 			var dynamicState = new PipelineDynamicStateCreateInfo
@@ -333,12 +323,12 @@ internal sealed class LogicalGpu : IDisposable
 		}
 	}
 
-	internal unsafe RenderPass CreateRenderPass( SampleCountFlags msaaSamples )
+	internal unsafe RenderPass CreateRenderPass( Format swapchainImageFormat, SampleCountFlags msaaSamples )
 	{
 		var useMsaa = msaaSamples != SampleCountFlags.Count1Bit;
 		var colorAttachment = new AttachmentDescription()
 		{
-			Format = SwapchainImageFormat,
+			Format = swapchainImageFormat,
 			Samples = msaaSamples,
 			LoadOp = AttachmentLoadOp.Clear,
 			StoreOp = AttachmentStoreOp.Store,
@@ -374,7 +364,7 @@ internal sealed class LogicalGpu : IDisposable
 
 		var colorAttachmentResolve = new AttachmentDescription()
 		{
-			Format = SwapchainImageFormat,
+			Format = swapchainImageFormat,
 			Samples = SampleCountFlags.Count1Bit,
 			LoadOp = AttachmentLoadOp.DontCare,
 			StoreOp = AttachmentStoreOp.DontCare,

@@ -46,12 +46,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private Gpu Gpu { get; set; } = null!;
 
 	private LogicalGpu LogicalGpu { get; set; } = null!;
-	private SwapchainKHR Swapchain => LogicalGpu.Swapchain;
-	private Image[] SwapchainImages => LogicalGpu.SwapchainImages;
-	private ImageView[] SwapchainImageViews => LogicalGpu.SwapchainImageViews;
-	private Format SwapchainImageFormat => LogicalGpu.SwapchainImageFormat;
-	private Extent2D SwapchainExtent => LogicalGpu.SwapchainExtent;
-	private KhrSwapchain SwapchainExtension => LogicalGpu.SwapchainExtension;
+	private VulkanSwapchain Swapchain { get; set; } = null!;
+	private Image[] SwapchainImages => Swapchain.Images;
+	private ImageView[] SwapchainImageViews => Swapchain.ImageViews;
+	private Format SwapchainImageFormat => Swapchain.ImageFormat;
+	private Extent2D SwapchainExtent => Swapchain.Extent;
+	private Framebuffer[] SwapchainFrameBuffers => Swapchain.FrameBuffers;
+	private KhrSwapchain SwapchainExtension => Swapchain.Extension;
 
 	private Shader DefaultShader { get; set; } = null!;
 
@@ -59,7 +60,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
 	private GraphicsPipeline GraphicsPipeline { get; set; } = null!;
 	private PipelineLayout PipelineLayout => GraphicsPipeline.Layout;
-	private Framebuffer[] SwapchainFrameBuffers { get; set; } = Array.Empty<Framebuffer>();
 	private CommandPool CommandPool { get; set; }
 	private VulkanBuffer[] UniformBuffers { get; set; } = Array.Empty<VulkanBuffer>();
 	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
@@ -631,12 +631,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateSwapChain()
 	{
-		LogicalGpu.CreateSwapchain();
+		Swapchain = LogicalGpu.CreateSwapchain();
 	}
 
 	private void CreateRenderPass()
 	{
-		RenderPass = LogicalGpu.CreateRenderPass( Options.Msaa.ToVulkan() );
+		RenderPass = LogicalGpu.CreateRenderPass( Swapchain.ImageFormat, Options.Msaa.ToVulkan() );
 	}
 
 	private void CreateDescriptorSetLayout()
@@ -686,7 +686,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			}
 		};
 
-		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, DefaultShader, RenderPass,
+		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, DefaultShader, SwapchainExtent, RenderPass,
 			bindingDescriptions, attributeDescriptions, dynamicStates,
 			descriptorSetLayouts, pushConstantRanges );
 	}
@@ -724,35 +724,18 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateFrameBuffers()
 	{
-		SwapchainFrameBuffers = new Framebuffer[SwapchainImageViews.Length];
-
 		var useMsaa = Options.Msaa != MsaaOption.One;
-		ImageView* attachments = stackalloc ImageView[useMsaa ? 3 : 2];
+		var attachments = new ImageView[useMsaa ? 3 : 2];
 		attachments[0] = ColorImageView;
 		attachments[1] = DepthImageView;
-		for ( var i = 0; i < SwapchainImageViews.Length; i++ )
+
+		Swapchain.CreateFrameBuffers( RenderPass, attachments, frameBufferIndex =>
 		{
 			if ( useMsaa )
-				attachments[2] = SwapchainImageViews[i];
+				attachments[2] = SwapchainImageViews[frameBufferIndex];
 			else
-				attachments[0] = SwapchainImageViews[i];
-
-			var frameBufferInfo = new FramebufferCreateInfo
-			{
-				SType = StructureType.FramebufferCreateInfo,
-				RenderPass = RenderPass,
-				AttachmentCount = (uint)(useMsaa ? 3 : 2),
-				PAttachments = attachments,
-				Width = SwapchainExtent.Width,
-				Height = SwapchainExtent.Height,
-				Layers = 1
-			};
-
-			if ( Vk.CreateFramebuffer( LogicalGpu, frameBufferInfo, null, out var frameBuffer ) != Result.Success )
-				throw new ApplicationException( $"Failed to create Vulkan frame buffer [{i}]" );
-
-			SwapchainFrameBuffers[i] = frameBuffer;
-		}
+				attachments[0] = SwapchainImageViews[frameBufferIndex];
+		} );
 	}
 
 	private void CreateTextureImage()
