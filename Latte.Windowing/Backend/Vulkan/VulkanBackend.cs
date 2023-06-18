@@ -403,25 +403,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		CopyBuffer( stagingBuffer, buffer, bufferSize );
 	}
 
-	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
-	{
-		var createInfo = new ShaderModuleCreateInfo
-		{
-			SType = StructureType.ShaderModuleCreateInfo,
-			CodeSize = (nuint)shaderCode.Length
-		};
-
-		ShaderModule shaderModule;
-		fixed ( byte* shaderCodePtr = shaderCode )
-		{
-			createInfo.PCode = (uint*)shaderCodePtr;
-
-			if ( Vk.CreateShaderModule( LogicalGpu, createInfo, null, out shaderModule ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan shader module" );
-		}
-
-		return shaderModule;
-	}
+	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode ) => LogicalGpu.CreateShaderModule( shaderCode );
 	#endregion
 
 	#region Internal

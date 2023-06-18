@@ -517,6 +517,26 @@ internal sealed class LogicalGpu : IDisposable
 		return textureSampler;
 	}
 
+	internal unsafe ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
+	{
+		var createInfo = new ShaderModuleCreateInfo
+		{
+			SType = StructureType.ShaderModuleCreateInfo,
+			CodeSize = (nuint)shaderCode.Length
+		};
+
+		fixed ( byte* shaderCodePtr = shaderCode )
+		{
+			createInfo.PCode = (uint*)shaderCodePtr;
+
+			if ( Apis.Vk.CreateShaderModule( LogicalDevice, createInfo, null, out var shaderModule ) != Result.Success )
+				throw new ApplicationException( "Failed to create Vulkan shader module" );
+
+			DisposeQueue.Enqueue( () => Apis.Vk.DestroyShaderModule( LogicalDevice, shaderModule, null ) );
+			return shaderModule;
+		}
+	}
+
 	private unsafe void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
 		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
 		out Image image, out DeviceMemory imageMemory )
