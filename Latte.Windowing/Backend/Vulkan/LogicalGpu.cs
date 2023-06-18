@@ -488,6 +488,35 @@ internal sealed class LogicalGpu : IDisposable
 		return vulkanImage;
 	}
 
+	internal unsafe Sampler CreateTextureSampler( bool enableMsaa, uint mipLevels )
+	{
+		var samplerInfo = new SamplerCreateInfo()
+		{
+			SType = StructureType.SamplerCreateInfo,
+			MagFilter = Filter.Linear,
+			MinFilter = Filter.Linear,
+			AddressModeU = SamplerAddressMode.Repeat,
+			AddressModeV = SamplerAddressMode.Repeat,
+			AddressModeW = SamplerAddressMode.Repeat,
+			AnisotropyEnable = enableMsaa ? Vk.True : Vk.False,
+			MaxAnisotropy = Gpu.Properties.Limits.MaxSamplerAnisotropy,
+			BorderColor = BorderColor.IntOpaqueBlack,
+			UnnormalizedCoordinates = Vk.False,
+			CompareEnable = Vk.False,
+			CompareOp = CompareOp.Always,
+			MipmapMode = SamplerMipmapMode.Linear,
+			MipLodBias = 0,
+			MinLod = 0,
+			MaxLod = mipLevels
+		};
+
+		if ( Apis.Vk.CreateSampler( LogicalDevice, samplerInfo, null, out var textureSampler ) != Result.Success )
+			throw new ApplicationException( "Failed to create Vulkan texture sampler" );
+
+		DisposeQueue.Enqueue( () => Apis.Vk.DestroySampler( LogicalDevice, textureSampler, null ) );
+		return textureSampler;
+	}
+
 	private unsafe void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
 		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
 		out Image image, out DeviceMemory imageMemory )

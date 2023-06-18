@@ -776,30 +776,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateTextureSampler()
 	{
-		var samplerInfo = new SamplerCreateInfo()
-		{
-			SType = StructureType.SamplerCreateInfo,
-			MagFilter = Filter.Linear,
-			MinFilter = Filter.Linear,
-			AddressModeU = SamplerAddressMode.Repeat,
-			AddressModeV = SamplerAddressMode.Repeat,
-			AddressModeW = SamplerAddressMode.Repeat,
-			AnisotropyEnable = Options.Msaa != MsaaOption.One ? Vk.True : Vk.False,
-			MaxAnisotropy = Gpu.Properties.Limits.MaxSamplerAnisotropy,
-			BorderColor = BorderColor.IntOpaqueBlack,
-			UnnormalizedCoordinates = Vk.False,
-			CompareEnable = Vk.False,
-			CompareOp = CompareOp.Always,
-			MipmapMode = SamplerMipmapMode.Linear,
-			MipLodBias = 0,
-			MinLod = 0,
-			MaxLod = MipLevels
-		};
-
-		if ( Vk.CreateSampler( LogicalGpu, samplerInfo, null, out var textureSampler ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan texture sampler" );
-
-		TextureSampler = textureSampler;
+		TextureSampler = LogicalGpu.CreateTextureSampler( Options.Msaa != MsaaOption.One, MipLevels );
 	}
 
 	private void CreateUniformBuffers()
