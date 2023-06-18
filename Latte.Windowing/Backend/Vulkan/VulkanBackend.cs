@@ -771,19 +771,19 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var pools = stackalloc DescriptorPoolSize[]
 		{
-			new DescriptorPoolSize()
+			new DescriptorPoolSize
 			{
 				Type = DescriptorType.UniformBuffer,
 				DescriptorCount = MaxFramesInFlight
 			},
-			new DescriptorPoolSize()
+			new DescriptorPoolSize
 			{
 				Type = DescriptorType.CombinedImageSampler,
 				DescriptorCount = MaxFramesInFlight
 			}
 		};
 
-		var poolInfo = new DescriptorPoolCreateInfo()
+		var poolInfo = new DescriptorPoolCreateInfo
 		{
 			SType = StructureType.DescriptorPoolCreateInfo,
 			PoolSizeCount = 2,
@@ -805,7 +805,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 			layouts[i] = DescriptorSetLayout;
 
-		var allocateInfo = new DescriptorSetAllocateInfo()
+		var allocateInfo = new DescriptorSetAllocateInfo
 		{
 			SType = StructureType.DescriptorSetAllocateInfo,
 			DescriptorPool = DescriptorPool,
@@ -823,21 +823,21 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var descriptorWrites = stackalloc WriteDescriptorSet[2];
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			var bufferInfo = new DescriptorBufferInfo()
+			var bufferInfo = new DescriptorBufferInfo
 			{
 				Buffer = UniformBuffers[i],
 				Offset = 0,
 				Range = (ulong)sizeof( UniformBufferObject )
 			};
 
-			var imageInfo = new DescriptorImageInfo()
+			var imageInfo = new DescriptorImageInfo
 			{
 				ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
 				ImageView = TextureImageView,
 				Sampler = TextureSampler
 			};
 
-			var uboWrite = new WriteDescriptorSet()
+			var uboWrite = new WriteDescriptorSet
 			{
 				SType = StructureType.WriteDescriptorSet,
 				DstSet = DescriptorSets[i],
@@ -849,7 +849,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			};
 			descriptorWrites[0] = uboWrite;
 
-			var imageWrite = new WriteDescriptorSet()
+			var imageWrite = new WriteDescriptorSet
 			{
 				SType = StructureType.WriteDescriptorSet,
 				DstSet = DescriptorSets[i],
@@ -934,7 +934,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private CommandBuffer BeginOneTimeCommands()
 	{
-		var allocateInfo = new CommandBufferAllocateInfo()
+		var allocateInfo = new CommandBufferAllocateInfo
 		{
 			SType = StructureType.CommandBufferAllocateInfo,
 			Level = CommandBufferLevel.Primary,
@@ -945,7 +945,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ) != Result.Success )
 			throw new ApplicationException( "Failed to allocate command buffer for one time use" );
 
-		var beginInfo = new CommandBufferBeginInfo()
+		var beginInfo = new CommandBufferBeginInfo
 		{
 			SType = StructureType.CommandBufferBeginInfo,
 			Flags = CommandBufferUsageFlags.OneTimeSubmitBit
@@ -966,7 +966,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			commandBuffer
 		};
-		var submitInfo = new SubmitInfo()
+		var submitInfo = new SubmitInfo
 		{
 			SType = StructureType.SubmitInfo,
 			CommandBufferCount = 1,
@@ -1030,7 +1030,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
 		out Image image, out DeviceMemory imageMemory )
 	{
-		var imageInfo = new ImageCreateInfo()
+		var imageInfo = new ImageCreateInfo
 		{
 			SType = StructureType.ImageCreateInfo,
 			ImageType = ImageType.Type2D,
@@ -1055,7 +1055,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		var requirements = Vk.GetImageMemoryRequirements( LogicalGpu, image );
 
-		var allocateInfo = new MemoryAllocateInfo()
+		var allocateInfo = new MemoryAllocateInfo
 		{
 			SType = StructureType.MemoryAllocateInfo,
 			AllocationSize = requirements.Size,
@@ -1071,7 +1071,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
 	{
-		var viewInfo = new ImageViewCreateInfo()
+		var viewInfo = new ImageViewCreateInfo
 		{
 			SType = StructureType.ImageViewCreateInfo,
 			Image = image,
@@ -1098,7 +1098,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var commandBuffer = BeginOneTimeCommands();
 
-		var barrier = new ImageMemoryBarrier()
+		var barrier = new ImageMemoryBarrier
 		{
 			SType = StructureType.ImageMemoryBarrier,
 			OldLayout = oldLayout,
@@ -1169,7 +1169,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var commandBuffer = BeginOneTimeCommands();
 
-		var copyRegion = new BufferCopy()
+		var copyRegion = new BufferCopy
 		{
 			Size = size
 		};
@@ -1183,7 +1183,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var commandBuffer = BeginOneTimeCommands();
 
-		var region = new BufferImageCopy()
+		var region = new BufferImageCopy
 		{
 			BufferOffset = 0,
 			BufferRowLength = 0,
@@ -1217,7 +1217,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		var commandBuffer = BeginOneTimeCommands();
 
-		var barrier = new ImageMemoryBarrier()
+		var barrier = new ImageMemoryBarrier
 		{
 			SType = StructureType.ImageMemoryBarrier,
 			Image = image,
@@ -1248,7 +1248,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				0, null,
 				1, barrier );
 
-			var blit = new ImageBlit()
+			var blit = new ImageBlit
 			{
 				SrcSubresource =
 				{
