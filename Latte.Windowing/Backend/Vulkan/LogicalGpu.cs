@@ -469,7 +469,7 @@ internal sealed class LogicalGpu : IDisposable
 		if ( Apis.Vk.BindBufferMemory( LogicalDevice, buffer, bufferMemory, 0 ) != Result.Success )
 			throw new ApplicationException( "Failed to bind buffer memory to buffer" );
 
-		var vulkanBuffer = new VulkanBuffer( buffer, bufferMemory, this );
+		var vulkanBuffer = new VulkanBuffer( buffer, bufferMemory, size, this );
 		DisposeQueue.Enqueue( vulkanBuffer.Dispose );
 		return vulkanBuffer;
 	}

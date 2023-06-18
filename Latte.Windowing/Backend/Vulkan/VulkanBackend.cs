@@ -393,12 +393,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		using var stagingBuffer = LogicalGpu.CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
 
-		void* dataPtr;
-		if ( Vk.MapMemory( LogicalGpu, stagingBuffer.Memory, 0, bufferSize, 0, &dataPtr ) != Result.Success )
-			throw new ApplicationException( "Failed to map staging buffer memory" );
-
-		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
-		Vk.UnmapMemory( LogicalGpu, stagingBuffer.Memory );
+		stagingBuffer.SetMemory( data );
 
 		CopyBuffer( stagingBuffer, buffer, bufferSize );
 	}
@@ -495,13 +490,11 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( Camera.Zoom ), (float)Window.Size.X / Window.Size.Y, Camera.ZNear, Camera.ZFar );
 		var ubo = new UniformBufferObject( view, projection );
 
-		void* data;
-		if ( Vk.MapMemory( LogicalGpu, UniformBuffers[currentImage].Memory, 0, (ulong)sizeof( UniformBufferObject ), 0, &data ) != Result.Success )
-			throw new ApplicationException( "Failed to map memory of the UBO" );
-
-		new Span<UniformBufferObject>( data, 1 )[0] = ubo;
-
-		Vk.UnmapMemory( LogicalGpu, UniformBuffers[currentImage].Memory );
+		Span<UniformBufferObject> data = stackalloc UniformBufferObject[]
+		{
+			ubo
+		};
+		UniformBuffers[currentImage].SetMemory<UniformBufferObject>( data );
 	}
 
 	private void RecordCommandBuffer( in CommandBuffer commandBuffer, uint imageIndex, double dt )

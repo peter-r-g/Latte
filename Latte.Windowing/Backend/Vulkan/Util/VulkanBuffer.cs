@@ -10,13 +10,15 @@ internal sealed class VulkanBuffer : IDisposable
 
 	internal Buffer Buffer { get; }
 	internal DeviceMemory Memory { get; }
+	internal ulong Size { get; }
 
 	private bool disposed;
 
-	internal VulkanBuffer( in Buffer buffer, in DeviceMemory memory, LogicalGpu owner )
+	internal VulkanBuffer( in Buffer buffer, in DeviceMemory memory, ulong size, LogicalGpu owner )
 	{
 		Buffer = buffer;
 		Memory = memory;
+		Size = size;
 		Owner = owner;
 	}
 
@@ -35,6 +37,16 @@ internal sealed class VulkanBuffer : IDisposable
 		Apis.Vk.FreeMemory( Owner, Memory, null );
 
 		GC.SuppressFinalize( this );
+	}
+
+	internal unsafe void SetMemory<T>( ReadOnlySpan<T> data ) where T : unmanaged
+	{
+		void* dataPtr;
+		if ( Apis.Vk.MapMemory( Owner, Memory, 0, Size, 0, &dataPtr ) != Result.Success )
+			throw new ApplicationException( "Failed to map buffer memory" );
+
+		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
+		Apis.Vk.UnmapMemory( Owner, Memory );
 	}
 
 	public static implicit operator Buffer( VulkanBuffer vulkanBuffer ) => vulkanBuffer.Buffer;
