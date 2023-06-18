@@ -39,10 +39,10 @@ internal sealed class VulkanBuffer : IDisposable
 		GC.SuppressFinalize( this );
 	}
 
-	internal unsafe void SetMemory<T>( ReadOnlySpan<T> data ) where T : unmanaged
+	internal unsafe void SetMemory<T>( ReadOnlySpan<T> data, ulong offset = 0 ) where T : unmanaged
 	{
 		void* dataPtr;
-		if ( Apis.Vk.MapMemory( Owner, Memory, 0, Size, 0, &dataPtr ) != Result.Success )
+		if ( Apis.Vk.MapMemory( Owner, Memory, offset, Size, 0, &dataPtr ) != Result.Success )
 			throw new ApplicationException( "Failed to map buffer memory" );
 
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
