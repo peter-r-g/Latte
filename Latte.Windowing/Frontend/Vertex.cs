@@ -45,19 +45,20 @@ public struct Vertex : IEquatable<Vertex>
 	public static bool operator !=( in Vertex left, in Vertex right ) => !(left == right);
 
 	/// <summary>
-	/// Returns the binding description of a <see cref="Vertex"/>.
+	/// Returns all binding descriptions of the <see cref="Vertex"/>.
 	/// </summary>
-	/// <returns>The binding description of the <see cref="Vertex"/>.</returns>
-	internal static unsafe VertexInputBindingDescription GetBindingDescription()
+	/// <returns>The binding descriptions of the <see cref="Vertex"/>.</returns>
+	internal static unsafe VertexInputBindingDescription[] GetBindingDescriptions()
 	{
-		var bindingDescription = new VertexInputBindingDescription
+		return new VertexInputBindingDescription[]
 		{
-			Binding = 0,
+			new VertexInputBindingDescription
+			{
+				Binding = 0,
 			Stride = (uint)sizeof( Vertex ),
 			InputRate = VertexInputRate.Vertex
+			}
 		};
-
-		return bindingDescription;
 	}
 
 	/// <summary>

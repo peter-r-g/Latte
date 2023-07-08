@@ -22,11 +22,11 @@ public sealed class Mesh
 	/// <summary>
 	/// The vertex buffer that stores the <see cref="Vertices"/> on the GPU.
 	/// </summary>
-	internal GPUBuffer<Vertex>? VulkanVertexBuffer { get; private set; }
+	internal GpuBuffer<Vertex>? VulkanVertexBuffer { get; private set; }
 	/// <summary>
 	/// The index buffer that stores the <see cref="Indices"/> on the GPU.
 	/// </summary>
-	internal GPUBuffer<uint>? VulkanIndexBuffer { get; private set; }
+	internal GpuBuffer<uint>? VulkanIndexBuffer { get; private set; }
 
 	/// <summary>
 	/// Flags that represent what renderers have initialized this meshes renderer specific data.
@@ -67,23 +67,9 @@ public sealed class Mesh
 		if ( InitializedFlags.HasFlag( RenderingBackend.Vulkan ) )
 			throw new InvalidOperationException( "This mesh has already been initialized for usage in Vulkan" );
 
-		backend.OptionsApplied += OnOptionsApplied;
-
-		VulkanVertexBuffer = new GPUBuffer<Vertex>( vulkanBackend, Vertices.AsSpan(), BufferUsageFlags.VertexBufferBit );
+		VulkanVertexBuffer = new GpuBuffer<Vertex>( vulkanBackend, Vertices.AsSpan(), BufferUsageFlags.VertexBufferBit );
 		if ( Indices.Length > 0 )
-			VulkanIndexBuffer = new GPUBuffer<uint>( vulkanBackend, Indices.AsSpan(), BufferUsageFlags.IndexBufferBit );
+			VulkanIndexBuffer = new GpuBuffer<uint>( vulkanBackend, Indices.AsSpan(), BufferUsageFlags.IndexBufferBit );
 		InitializedFlags |= RenderingBackend.Vulkan;
-	}
-
-	/// <summary>
-	/// Invoked when the Vulkan renderer has had its options changed and needs re-building.
-	/// </summary>
-	/// <param name="backend">The Vulkan renderer that has changed.</param>
-	private void OnOptionsApplied( IRenderingBackend backend )
-	{
-		backend.OptionsApplied -= OnOptionsApplied;
-		InitializedFlags &= ~RenderingBackend.Vulkan;
-
-		Initialize( backend );
 	}
 }

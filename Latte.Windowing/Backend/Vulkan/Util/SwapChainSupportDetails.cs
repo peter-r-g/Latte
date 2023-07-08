@@ -2,7 +2,7 @@
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal struct SwapChainSupportDetails
+internal struct SwapchainSupportDetails
 {
 	internal SurfaceCapabilitiesKHR Capabilities { get; set; }
 	internal SurfaceFormatKHR[] Formats { get; set; }
