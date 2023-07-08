@@ -340,7 +340,62 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		OptionsApplied?.Invoke( this );
 	}
-	
+
+	internal CommandBuffer BeginOneTimeCommands()
+	{
+		var allocateInfo = new CommandBufferAllocateInfo
+		{
+			SType = StructureType.CommandBufferAllocateInfo,
+			Level = CommandBufferLevel.Primary,
+			CommandBufferCount = 1,
+			CommandPool = CommandPool
+		};
+
+		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ) != Result.Success )
+			throw new ApplicationException( "Failed to allocate command buffer for one time use" );
+
+		var beginInfo = new CommandBufferBeginInfo
+		{
+			SType = StructureType.CommandBufferBeginInfo,
+			Flags = CommandBufferUsageFlags.OneTimeSubmitBit
+		};
+
+		if ( Vk.BeginCommandBuffer( commandBuffer, beginInfo ) != Result.Success )
+			throw new ApplicationException( "Failed to begin command buffer for one time use" );
+
+		return commandBuffer;
+	}
+
+	internal void EndOneTimeCommands( in CommandBuffer commandBuffer )
+	{
+		if ( Vk.EndCommandBuffer( commandBuffer ) != Result.Success )
+			throw new ApplicationException( "Failed to end command buffer for one time use" );
+
+		var commandBuffers = stackalloc CommandBuffer[]
+		{
+			commandBuffer
+		};
+		var submitInfo = new SubmitInfo
+		{
+			SType = StructureType.SubmitInfo,
+			CommandBufferCount = 1,
+			PCommandBuffers = commandBuffers
+		};
+
+		if ( Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ) != Result.Success )
+			throw new ApplicationException( "Failed to submit command buffer to queue for one time use" );
+
+		if ( Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ) != Result.Success )
+			throw new ApplicationException( "Failed to wait for queue to idle for one time use" );
+
+		Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
+	}
+
+	internal VulkanBuffer GetCPUBuffer( ulong size, BufferUsageFlags usageFlags )
+	{
+		return LogicalGpu.CreateBuffer( size, usageFlags, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
+	}
+
 	internal VulkanBuffer GetGPUBuffer( ulong size, BufferUsageFlags usage, out ulong offset )
 	{
 		const ulong requestSize = 1024000;
@@ -397,6 +452,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		CopyBuffer( stagingBuffer, buffer, bufferSize );
 	}
+
+	internal VulkanImage CreateImage( uint width, uint height, uint mipLevels ) => LogicalGpu.CreateImage(
+		width, height, mipLevels,
+		SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal,
+		ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+		MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
 
 	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode ) => LogicalGpu.CreateShaderModule( shaderCode );
 	#endregion
@@ -930,56 +991,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		}
 
 		return indices.IsComplete() && extensionsSupported && swapChainAdequate && gpu.Features.SamplerAnisotropy;
-	}
-
-	private CommandBuffer BeginOneTimeCommands()
-	{
-		var allocateInfo = new CommandBufferAllocateInfo
-		{
-			SType = StructureType.CommandBufferAllocateInfo,
-			Level = CommandBufferLevel.Primary,
-			CommandBufferCount = 1,
-			CommandPool = CommandPool
-		};
-
-		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate command buffer for one time use" );
-
-		var beginInfo = new CommandBufferBeginInfo
-		{
-			SType = StructureType.CommandBufferBeginInfo,
-			Flags = CommandBufferUsageFlags.OneTimeSubmitBit
-		};
-
-		if ( Vk.BeginCommandBuffer( commandBuffer, beginInfo ) != Result.Success )
-			throw new ApplicationException( "Failed to begin command buffer for one time use" );
-
-		return commandBuffer;
-	}
-
-	private void EndOneTimeCommands( in CommandBuffer commandBuffer )
-	{
-		if ( Vk.EndCommandBuffer( commandBuffer ) != Result.Success )
-			throw new ApplicationException( "Failed to end command buffer for one time use" );
-
-		var commandBuffers = stackalloc CommandBuffer[]
-		{
-			commandBuffer
-		};
-		var submitInfo = new SubmitInfo
-		{
-			SType = StructureType.SubmitInfo,
-			CommandBufferCount = 1,
-			PCommandBuffers = commandBuffers
-		};
-
-		if ( Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ) != Result.Success )
-			throw new ApplicationException( "Failed to submit command buffer to queue for one time use" );
-
-		if ( Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ) != Result.Success )
-			throw new ApplicationException( "Failed to wait for queue to idle for one time use" );
-
-		Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
 	}
 
 	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
