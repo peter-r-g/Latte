@@ -52,23 +52,21 @@ internal static class NuGetHelper
 
 		// Find the framework target we want.
 		var currentFramework = NuGetFramework.ParseFrameworkName( CompilerHelper.GetTargetFrameworkName(), DefaultFrameworkNameProvider.Instance );
-		var targetFrameworkGroup = NuGetFrameworkExtensions.GetNearest( packageReader.GetLibItems(), currentFramework );
-		if ( targetFrameworkGroup is null )
-			return;
-
-		var dependencies = nuspecReader.GetDependencyGroups().First( group => group.TargetFramework == targetFrameworkGroup.TargetFramework ).Packages.ToArray();
 
 		// Add dependencies.
-		if ( dependencies.Length > 0 )
+		var dependenciesGroup = nuspecReader.GetDependencyGroups().GetNearest( currentFramework );
+		if ( dependenciesGroup is not null && dependenciesGroup.Packages.Any() )
 		{
-			foreach ( var dependency in dependencies )
+			foreach ( var dependency in dependenciesGroup.Packages )
 				await FetchPackageWithVersionRangeAsync( dependency.Id, dependency.VersionRange, references );
 		}
 
-		if ( !targetFrameworkGroup.Items.Any() )
+		// Get DLL from package.
+		var packageItemsGroup = packageReader.GetLibItems().GetNearest( currentFramework );
+		if ( packageItemsGroup is null || !packageItemsGroup.Items.Any() )
 			return;
 
-		var dllFile = targetFrameworkGroup.Items.FirstOrDefault( item => item.EndsWith( "dll" ) );
+		var dllFile = packageItemsGroup.Items.FirstOrDefault( item => item.EndsWith( "dll" ) );
 		if ( dllFile is null )
 			return;
 
