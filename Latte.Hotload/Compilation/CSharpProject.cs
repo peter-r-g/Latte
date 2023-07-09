@@ -283,7 +283,7 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 	internal XmlDocument ToXml()
 	{
 		// Setup.
-		var baseReferenceDir = Path.GetFullPath( "build\\" );
+		var baseReferenceDir = Directory.GetCurrentDirectory();
 		var document = new XmlDocument();
 		var rootElement = document.CreateElement( "Project" );
 		rootElement.SetAttribute( "Sdk", "Microsoft.NET.Sdk" );
@@ -341,14 +341,6 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 			cleanup.CreateElementWithAttributes( "Compile", "Remove", "bin\\**" );
 			cleanup.CreateElementWithAttributes( "EmbeddedResource", "Remove", "bin\\**" );
 			cleanup.CreateElementWithAttributes( "None", "Remove", "bin\\**" );
-		}
-
-		// Mocha references.
-		{
-			var references = rootElement.CreateElement( "ItemGroup" );
-			references.CreateElementWithAttributes( "Reference", "Include", baseReferenceDir + "Mocha.Common.dll" );
-			references.CreateElementWithAttributes( "Reference", "Include", baseReferenceDir + "Mocha.Engine.dll" );
-			references.CreateElementWithAttributes( "Reference", "Include", baseReferenceDir + "Mocha.UI.dll" );
 		}
 
 		// NuGet package references.
