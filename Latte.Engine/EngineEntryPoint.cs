@@ -8,6 +8,7 @@ public sealed class EngineEntryPoint : IEntryPoint
 {
 	internal static Logger Log { get; } = new( "Engine", LogLevel.Verbose );
 
+	[SkipUpgrading] private static bool NeverHotloaded { get; set; }
 	private static bool HasMainExecuted { get; set; } = false;
 	private int TimesHotloaded { get; set; } = 0;
 
@@ -15,6 +16,7 @@ public sealed class EngineEntryPoint : IEntryPoint
 	{
 		Log.Information( "Hello from engine!" );
 		HasMainExecuted = true;
+		NeverHotloaded = true;
 	}
 
 	public void PreHotload()
@@ -26,5 +28,6 @@ public sealed class EngineEntryPoint : IEntryPoint
 	public void PostHotload()
 	{
 		TimesHotloaded++;
+		Log.Information( $"Has the engine assembly ever hotloaded? {(NeverHotloaded ? "No" : "Yes")}" );
 	}
 }
