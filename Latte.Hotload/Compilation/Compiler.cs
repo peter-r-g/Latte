@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -69,7 +70,7 @@ internal static class Compiler
 
 		"System.Xml.ReaderWriter.dll" );
 
-	private static Dictionary<string, PortableExecutableReference> ReferenceCache { get; } = new();
+	private static ConcurrentDictionary<string, PortableExecutableReference> ReferenceCache { get; } = new();
 
 	/// <summary>
 	/// Compiles a given assembly.
@@ -136,7 +137,7 @@ internal static class Compiler
 		//
 		// Build up references.
 		//
-		var references = new List<PortableExecutableReference>();
+		var references = new ConcurrentBag<PortableExecutableReference>();
 		{
 			// System references.
 			var dotnetBaseDir = Path.GetDirectoryName( typeof( object ).Assembly.Location )!;
@@ -439,7 +440,7 @@ internal static class Compiler
 			return reference;
 
 		var newReference = MetadataReference.CreateFromFile( assemblyPath );
-		ReferenceCache.Add( assemblyPath, newReference );
+		ReferenceCache.TryAdd( assemblyPath, newReference );
 		return newReference;
 	}
 }

@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Collections.Concurrent;
 
 namespace Latte.Hotload.Compilation;
 
@@ -25,7 +26,7 @@ internal static class NuGetHelper
 	/// <param name="version">The version of the NuGet package.</param>
 	/// <param name="references">The references to append the NuGet package to.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-	internal static async Task FetchPackageAsync( string id, NuGetVersion version, ICollection<PortableExecutableReference> references )
+	internal static async Task FetchPackageAsync( string id, NuGetVersion version, IProducerConsumerCollection<PortableExecutableReference> references )
 	{
 		// Setup.
 		var logger = NullLogger.Instance;
@@ -73,7 +74,8 @@ internal static class NuGetHelper
 
 		// Extract the correct DLL and add it to references.
 		packageReader.ExtractFile( dllFile, Path.Combine( Directory.GetCurrentDirectory(), "nuget", $"{id}.dll" ), logger );
-		references.Add( Compiler.CreateMetadataReferenceFromPath( Path.Combine( "nuget", $"{id}.dll" ) ) );
+		var reference = Compiler.CreateMetadataReferenceFromPath( Path.Combine( "nuget", $"{id}.dll" ) );
+			references.TryAdd( reference );
 	}
 
 	/// <summary>
@@ -83,7 +85,7 @@ internal static class NuGetHelper
 	/// <param name="versionRange">The range of versions to look at.</param>
 	/// <param name="references">The references to append the NuGet package to.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, ICollection<PortableExecutableReference> references )
+	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, IProducerConsumerCollection<PortableExecutableReference> references )
 	{
 		// Setup.
 		var cache = new SourceCacheContext();
