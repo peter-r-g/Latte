@@ -55,7 +55,7 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 	/// <summary>
 	/// The default namespace of the C# project.
 	/// </summary>
-	internal string RootNamespace { get; } = "Mocha";
+	internal string RootNamespace { get; } = "Latte";
 	/// <summary>
 	/// All of the pre-processor symbols defined in the project.
 	/// </summary>
@@ -302,29 +302,6 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 			basics.CreateElementWithInnerText( "AssemblyName", AssemblyName );
 			basics.CreateElementWithInnerText( "RootNamespace", RootNamespace );
 			basics.CreateElementWithInnerText( "Configurations", "DebugClient;DebugServer;ReleaseClient;ReleaseServer" );
-		}
-
-		// Constant definitions.
-		{
-			const string debugDefinitions = "DEBUG;TRACE;";
-			const string clientDefinitions = "MOCHA;CLIENT;";
-			const string serverDefinitions = "MOCHA;SERVER;";
-			var customDefinitions = string.Join( ';', ProjectPreProcessorSymbols );
-
-
-			// Mocha client.
-			rootElement.CreateElementWithAttributes( "PropertyGroup", "Condition", "'$(Configuration)'=='DebugClient'" )
-				.CreateElementWithInnerText( "DefineConstants", (debugDefinitions + clientDefinitions + customDefinitions).Trim( ';' ) );
-
-			rootElement.CreateElementWithAttributes( "PropertyGroup", "Condition", "'$(Configuration)'=='ReleaseClient'" )
-				.CreateElementWithInnerText( "DefineConstants", (clientDefinitions + customDefinitions).Trim( ';' ) );
-
-			// Mocha dedicated server.
-			rootElement.CreateElementWithAttributes( "PropertyGroup", "Condition", "'$(Configuration)'=='DebugServer'" )
-				.CreateElementWithInnerText( "DefineConstants", (debugDefinitions + serverDefinitions + customDefinitions).Trim( ';' ) );
-
-			rootElement.CreateElementWithAttributes( "PropertyGroup", "Condition", "'$(Configuration)'=='ReleaseServer'" )
-				.CreateElementWithInnerText( "DefineConstants", (serverDefinitions + customDefinitions).Trim( ';' ) );
 		}
 
 		// Implicit usings.
