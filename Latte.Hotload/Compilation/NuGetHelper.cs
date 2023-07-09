@@ -52,6 +52,9 @@ internal static class NuGetHelper
 		// Find the framework target we want.
 		var currentFramework = NuGetFramework.ParseFrameworkName( CompilerHelper.GetTargetFrameworkName(), DefaultFrameworkNameProvider.Instance );
 		var targetFrameworkGroup = NuGetFrameworkExtensions.GetNearest( packageReader.GetLibItems(), currentFramework );
+		if ( targetFrameworkGroup is null )
+			return;
+
 		var dependencies = nuspecReader.GetDependencyGroups().First( group => group.TargetFramework == targetFrameworkGroup.TargetFramework ).Packages.ToArray();
 
 		// Add dependencies.

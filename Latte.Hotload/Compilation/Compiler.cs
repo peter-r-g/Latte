@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Latte.Logging;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using System;
