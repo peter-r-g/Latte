@@ -182,7 +182,8 @@ internal static class Compiler
 			.WithPlatform( Platform.AnyCpu )
 			.WithOptimizationLevel( compileOptions.OptimizationLevel )
 			.WithConcurrentBuild( true )
-			.WithAllowUnsafe( csproj.AllowUnsafeBlocks );
+			.WithAllowUnsafe( csproj.AllowUnsafeBlocks )
+			.WithNullableContextOptions( csproj.Nullable ? NullableContextOptions.Enable : NullableContextOptions.Disable );
 
 		// Setup incremental workspace.
 		var workspace = new AdhocWorkspace();
