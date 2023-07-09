@@ -73,6 +73,7 @@ internal static class NuGetHelper
 		// Extract the correct DLL and add it to references.
 		packageReader.ExtractFile( dllFile, Path.Combine( Directory.GetCurrentDirectory(), "nuget", $"{id}.dll" ), logger );
 		var reference = Compiler.CreateMetadataReferenceFromPath( Path.Combine( "nuget", $"{id}.dll" ) );
+		if ( !references.Contains( reference ) )
 			references.TryAdd( reference );
 	}
 
