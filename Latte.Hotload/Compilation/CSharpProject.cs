@@ -155,10 +155,10 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 					TargetFramework = reader.ReadElementContentAsString();
 					break;
 				case "ImplicitUsings":
-					ImplicitUsings = reader.ReadElementContentAsString() == "enable";
+					ImplicitUsings = reader.ReadElementContentAsString().ToLower() == "enable";
 					break;
 				case "AllowUnsafeBlocks":
-					AllowUnsafeBlocks = reader.ReadElementContentAsString() == "True";
+					AllowUnsafeBlocks = reader.ReadElementContentAsString().ToLower() == "true";
 					break;
 				case "LangVersion":
 					LangVersion = reader.ReadElementContentAsString();
@@ -169,7 +169,7 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 					Platforms = platforms.ToImmutableArray();
 					break;
 				case "Nullable":
-					Nullable = reader.ReadElementContentAsString() == "enable";
+					Nullable = reader.ReadElementContentAsString().ToLower() == "enable";
 					break;
 				case "AssemblyName":
 					AssemblyName = reader.ReadElementContentAsString()
@@ -180,7 +180,7 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 						.Replace( "$(MSBuildProjectName)", Path.GetFileNameWithoutExtension( filePath ) );
 					break;
 				case "Using":
-					usings.Add( reader.GetAttribute( "Include" )!, reader.GetAttribute( "Static" ) == "true" );
+					usings.Add( reader.GetAttribute( "Include" )!, reader.GetAttribute( "Static" )?.ToLower() == "true" );
 					break;
 				// Package references can have extra meta data so setup for that.
 				case "PackageReference":
@@ -295,7 +295,7 @@ internal sealed class CSharpProject : IEquatable<CSharpProject>
 			basics.CreateElementWithInnerText( "OutputType", OutputType );
 			basics.CreateElementWithInnerText( "TargetFramework", TargetFramework );
 			basics.CreateElementWithInnerText( "ImplicitUsings", ImplicitUsings ? "enable" : "disable" );
-			basics.CreateElementWithInnerText( "AllowUnsafeBlocks", AllowUnsafeBlocks ? "True" : "False" );
+			basics.CreateElementWithInnerText( "AllowUnsafeBlocks", AllowUnsafeBlocks ? "true" : "false" );
 			basics.CreateElementWithInnerText( "LangVersion", LangVersion );
 			basics.CreateElementWithInnerText( "Platforms", string.Join( ';', Platforms ) );
 			basics.CreateElementWithInnerText( "Nullable", Nullable ? "enable" : "disable" );
