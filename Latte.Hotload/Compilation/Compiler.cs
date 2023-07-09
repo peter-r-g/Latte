@@ -255,7 +255,7 @@ internal static class Compiler
 				switch ( diagnostic.Severity )
 				{
 					case DiagnosticSeverity.Hidden:
-						Loggers.Compiler.Verbose( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
 						break;
 					case DiagnosticSeverity.Info:
 						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
@@ -398,7 +398,7 @@ internal static class Compiler
 				switch ( diagnostic.Severity )
 				{
 					case DiagnosticSeverity.Hidden:
-						Loggers.Compiler.Verbose( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
 						break;
 					case DiagnosticSeverity.Info:
 						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
