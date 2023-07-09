@@ -23,6 +23,7 @@ internal static class Compiler
 	/// The .NET references to include in every build.
 	/// </summary>
 	private static ImmutableArray<string> SystemReferences { get; } = ImmutableArray.Create(
+		"netstandard.dll",
 		"mscorlib.dll",
 		"System.dll",
 
