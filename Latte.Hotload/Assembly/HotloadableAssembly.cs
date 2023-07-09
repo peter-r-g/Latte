@@ -144,6 +144,8 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	private void Swap( in CompileResult compileResult )
 	{
+		var oldAssembly = Assembly;
+		var oldEntryPoint = EntryPoint;
 		Context?.Unload();
 
 		using var assemblyStream = new MemoryStream( compileResult.CompiledAssembly! );
@@ -152,6 +154,13 @@ internal sealed class HotloadableAssembly : IDisposable
 		Context = new AssemblyLoadContext( AssemblyInfo.Name, true );
 		var newAssembly = Context.LoadFromStream( assemblyStream, symbolsStream );
 		var newEntryPoint = GetEntryPoint( newAssembly );
+
+		if ( oldAssembly is not null && oldEntryPoint is not null )
+		{
+			oldEntryPoint.PreHotload();
+			Upgrader.Upgrade( oldAssembly, oldEntryPoint, newAssembly, newEntryPoint );
+			newEntryPoint.PostHotload();
+		}
 
 		Assembly = newAssembly;
 		EntryPoint = newEntryPoint;
