@@ -8,7 +8,6 @@
     <AssemblyName>Latte.Hotload</AssemblyName>
 
     <OutputPath>$(SolutionDir)bin/</OutputPath>
-    <UseCommonOutputDirectory>true</UseCommonOutputDirectory>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>

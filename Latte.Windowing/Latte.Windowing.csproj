@@ -8,7 +8,6 @@
     <RootNamespace>Latte.Windowing</RootNamespace>
 
     <OutputPath>$(SolutionDir)bin/</OutputPath>
-    <UseCommonOutputDirectory>true</UseCommonOutputDirectory>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
