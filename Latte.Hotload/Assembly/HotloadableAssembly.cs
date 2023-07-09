@@ -106,6 +106,7 @@ internal sealed class HotloadableAssembly : IDisposable
 
 		Assembly = assembly;
 		EntryPoint = GetEntryPoint( assembly );
+		EntryPoint.Main();
 	}
 
 	~HotloadableAssembly()
