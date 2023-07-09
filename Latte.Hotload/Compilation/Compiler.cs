@@ -79,8 +79,13 @@ internal static class Compiler
 	/// <exception cref="UnreachableException">Thrown when the final workspace project becomes invalid unexpectedly.</exception>
 	internal static async Task<CompileResult> CompileAsync( AssemblyInfo assemblyInfo, CompileOptions? compileOptions = null )
 	{
+		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+
 		if ( assemblyInfo.ProjectPath is null )
 			throw new ArgumentException( $"The assembly \"{assemblyInfo.Name}\" cannot be compiled", nameof( assemblyInfo ) );
+
+		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+			Loggers.Compiler.Verbose( "Starting full build for " + assemblyInfo.Name );
 
 		compileOptions ??= new CompileOptions
 		{
@@ -234,6 +239,34 @@ internal static class Compiler
 			options: emitOptions
 		);
 
+		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+			Loggers.Compiler.Verbose( $"Full build for {assemblyInfo.Name} {(result.Success ? "succeeded" : "failed")}" );
+
+		// Output all diagnostics that came from the compile.
+		foreach ( var diagnosticGroup in result.Diagnostics
+			.OrderBy( diagnostic => diagnostic.WarningLevel )
+			.GroupBy( diagnostic => diagnostic.Severity ) )
+		{
+			foreach ( var diagnostic in diagnosticGroup )
+			{
+				switch ( diagnostic.Severity )
+				{
+					case DiagnosticSeverity.Hidden:
+						Loggers.Compiler.Verbose( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+					case DiagnosticSeverity.Info:
+						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+					case DiagnosticSeverity.Warning:
+						Loggers.Compiler.Warning( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+					case DiagnosticSeverity.Error:
+						Loggers.Compiler.Error( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+				}
+			}
+		}
+
 		if ( result.Success )
 			return CompileResult.Successful( workspace, result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
 		else
@@ -251,6 +284,11 @@ internal static class Compiler
 	/// <exception cref="UnreachableException">Thrown when applying changes to the <see cref="Workspace"/> failed.</exception>
 	internal static async Task<CompileResult> IncrementalCompileAsync( AssemblyInfo assemblyInfo, AdhocWorkspace workspace, IReadOnlyDictionary<string, WatcherChangeTypes> changedFilePaths, CompileOptions? compileOptions = null )
 	{
+		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+
+		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+			Loggers.Compiler.Verbose( "Starting incremental build for " + assemblyInfo.Name );
+
 		compileOptions ??= new CompileOptions
 		{
 			OptimizationLevel = OptimizationLevel.Debug,
@@ -343,6 +381,34 @@ internal static class Compiler
 			symbolsStream,
 			options: emitOptions
 		);
+
+		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+			Loggers.Compiler.Verbose( $"Incremental build for {assemblyInfo.Name} {(result.Success ? "succeeded" : "failed")}" );
+
+		// Output all diagnostics that came from the compile.
+		foreach ( var diagnosticGroup in result.Diagnostics
+			.OrderBy( diagnostic => diagnostic.WarningLevel )
+			.GroupBy( diagnostic => diagnostic.Severity ) )
+		{
+			foreach ( var diagnostic in diagnosticGroup )
+			{
+				switch ( diagnostic.Severity )
+				{
+					case DiagnosticSeverity.Hidden:
+						Loggers.Compiler.Verbose( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+					case DiagnosticSeverity.Info:
+						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+					case DiagnosticSeverity.Warning:
+						Loggers.Compiler.Warning( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+					case DiagnosticSeverity.Error:
+						Loggers.Compiler.Error( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
+						break;
+				}
+			}
+		}
 
 		if ( result.Success )
 			return CompileResult.Successful( workspace, result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );

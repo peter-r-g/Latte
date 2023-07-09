@@ -1,5 +1,6 @@
 ﻿using Latte.Hotload.Compilation;
 using Latte.Hotload.Upgrading;
+using Latte.Logging;
 using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
@@ -26,6 +27,8 @@ internal sealed class HotloadableAssembly : IDisposable
 	/// </summary>
 	private Dictionary<string, WatcherChangeTypes> IncrementalBuildChanges { get; } = new();
 
+	private Logger Log { get; }
+
 	/// <summary>
 	/// The <see cref="Task"/> that represents the current build process.
 	/// </summary>
@@ -50,6 +53,8 @@ internal sealed class HotloadableAssembly : IDisposable
 		}
 		else
 			AssemblyInfo = assemblyInfo;
+
+		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
 
 		if ( assemblyInfo.ProjectPath is null )
 			return;
@@ -96,6 +101,9 @@ internal sealed class HotloadableAssembly : IDisposable
 			Name = assembly.GetName().Name ?? "Unknown",
 			Path = assembly.Location
 		};
+
+		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
+
 		Assembly = assembly;
 		EntryPoint = GetEntryPoint( assembly );
 	}
@@ -107,6 +115,8 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	private async Task BuildAsync( bool incremental = false )
 	{
+		using var _ = new ScopedTimingLogger( Log );
+
 		// Compile.
 		CompileResult compileResult;
 		if ( incremental && Workspace is not null )
@@ -118,11 +128,6 @@ internal sealed class HotloadableAssembly : IDisposable
 		}
 		else
 			compileResult = await Compiler.CompileAsync( AssemblyInfo );
-
-		Console.WriteLine( $"Build has {(compileResult.WasSuccessful ? "succeeded" : "failed")}" );
-		// Output all diagnostics that came from the compile.
-		foreach ( var diagnostic in compileResult.Diagnostics )
-			Console.WriteLine( $"{diagnostic.Id}: {diagnostic.GetMessage()}" );
 
 		// Check if compile failed.
 		if ( !compileResult.WasSuccessful )
@@ -144,6 +149,8 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	private void Swap( in CompileResult compileResult )
 	{
+		using var _ = new ScopedTimingLogger( Log );
+
 		var oldAssembly = Assembly;
 		var oldEntryPoint = EntryPoint;
 		Context?.Unload();

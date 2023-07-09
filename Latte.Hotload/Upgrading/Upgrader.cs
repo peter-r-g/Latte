@@ -1,4 +1,5 @@
 ﻿using Latte.Attributes;
+using Latte.Logging;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -27,6 +28,9 @@ internal static class Upgrader
 
 	internal static void Upgrade( Assembly oldAssembly, IEntryPoint oldEntryPoint, Assembly newAssembly, IEntryPoint newEntryPoint )
 	{
+		if ( Loggers.Hotloader.IsEnabled( LogLevel.Verbose ) )
+			Loggers.Hotloader.Verbose( $"Starting upgrade for {oldAssembly.GetName().Name}" );
+
 		foreach ( var oldType in oldAssembly.DefinedTypes )
 		{
 			var newType = newAssembly.GetType( oldType.FullName ?? oldType.Name );
@@ -37,6 +41,9 @@ internal static class Upgrader
 		}
 
 		UpgradeInstance( oldEntryPoint, newEntryPoint );
+
+		if ( Loggers.Hotloader.IsEnabled( LogLevel.Verbose ) )
+			Loggers.Hotloader.Verbose( $"Finished upgrade for {oldAssembly.GetName().Name}" );
 	}
 
 	/// <summary>
@@ -73,6 +80,14 @@ internal static class Upgrader
 	/// <param name="newInstance">The new instance.</param>
 	private static void UpgradeMembers( Type oldType, Type newType, object? oldInstance, object? newInstance )
 	{
+		if ( Loggers.Hotloader.IsEnabled( LogLevel.Verbose ) )
+		{
+			if ( oldInstance is null && newInstance is null )
+				Loggers.Hotloader.Verbose( $"Upgrading static instance of {oldType} to {newType}" );
+			else
+				Loggers.Hotloader.Verbose( $"Upgrading instance of {oldType} to {newType}" );
+		}
+
 		// If both instance are null then we're upgrading static members.
 		var bindingFlags = (oldInstance is null && newInstance is null)
 			? BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
@@ -126,8 +141,8 @@ internal static class Upgrader
 				break;
 			}
 
-			if ( !wasUpgraded )
-				Console.WriteLine( $"Don't know how to upgrade {oldMember.MemberType.ToString().ToLower()} '{oldMember.Name}' in '{oldType.Name}'" );
+			if ( !wasUpgraded && Loggers.Hotloader.IsEnabled( LogLevel.Warning ) )
+				Loggers.Hotloader.Warning( $"Don't know how to upgrade {oldMember.MemberType.ToString().ToLower()} '{oldMember.Name}' in '{oldType.Name}'" );
 		}
 	}
 }
