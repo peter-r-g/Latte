@@ -25,7 +25,6 @@ public static class Program
 			Path = "Latte.Engine.dll",
 			ProjectPath = "../Latte.Engine"
 		} );
-		EngineAssembly.EntryPoint.Main();
 
 		for ( var i = 0; i < 10; i++ )
 			Thread.Sleep( 1000 );
@@ -35,7 +34,6 @@ public static class Program
 	{
 		var assembly = new HotloadableAssembly( assemblyInfo );
 		CustomAssemblies.Push( assembly );
-		assembly.EntryPoint.Main();
 	}
 
 	private static void OnProcessExit( object? sender, EventArgs e )
