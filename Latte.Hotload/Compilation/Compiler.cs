@@ -112,8 +112,8 @@ internal static class Compiler
 		{
 			// Global namespaces.
 			var globalUsings = string.Empty;
-			foreach ( var usingEntry in csproj.Usings )
-				globalUsings += $"global using{(usingEntry.Value ? " static " : " ")}{usingEntry.Key};{Environment.NewLine}";
+			foreach ( var (@namespace, @static) in csproj.Usings )
+				globalUsings += $"global using{(@static ? " static " : " ")}{@namespace};{Environment.NewLine}";
 
 			if ( globalUsings != string.Empty )
 				syntaxTrees.Add( CSharpSyntaxTree.ParseText( globalUsings, options: parseOptions, encoding: Encoding.UTF8 ) );
