@@ -37,6 +37,9 @@ internal static class Upgrader
 			if ( newType is null )
 				continue;
 
+			if ( oldType.IsEnum || newType.IsEnum )
+				continue;
+
 			UpgradeStaticInstance( oldType, newType );
 		}
 
