@@ -52,6 +52,6 @@ public static class Program
 		while ( CustomAssemblies.TryPop( out var assembly ) )
 			assembly.Dispose();
 
-		EngineAssembly.Dispose();
+		EngineAssembly?.Dispose();
 	}
 }
