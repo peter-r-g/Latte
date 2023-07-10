@@ -160,6 +160,7 @@ internal sealed class HotloadableAssembly : IDisposable
 		using var symbolsStream = compileResult.HasSymbols ? new MemoryStream( compileResult.CompiledAssemblySymbols! ) : null;
 
 		Context = new AssemblyLoadContext( AssemblyInfo.Name, true );
+		Context.Resolving += ResolveContextAssembly;
 		var newAssembly = Context.LoadFromStream( assemblyStream, symbolsStream );
 		var newEntryPoint = GetEntryPoint( newAssembly );
 
@@ -172,6 +173,16 @@ internal sealed class HotloadableAssembly : IDisposable
 
 		Assembly = newAssembly;
 		EntryPoint = newEntryPoint;
+	}
+
+	private Assembly? ResolveContextAssembly( AssemblyLoadContext context, AssemblyName assemblyName )
+	{
+		var assemblyPath = Path.GetFullPath( Path.Combine( "nuget", assemblyName.Name + ".dll" ) );
+		if ( File.Exists( assemblyPath ) )
+			return Assembly.LoadFile( assemblyPath );
+
+		Loggers.Hotloader.Error( $"Failed to find assembly: {assemblyName}" );
+		return null;
 	}
 
 	/// <summary>
