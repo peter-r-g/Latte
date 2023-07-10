@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Collections.Concurrent;
 using Latte.Hotload.Util;
+using System.Diagnostics;
 
 namespace Latte.Hotload.Compilation;
 
@@ -78,20 +79,21 @@ internal static class NuGetHelper
 		if ( packageItemsGroup is null || !packageItemsGroup.Items.Any() )
 			return;
 
-		var dllFile = packageItemsGroup.Items.FirstOrDefault( item => item.EndsWith( "dll" ) );
-		if ( dllFile is null )
+		var dllFilePath = packageItemsGroup.Items.FirstOrDefault( item => item.EndsWith( "dll" ) );
+		if ( dllFilePath is null )
 			return;
 
+		var dllFileName = Path.GetFileName( dllFilePath );
 		string referencePath;
-		if ( File.Exists( dllFile ) )
-			referencePath = dllFile;
-		else if ( File.Exists( Path.Combine( "nuget", $"{id}.dll" ) ) )
-			referencePath = Path.Combine( "nuget", id + ".dll" );
+		if ( File.Exists( dllFilePath ) )
+			referencePath = dllFilePath;
+		else if ( File.Exists( Path.Combine( "nuget", dllFilePath ) ) )
+			referencePath = Path.Combine( "nuget", dllFileName );
 		else
 		{
 			// Extract the correct DLL and add it to references.
-			referencePath = Path.Combine( "nuget", id + ".dll" );
-			packageReader.ExtractFile( dllFile, Path.Combine( Directory.GetCurrentDirectory(), referencePath ), logger );
+			referencePath = Path.Combine( "nuget", dllFileName );
+			packageReader.ExtractFile( dllFilePath, Path.Combine( Directory.GetCurrentDirectory(), referencePath ), logger );
 		}
 
 		var reference = Compiler.CreateMetadataReferenceFromPath( referencePath );
