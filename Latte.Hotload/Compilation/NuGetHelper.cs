@@ -19,6 +19,9 @@ namespace Latte.Hotload.Compilation;
 /// </summary>
 internal static class NuGetHelper
 {
+	private static readonly SourceCacheContext cache = new();
+	private static readonly ILogger logger = NullLogger.Instance;
+
 	/// <summary>
 	/// Fetches a NuGet package DLL and adds it to the build references.
 	/// </summary>
@@ -32,10 +35,6 @@ internal static class NuGetHelper
 		fetchedIds.Add( id );
 
 		// Setup.
-		var logger = NullLogger.Instance;
-		var cancellationToken = CancellationToken.None;
-
-		var cache = new SourceCacheContext();
 		var repository = Repository.Factory.GetCoreV3( "https://api.nuget.org/v3/index.json" );
 		var resource = await repository.GetResourceAsync<FindPackageByIdResource>();
 
@@ -48,10 +47,10 @@ internal static class NuGetHelper
 			packageStream,
 			cache,
 			logger,
-			cancellationToken );
+			CancellationToken.None );
 
 		using var packageReader = new PackageArchiveReader( packageStream );
-		var nuspecReader = await packageReader.GetNuspecReaderAsync( cancellationToken );
+		var nuspecReader = await packageReader.GetNuspecReaderAsync( CancellationToken.None );
 
 		// Find the framework target we want.
 		var currentFramework = NuGetFramework.ParseFrameworkName( CompilerHelper.GetTargetFrameworkName(), DefaultFrameworkNameProvider.Instance );
@@ -95,7 +94,6 @@ internal static class NuGetHelper
 	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, IProducerConsumerCollection<PortableExecutableReference> references, HashSet<string> fetchedIds )
 	{
 		// Setup.
-		var cache = new SourceCacheContext();
 		var repository = Repository.Factory.GetCoreV3( "https://api.nuget.org/v3/index.json" );
 		var resource = await repository.GetResourceAsync<FindPackageByIdResource>();
 
@@ -104,8 +102,7 @@ internal static class NuGetHelper
 			id,
 			cache,
 			NullLogger.Instance,
-			CancellationToken.None
-			);
+			CancellationToken.None );
 
 		// Find the best version and get it.
 		var bestVersion = versionRange.FindBestMatch( versions );
