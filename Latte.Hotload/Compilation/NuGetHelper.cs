@@ -82,9 +82,19 @@ internal static class NuGetHelper
 		if ( dllFile is null )
 			return;
 
-		// Extract the correct DLL and add it to references.
-		packageReader.ExtractFile( dllFile, Path.Combine( Directory.GetCurrentDirectory(), "nuget", $"{id}.dll" ), logger );
-		var reference = Compiler.CreateMetadataReferenceFromPath( Path.Combine( "nuget", $"{id}.dll" ) );
+		string referencePath;
+		if ( File.Exists( dllFile ) )
+			referencePath = dllFile;
+		else if ( File.Exists( Path.Combine( "nuget", $"{id}.dll" ) ) )
+			referencePath = Path.Combine( "nuget", id + ".dll" );
+		else
+		{
+			// Extract the correct DLL and add it to references.
+			referencePath = Path.Combine( "nuget", id + ".dll" );
+			packageReader.ExtractFile( dllFile, Path.Combine( Directory.GetCurrentDirectory(), referencePath ), logger );
+		}
+
+		var reference = Compiler.CreateMetadataReferenceFromPath( referencePath );
 		if ( !references.Contains( reference ) )
 			references.TryAdd( reference );
 	}
