@@ -26,8 +26,11 @@ internal static class NuGetHelper
 	/// <param name="version">The version of the NuGet package.</param>
 	/// <param name="references">The references to append the NuGet package to.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-	internal static async Task FetchPackageAsync( string id, NuGetVersion version, IProducerConsumerCollection<PortableExecutableReference> references )
+	internal static async Task FetchPackageAsync( string id, NuGetVersion version, IProducerConsumerCollection<PortableExecutableReference> references, HashSet<string>? fetchedIds = null )
 	{
+		fetchedIds ??= new();
+		fetchedIds.Add( id );
+
 		// Setup.
 		var logger = NullLogger.Instance;
 		var cancellationToken = CancellationToken.None;
@@ -58,7 +61,12 @@ internal static class NuGetHelper
 		if ( dependenciesGroup is not null && dependenciesGroup.Packages.Any() )
 		{
 			foreach ( var dependency in dependenciesGroup.Packages )
-				await FetchPackageWithVersionRangeAsync( dependency.Id, dependency.VersionRange, references );
+			{
+				if ( fetchedIds.Contains( dependency.Id ) )
+					continue;
+
+				await FetchPackageWithVersionRangeAsync( dependency.Id, dependency.VersionRange, references, fetchedIds );
+			}
 		}
 
 		// Get DLL from package.
@@ -84,7 +92,7 @@ internal static class NuGetHelper
 	/// <param name="versionRange">The range of versions to look at.</param>
 	/// <param name="references">The references to append the NuGet package to.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, IProducerConsumerCollection<PortableExecutableReference> references )
+	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, IProducerConsumerCollection<PortableExecutableReference> references, HashSet<string> fetchedIds )
 	{
 		// Setup.
 		var cache = new SourceCacheContext();
@@ -101,6 +109,6 @@ internal static class NuGetHelper
 
 		// Find the best version and get it.
 		var bestVersion = versionRange.FindBestMatch( versions );
-		await FetchPackageAsync( id, bestVersion, references );
+		await FetchPackageAsync( id, bestVersion, references, fetchedIds );
 	}
 }
