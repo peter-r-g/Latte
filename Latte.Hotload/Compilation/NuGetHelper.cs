@@ -60,13 +60,17 @@ internal static class NuGetHelper
 		var dependenciesGroup = nuspecReader.GetDependencyGroups().GetNearest( currentFramework );
 		if ( dependenciesGroup is not null && dependenciesGroup.Packages.Any() )
 		{
+			var dependencyTasks = new List<Task>();
+
 			foreach ( var dependency in dependenciesGroup.Packages )
 			{
 				if ( fetchedIds.Contains( dependency.Id ) )
 					continue;
 
-				await FetchPackageWithVersionRangeAsync( dependency.Id, dependency.VersionRange, references, fetchedIds );
+				dependencyTasks.Add( FetchPackageWithVersionRangeAsync( dependency.Id, dependency.VersionRange, references, fetchedIds ) );
 			}
+
+			await Task.WhenAll( dependencyTasks );
 		}
 
 		// Get DLL from package.
