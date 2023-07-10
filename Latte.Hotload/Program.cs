@@ -24,7 +24,6 @@ public static class Program
 		EngineAssembly = new HotloadableAssembly( new AssemblyInfo
 		{
 			Name = "Latte.Engine",
-			Path = "Latte.Engine.dll",
 			ProjectPath = "../Latte.Engine"
 		} );
 

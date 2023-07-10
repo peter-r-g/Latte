@@ -21,7 +21,6 @@ public sealed class EngineEntryPoint : IEntryPoint
 		Program.AddAssembly( new AssemblyInfo
 		{
 			Name = "Latte.Windowing",
-			Path = "Latte.Windowing.dll",
 			ProjectPath = "../Latte.Windowing"
 		} );
 
