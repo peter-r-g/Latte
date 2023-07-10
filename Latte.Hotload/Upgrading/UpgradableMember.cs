@@ -80,7 +80,7 @@ public sealed class UpgradableMember
 	/// </summary>
 	internal static UpgradableMember? FromMember( MemberInfo memberInfo )
 	{
-		if ( memberInfo is PropertyInfo propertyInfo )
+		if ( memberInfo is PropertyInfo propertyInfo && propertyInfo.CanRead && propertyInfo.CanWrite )
 			return FromProperty( propertyInfo );
 		else if ( memberInfo is FieldInfo fieldInfo && !fieldInfo.IsInitOnly )
 			return FromField( fieldInfo );
