@@ -78,11 +78,6 @@ internal sealed class HotloadableAssembly : IDisposable
 		CodeWatcher.Renamed += OnFileChanged;
 		CodeWatcher.IncludeSubdirectories = true;
 		CodeWatcher.EnableRaisingEvents = true;
-
-		buildTask = BuildAsync();
-		buildTask.Wait();
-
-		EntryPoint?.Main();
 	}
 
 	internal HotloadableAssembly( Assembly assembly )
@@ -94,15 +89,22 @@ internal sealed class HotloadableAssembly : IDisposable
 		};
 
 		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
-
 		Assembly = assembly;
-		EntryPoint = GetEntryPoint( assembly );
-		EntryPoint.Main();
 	}
 
 	~HotloadableAssembly()
 	{
 		Dispose();
+	}
+
+	internal async Task InitAsync()
+	{
+		if ( Assembly is null )
+			await BuildAsync();
+		else
+			EntryPoint = GetEntryPoint( Assembly );
+
+		EntryPoint?.Main();
 	}
 
 	private async Task BuildAsync( bool incremental = false )

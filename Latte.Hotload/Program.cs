@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Latte.Hotload;
 
@@ -26,6 +27,7 @@ public static class Program
 			Name = "Latte.Engine",
 			ProjectPath = "../Latte.Engine"
 		} );
+		EngineAssembly.InitAsync().Wait();
 
 		for ( var i = 0; i < 10; i++ )
 			Thread.Sleep( 1000 );
@@ -41,10 +43,12 @@ public static class Program
 		return null;
 	}
 
-	internal static void AddAssembly( in AssemblyInfo assemblyInfo )
+	internal static async Task AddAssemblyAsync( AssemblyInfo assemblyInfo )
 	{
 		var assembly = new HotloadableAssembly( assemblyInfo );
 		CustomAssemblies.Push( assembly );
+
+		await assembly.InitAsync();
 	}
 
 	private static void OnProcessExit( object? sender, EventArgs e )

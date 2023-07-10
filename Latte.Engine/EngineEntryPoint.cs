@@ -18,11 +18,11 @@ public sealed class EngineEntryPoint : IEntryPoint
 		HasMainExecuted = true;
 		NeverHotloaded = true;
 
-		Program.AddAssembly( new AssemblyInfo
+		Program.AddAssemblyAsync( new AssemblyInfo
 		{
 			Name = "Latte.Windowing",
 			ProjectPath = "../Latte.Windowing"
-		} );
+		} ).Wait();
 	}
 
 	public void PreHotload()
