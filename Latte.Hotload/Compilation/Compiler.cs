@@ -1,4 +1,5 @@
-﻿using Latte.Logging;
+﻿using Latte.Hotload.NuGet;
+using Latte.Logging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;

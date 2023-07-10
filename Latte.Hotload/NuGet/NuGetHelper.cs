@@ -13,8 +13,9 @@ using System.Threading;
 using System.Collections.Concurrent;
 using Latte.Hotload.Util;
 using System.Diagnostics;
+using Latte.Hotload.Compilation;
 
-namespace Latte.Hotload.Compilation;
+namespace Latte.Hotload.NuGet;
 
 /// <summary>
 /// A collection of helper methods for the NuGet.Protocol package.
@@ -95,7 +96,7 @@ internal static class NuGetHelper
 		{
 			// Extract the correct DLL and add it to references.
 			referencePath = Path.Combine( "nuget", dllFileName );
-			
+
 			if ( ExtractionsInProgress.Contains( id ) )
 			{
 				do
