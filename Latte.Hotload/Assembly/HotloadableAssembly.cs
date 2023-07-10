@@ -240,6 +240,9 @@ internal sealed class HotloadableAssembly : IDisposable
 		if ( Directory.Exists( args.FullPath ) )
 			return;
 
+		if ( Loggers.Hotloader.IsEnabled( LogLevel.Verbose ) )
+			Log.Verbose( $"{args.FullPath} has changed" );
+
 		switch ( args.ChangeType )
 		{
 			// A C# file was created.
