@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
 using System.Collections.Concurrent;
+using Latte.Hotload.Util;
 
 namespace Latte.Hotload.Compilation;
 
@@ -29,10 +30,10 @@ internal static class NuGetHelper
 	/// <param name="version">The version of the NuGet package.</param>
 	/// <param name="references">The references to append the NuGet package to.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-	internal static async Task FetchPackageAsync( string id, NuGetVersion version, IProducerConsumerCollection<PortableExecutableReference> references, HashSet<string>? fetchedIds = null )
+	internal static async Task FetchPackageAsync( string id, NuGetVersion version, IProducerConsumerCollection<PortableExecutableReference> references, ConcurrentHashSet<string>? fetchedIds = null )
 	{
 		fetchedIds ??= new();
-		fetchedIds.Add( id );
+		fetchedIds.TryAdd( id );
 
 		// Setup.
 		var repository = Repository.Factory.GetCoreV3( "https://api.nuget.org/v3/index.json" );
@@ -91,7 +92,7 @@ internal static class NuGetHelper
 	/// <param name="versionRange">The range of versions to look at.</param>
 	/// <param name="references">The references to append the NuGet package to.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, IProducerConsumerCollection<PortableExecutableReference> references, HashSet<string> fetchedIds )
+	internal static async Task FetchPackageWithVersionRangeAsync( string id, VersionRange versionRange, IProducerConsumerCollection<PortableExecutableReference> references, ConcurrentHashSet<string> fetchedIds )
 	{
 		// Setup.
 		var repository = Repository.Factory.GetCoreV3( "https://api.nuget.org/v3/index.json" );
