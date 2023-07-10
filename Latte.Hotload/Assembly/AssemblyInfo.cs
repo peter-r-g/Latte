@@ -23,5 +23,22 @@ internal readonly struct AssemblyInfo
 	}
 	private readonly string? path;
 
-	internal string? ProjectPath { get; init; }
+	internal string? ProjectPath
+	{
+		get => projectPath;
+		init
+		{
+			if ( value is null )
+			{
+				projectPath = null;
+				return;
+			}
+
+			if ( !System.IO.Path.IsPathFullyQualified( value ) )
+				projectPath = System.IO.Path.GetFullPath( System.IO.Path.Combine( Program.CurrentDirectory, value ) );
+			else
+				projectPath = value;
+		}
+	}
+	private readonly string? projectPath;
 }

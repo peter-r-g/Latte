@@ -23,7 +23,6 @@ public sealed class EngineEntryPoint : IEntryPoint
 			Name = "Latte.Windowing",
 			ProjectPath = "../Latte.Windowing"
 		} );
-
 	}
 
 	public void PreHotload()
