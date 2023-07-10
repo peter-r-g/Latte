@@ -3,6 +3,25 @@
 internal readonly struct AssemblyInfo
 {
 	internal string Name { get; init; }
-	internal string Path { get; init; }
+
+	internal string? Path
+	{
+		get => path;
+		init
+		{
+			if ( value is null )
+			{
+				path = null;
+				return;
+			}
+
+			if ( !System.IO.Path.IsPathFullyQualified( value ) )
+				path = System.IO.Path.GetFullPath( System.IO.Path.Combine( Program.CurrentDirectory, value ) );
+			else
+				path = value;
+		}
+	}
+	private readonly string? path;
+
 	internal string? ProjectPath { get; init; }
 }

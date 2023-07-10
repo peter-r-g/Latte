@@ -44,16 +44,7 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	internal HotloadableAssembly( in AssemblyInfo assemblyInfo )
 	{
-		if ( !Path.IsPathFullyQualified( assemblyInfo.Path ) )
-		{
-			AssemblyInfo = assemblyInfo with
-			{
-				Path = Path.GetFullPath( Path.Combine( Program.CurrentDirectory, assemblyInfo.Path ) )
-			};
-		}
-		else
-			AssemblyInfo = assemblyInfo;
-
+		AssemblyInfo = assemblyInfo;
 		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
 
 		if ( assemblyInfo.ProjectPath is null )
