@@ -21,6 +21,8 @@ namespace Latte.Hotload.Compilation;
 /// </summary>
 internal static class NuGetHelper
 {
+	private static ConcurrentHashSet<string> ExtractionsInProgress { get; } = new();
+
 	private static readonly SourceCacheContext cache = new();
 	private static readonly ILogger logger = NullLogger.Instance;
 
@@ -93,7 +95,20 @@ internal static class NuGetHelper
 		{
 			// Extract the correct DLL and add it to references.
 			referencePath = Path.Combine( "nuget", dllFileName );
-			packageReader.ExtractFile( dllFilePath, Path.Combine( Directory.GetCurrentDirectory(), referencePath ), logger );
+			
+			if ( ExtractionsInProgress.Contains( id ) )
+			{
+				do
+				{
+					await Task.Delay( 1 );
+				} while ( ExtractionsInProgress.Contains( id ) );
+			}
+			else
+			{
+				ExtractionsInProgress.TryAdd( id );
+				packageReader.ExtractFile( dllFilePath, Path.Combine( Directory.GetCurrentDirectory(), referencePath ), logger );
+				ExtractionsInProgress.TryRemove( id );
+			}
 		}
 
 		var reference = Compiler.CreateMetadataReferenceFromPath( referencePath );
