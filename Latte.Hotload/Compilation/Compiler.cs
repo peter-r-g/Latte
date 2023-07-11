@@ -110,7 +110,7 @@ internal static class Compiler
 		var parseOptions = CSharpParseOptions.Default
 			.WithPreprocessorSymbols( csproj.PreProcessorSymbols.Concat( compileOptions.PreProcessorSymbols ) );
 
-		var syntaxTrees = new List<SyntaxTree>();
+		var syntaxTrees = new ConcurrentBag<SyntaxTree>();
 
 		// Build syntax trees.
 		{
