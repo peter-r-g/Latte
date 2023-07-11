@@ -155,7 +155,7 @@ internal static class Compiler
 				foreach ( var (packageId, packageVersion) in csproj.PackageReferences )
 					installTasks.Add( NuGetManager.InstallPackageAsync( packageId, packageVersion, CancellationToken.None ) );
 
-				await Task.WhenAll( basicTasks );
+				await Task.WhenAll( installTasks );
 
 				foreach ( var installTask in installTasks )
 					references.AddRange( CreateMetadataReferencesFromPaths( installTask.Result.GetAllDllFilePaths() ) );
