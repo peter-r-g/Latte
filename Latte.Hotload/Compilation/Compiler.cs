@@ -100,9 +100,6 @@ internal static class Compiler
 			GenerateSymbols = true
 		};
 
-		// Setup a basic list of tasks.
-		var basicTasks = new List<Task>();
-
 		//
 		// Fetch the project and all source files.
 		//
@@ -114,6 +111,8 @@ internal static class Compiler
 
 		// Build syntax trees.
 		{
+			var treeTasks = new List<Task>();
+
 			// Global namespaces.
 			var globalUsings = string.Empty;
 			foreach ( var (@namespace, @static) in csproj.Usings )
@@ -126,7 +125,7 @@ internal static class Compiler
 			foreach ( var filePath in csproj.CSharpFiles )
 			{
 				// Add the parsed syntax tree.
-				basicTasks.Add( Task.Run( async () =>
+				treeTasks.Add( Task.Run( async () =>
 				{
 					var text = await File.ReadAllTextAsync( filePath );
 					syntaxTrees.Add( CSharpSyntaxTree.ParseText( text, options: parseOptions, encoding: Encoding.UTF8, path: filePath ) );
@@ -134,9 +133,7 @@ internal static class Compiler
 			}
 
 			// Wait for all tasks to finish before continuing.
-			await Task.WhenAll( basicTasks );
-			// Clear this list for any users later on.
-			basicTasks.Clear();
+			await Task.WhenAll( treeTasks );
 		}
 
 		//
