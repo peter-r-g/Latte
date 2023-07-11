@@ -86,19 +86,14 @@ internal static class Compiler
 	/// <exception cref="UnreachableException">Thrown when the final workspace project becomes invalid unexpectedly.</exception>
 	internal static async Task<CompileResult> CompileAsync( AssemblyInfo assemblyInfo, CompileOptions? compileOptions = null )
 	{
-		using var _ = new ScopedTimingLogger( Loggers.Compiler );
-
 		if ( assemblyInfo.ProjectPath is null )
 			throw new ArgumentException( $"The assembly \"{assemblyInfo.Name}\" cannot be compiled", nameof( assemblyInfo ) );
 
+		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+		compileOptions ??= CompileOptions.Default;
+
 		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
 			Loggers.Compiler.Verbose( "Starting full build for " + assemblyInfo.Name );
-
-		compileOptions ??= new CompileOptions
-		{
-			OptimizationLevel = OptimizationLevel.Debug,
-			GenerateSymbols = true
-		};
 
 		//
 		// Fetch the project and all source files.
@@ -299,15 +294,11 @@ internal static class Compiler
 	internal static async Task<CompileResult> IncrementalCompileAsync( AssemblyInfo assemblyInfo, IReadOnlyDictionary<string, WatcherChangeTypes> changedFilePaths, CompileOptions? compileOptions = null )
 	{
 		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+		compileOptions ??= CompileOptions.Default;
 
 		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
 			Loggers.Compiler.Verbose( "Starting incremental build for " + assemblyInfo.Name );
 
-		compileOptions ??= new CompileOptions
-		{
-			OptimizationLevel = OptimizationLevel.Debug,
-			GenerateSymbols = true,
-		};
 		var workspace = AssemblyWorkspaces[assemblyInfo.Name];
 		var parseOptions = (CSharpParseOptions)workspace.CurrentSolution.Projects.First().ParseOptions!;
 
