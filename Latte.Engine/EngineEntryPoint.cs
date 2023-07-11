@@ -17,6 +17,9 @@ public sealed class EngineEntryPoint : IEntryPoint
 		Log.Information( "Hello from engine!" );
 		HasMainExecuted = true;
 		NeverHotloaded = true;
+
+		var app = new TestWindow();
+		app.Run();
 	}
 
 	public void PreHotload()
