@@ -74,6 +74,7 @@ internal static class Compiler
 
 		"System.Xml.ReaderWriter.dll" );
 
+	private static ConcurrentDictionary<string, AdhocWorkspace> AssemblyWorkspaces { get; } = new();
 	private static ConcurrentDictionary<string, PortableExecutableReference> ReferenceCache { get; } = new();
 
 	/// <summary>
@@ -279,7 +280,10 @@ internal static class Compiler
 		}
 
 		if ( result.Success )
-			return CompileResult.Successful( workspace, result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
+		{
+			AssemblyWorkspaces.AddOrUpdate( assemblyInfo.Name, workspace, (key, val) => val );
+			return CompileResult.Successful( result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
+		}
 		else
 		{
 			Debugger.Break();
@@ -291,12 +295,11 @@ internal static class Compiler
 	/// Compiles a <see cref="Workspace"/> assembly with incremental changes.
 	/// </summary>
 	/// <param name="assemblyInfo">The information regarding the assembly that is being incrementally compiled.</param>
-	/// <param name="workspace">The <see cref="Workspace"/> that contains the code.</param>
 	/// <param name="changedFilePaths">A dictionary of absolute file paths mapped to the type of change it has experienced.</param>
 	/// <param name="compileOptions">The <see cref="CompileOptions"/> to give to the C# compilation.</param>
 	/// <returns>A <see cref="Task"/> that represents the asynchronous operation. The <see cref="Task"/>s return value is the result of the compilation.</returns>
 	/// <exception cref="UnreachableException">Thrown when applying changes to the <see cref="Workspace"/> failed.</exception>
-	internal static async Task<CompileResult> IncrementalCompileAsync( AssemblyInfo assemblyInfo, AdhocWorkspace workspace, IReadOnlyDictionary<string, WatcherChangeTypes> changedFilePaths, CompileOptions? compileOptions = null )
+	internal static async Task<CompileResult> IncrementalCompileAsync( AssemblyInfo assemblyInfo, IReadOnlyDictionary<string, WatcherChangeTypes> changedFilePaths, CompileOptions? compileOptions = null )
 	{
 		using var _ = new ScopedTimingLogger( Loggers.Compiler );
 
@@ -308,6 +311,7 @@ internal static class Compiler
 			OptimizationLevel = OptimizationLevel.Debug,
 			GenerateSymbols = true,
 		};
+		var workspace = AssemblyWorkspaces[assemblyInfo.Name];
 		var parseOptions = (CSharpParseOptions)workspace.CurrentSolution.Projects.First().ParseOptions!;
 
 		// Update each changed file.
@@ -425,7 +429,7 @@ internal static class Compiler
 		}
 
 		if ( result.Success )
-			return CompileResult.Successful( workspace, result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
+			return CompileResult.Successful( result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
 		else
 			return CompileResult.Failed( result.Diagnostics );
 	}

@@ -26,7 +26,6 @@ internal sealed class HotloadableAssembly : IDisposable
 	private FileSystemWatcher? CsProjectWatcher { get; }
 	private FileSystemWatcher? CodeWatcher { get; }
 	private AssemblyLoadContext? Context { get; set; }
-	private AdhocWorkspace? Workspace { get; set; }
 	/// <summary>
 	/// A container for all the changed files and the specific change that occurred to them.
 	/// </summary>
@@ -122,12 +121,12 @@ internal sealed class HotloadableAssembly : IDisposable
 
 		// Compile.
 		CompileResult compileResult;
-		if ( incremental && Workspace is not null )
+		if ( incremental )
 		{
 			var changedFiles = new Dictionary<string, WatcherChangeTypes>( IncrementalBuildChanges );
 			IncrementalBuildChanges.Clear();
 
-			compileResult = await Compiler.IncrementalCompileAsync( AssemblyInfo, Workspace, changedFiles );
+			compileResult = await Compiler.IncrementalCompileAsync( AssemblyInfo, changedFiles );
 		}
 		else
 			compileResult = await Compiler.CompileAsync( AssemblyInfo );
@@ -139,9 +138,6 @@ internal sealed class HotloadableAssembly : IDisposable
 			await PostBuildAsync();
 			return;
 		}
-
-		// Update compile workspace.
-		Workspace = compileResult.Workspace!;
 
 		// Swap and upgrade the assemblies.
 		Swap( compileResult );
@@ -308,7 +304,6 @@ internal sealed class HotloadableAssembly : IDisposable
 		AllAssemblies.TryRemove( AssemblyInfo.Name, out _ );
 		CsProjectWatcher?.Dispose();
 		CodeWatcher?.Dispose();
-		Workspace?.Dispose();
 		Context?.Unload();
 		Context = null;
 

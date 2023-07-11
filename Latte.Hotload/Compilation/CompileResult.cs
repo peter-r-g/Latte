@@ -14,11 +14,6 @@ internal readonly struct CompileResult
 	internal bool WasSuccessful { get; }
 
 	/// <summary>
-	/// The workspace that can be used for incremental builds.
-	/// </summary>
-	internal AdhocWorkspace? Workspace { get; }
-
-	/// <summary>
 	/// An array of diagnostics that occurred during compilation.
 	/// </summary>
 	internal ImmutableArray<Diagnostic> Diagnostics { get; } = ImmutableArray<Diagnostic>.Empty;
@@ -41,15 +36,13 @@ internal readonly struct CompileResult
 	/// Initializes a new instance of <see cref="CompileResult"/>.
 	/// </summary>
 	/// <param name="wasSuccessful">Whether or not the compilation was successful.</param>
-	/// <param name="workspace">The workspace that was created/updated. Null if <see ref="wasSuccessful"/> is false.</param>
 	/// <param name="compiledAssembly">The compiled assembly in a byte array. Null if <see ref="wasSuccessful"/> is false.</param>
 	/// <param name="compiledAssemblySymbols">The compiled assembly's debug symbols. Null if no symbols or if <see ref="wasSuccessful"/> is false.</param>
 	/// <param name="diagnostics">An array containing all diagnostics that occurred during compilation.</param>
-	private CompileResult( bool wasSuccessful, AdhocWorkspace? workspace, in ImmutableArray<Diagnostic> diagnostics, byte[]? compiledAssembly = null, byte[]? compiledAssemblySymbols = null )
+	private CompileResult( bool wasSuccessful, in ImmutableArray<Diagnostic> diagnostics, byte[]? compiledAssembly = null, byte[]? compiledAssemblySymbols = null )
 	{
 		WasSuccessful = wasSuccessful;
 
-		Workspace = workspace;
 		Diagnostics = diagnostics;
 		CompiledAssembly = compiledAssembly;
 		CompiledAssemblySymbols = compiledAssemblySymbols;
@@ -64,7 +57,6 @@ internal readonly struct CompileResult
 	{
 		return new CompileResult(
 			wasSuccessful: false,
-			workspace: null,
 			diagnostics: diagnostics
 		);
 	}
@@ -72,16 +64,14 @@ internal readonly struct CompileResult
 	/// <summary>
 	/// Shorthand method to create a successful <see cref="CompileResult"/>.
 	/// </summary>
-	/// <param name="workspace"></param>
 	/// <param name="diagnostics">An array containing all diagnostics that occurred during the compilation.</param>
 	/// <param name="compiledAssembly">The bytes of the compiled assembly.</param>
 	/// <param name="compiledAssemblySymbols">The bytes of the symbols contained in the compiled assembly. Null if no debug symbols.</param>
 	/// <returns>The newly created <see cref="CompileResult"/>.</returns>
-	internal static CompileResult Successful( AdhocWorkspace workspace, in ImmutableArray<Diagnostic> diagnostics, byte[] compiledAssembly, byte[]? compiledAssemblySymbols )
+	internal static CompileResult Successful( in ImmutableArray<Diagnostic> diagnostics, byte[] compiledAssembly, byte[]? compiledAssemblySymbols )
 	{
 		return new CompileResult(
 			wasSuccessful: true,
-			workspace: workspace,
 			diagnostics: diagnostics,
 			compiledAssembly: compiledAssembly,
 			compiledAssemblySymbols: compiledAssemblySymbols
