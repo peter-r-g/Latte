@@ -177,6 +177,10 @@ internal sealed class HotloadableAssembly : IDisposable
 	private Assembly? ResolveContextAssembly( AssemblyLoadContext context, AssemblyName assemblyName )
 	{
 		var assemblyFileName = assemblyName.Name ?? assemblyName.FullName;
+
+		if ( All.TryGetValue( assemblyFileName, out var hotloadableAssembly ) && hotloadableAssembly.Assembly is not null )
+			return hotloadableAssembly.Assembly;
+
 		if ( NuGetManager.IsDllInstalled( assemblyFileName ) )
 			return Assembly.LoadFile( Path.GetFullPath( NuGetManager.GetDllPath( assemblyFileName )! ) );
 
