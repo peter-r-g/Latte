@@ -223,64 +223,20 @@ internal static class Compiler
 		// Compile.
 		//
 
-		using var assemblyStream = new MemoryStream();
-		using var symbolsStream = compileOptions.GenerateSymbols ? new MemoryStream() : null;
-
-		// Setup emit options.
-		EmitOptions? emitOptions = null;
-		if ( compileOptions.GenerateSymbols )
-		{
-			emitOptions = new EmitOptions(
-				debugInformationFormat: DebugInformationFormat.PortablePdb,
-				pdbFilePath: $"{assemblyInfo.Name}.pdb" );
-		}
-
-		// Compile. Panic if compilation becomes invalid.
 		var compilation = await project.GetCompilationAsync() ?? throw new UnreachableException( "The project compilation became invalid unexpectedly" );
-		var result = compilation.Emit(
-			assemblyStream,
-			symbolsStream,
-			options: emitOptions
-		);
+		var result = FinishCompile( assemblyInfo, compileOptions, compilation );
 
-		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
-			Loggers.Compiler.Verbose( $"Full build for {assemblyInfo.Name} {(result.Success ? "succeeded" : "failed")}" );
+		if ( result.WasSuccessful )
+		{
+			AssemblyWorkspaces.AddOrUpdate( assemblyInfo.Name, workspace, ( key, val ) => val );
 
-		// Output all diagnostics that came from the compile.
-		foreach ( var diagnosticGroup in result.Diagnostics
-			.OrderBy( diagnostic => diagnostic.WarningLevel )
-			.GroupBy( diagnostic => diagnostic.Severity ) )
-		{
-			foreach ( var diagnostic in diagnosticGroup )
-			{
-				switch ( diagnostic.Severity )
-				{
-					case DiagnosticSeverity.Hidden:
-						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
-						break;
-					case DiagnosticSeverity.Info:
-						Loggers.Compiler.Information( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
-						break;
-					case DiagnosticSeverity.Warning:
-						Loggers.Compiler.Warning( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
-						break;
-					case DiagnosticSeverity.Error:
-						Loggers.Compiler.Error( $"{diagnostic.Id}: {diagnostic.GetMessage()} ({diagnostic.Location})" );
-						break;
-				}
-			}
+			if ( Loggers.Compiler.IsEnabled( LogLevel.Information ) )
+				Loggers.Compiler.Information( $"Full build for {assemblyInfo.Name} succeeded" );
 		}
+		else if ( !result.WasSuccessful && Loggers.Compiler.IsEnabled( LogLevel.Error ) )
+			Loggers.Compiler.Error( $"Full build for {assemblyInfo.Name} failed" );
 
-		if ( result.Success )
-		{
-			AssemblyWorkspaces.AddOrUpdate( assemblyInfo.Name, workspace, (key, val) => val );
-			return CompileResult.Successful( result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
-		}
-		else
-		{
-			Debugger.Break();
-			return CompileResult.Failed( result.Diagnostics );
-		}
+		return result;
 	}
 
 	/// <summary>
@@ -368,6 +324,19 @@ internal static class Compiler
 			}
 		}
 
+		var compilation = await workspace.CurrentSolution.Projects.First().GetCompilationAsync() ?? throw new UnreachableException();
+		var result = FinishCompile( assemblyInfo, compileOptions, compilation );
+
+		if ( result.WasSuccessful && Loggers.Compiler.IsEnabled( LogLevel.Information ) )
+			Loggers.Compiler.Information( $"Incremental build for {assemblyInfo.Name} succeeded" );
+		else if ( !result.WasSuccessful && Loggers.Compiler.IsEnabled( LogLevel.Error ) )
+			Loggers.Compiler.Error( $"Incremental build for {assemblyInfo.Name} failed" );
+			
+		return result;
+	}
+
+	private static CompileResult FinishCompile( in AssemblyInfo assemblyInfo, CompileOptions compileOptions, Microsoft.CodeAnalysis.Compilation compilation )
+	{
 		using var assemblyStream = new MemoryStream();
 		using var symbolsStream = compileOptions.GenerateSymbols ? new MemoryStream() : null;
 
@@ -381,15 +350,11 @@ internal static class Compiler
 		}
 
 		// Compile.
-		var compilation = await workspace.CurrentSolution.Projects.First().GetCompilationAsync() ?? throw new UnreachableException();
 		var result = compilation.Emit(
 			assemblyStream,
 			symbolsStream,
 			options: emitOptions
 		);
-
-		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
-			Loggers.Compiler.Verbose( $"Incremental build for {assemblyInfo.Name} {(result.Success ? "succeeded" : "failed")}" );
 
 		// Output all diagnostics that came from the compile.
 		foreach ( var diagnosticGroup in result.Diagnostics
@@ -427,7 +392,7 @@ internal static class Compiler
 	/// </summary>
 	/// <param name="assemblyPaths">A set of relative paths to create references from.</param>
 	/// <returns>A set of <see cref="PortableExecutableReference"/> from a set of relative paths.</returns>
-	internal static IEnumerable<PortableExecutableReference> CreateMetadataReferencesFromPaths( IEnumerable<string> assemblyPaths )
+	private static IEnumerable<PortableExecutableReference> CreateMetadataReferencesFromPaths( IEnumerable<string> assemblyPaths )
 	{
 		foreach ( var assemblyPath in assemblyPaths )
 			yield return CreateMetadataReferenceFromPath( assemblyPath );
@@ -438,7 +403,7 @@ internal static class Compiler
 	/// </summary>
 	/// <param name="assemblyPath">The relative path to create a reference from.</param>
 	/// <returns>A <see cref="PortableExecutableReference"/> from a relative path.</returns>
-	internal static PortableExecutableReference CreateMetadataReferenceFromPath( string assemblyPath )
+	private static PortableExecutableReference CreateMetadataReferenceFromPath( string assemblyPath )
 	{
 		if ( ReferenceCache.TryGetValue( assemblyPath, out var reference ) )
 			return reference;
