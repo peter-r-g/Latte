@@ -3,6 +3,7 @@ using Latte.Hotload.Upgrading;
 using Latte.Logging;
 using Microsoft.CodeAnalysis;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,6 +15,9 @@ namespace Latte.Hotload;
 
 internal sealed class HotloadableAssembly : IDisposable
 {
+	internal static IReadOnlyDictionary<string, HotloadableAssembly> All => AllAssemblies;
+	private static ConcurrentDictionary<string, HotloadableAssembly> AllAssemblies = new();
+
 	internal AssemblyInfo AssemblyInfo { get; }
 	internal Assembly? Assembly { get; private set; }
 	internal IEntryPoint? EntryPoint { get; private set; }
@@ -42,8 +46,10 @@ internal sealed class HotloadableAssembly : IDisposable
 	/// </summary>
 	private bool incrementalBuildRequested;
 
-	internal HotloadableAssembly( in AssemblyInfo assemblyInfo )
+	private HotloadableAssembly( in AssemblyInfo assemblyInfo )
 	{
+		AllAssemblies.TryAdd( assemblyInfo.Name, this );
+
 		AssemblyInfo = assemblyInfo;
 		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
 
@@ -80,13 +86,15 @@ internal sealed class HotloadableAssembly : IDisposable
 		CodeWatcher.EnableRaisingEvents = true;
 	}
 
-	internal HotloadableAssembly( Assembly assembly )
+	private HotloadableAssembly( Assembly assembly )
 	{
 		AssemblyInfo = new AssemblyInfo
 		{
 			Name = assembly.GetName().Name ?? "Unknown",
 			Path = assembly.Location
 		};
+
+		AllAssemblies.TryAdd( AssemblyInfo.Name, this );
 
 		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
 		Assembly = assembly;
@@ -296,6 +304,7 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	public void Dispose()
 	{
+		AllAssemblies.TryRemove( AssemblyInfo.Name, out _ );
 		CsProjectWatcher?.Dispose();
 		CodeWatcher?.Dispose();
 		Workspace?.Dispose();
@@ -304,4 +313,7 @@ internal sealed class HotloadableAssembly : IDisposable
 
 		GC.SuppressFinalize( this );
 	}
+
+	internal static HotloadableAssembly New( in AssemblyInfo assemblyInfo ) => new( assemblyInfo );
+	internal static HotloadableAssembly New( Assembly assembly ) => new( assembly );
 }

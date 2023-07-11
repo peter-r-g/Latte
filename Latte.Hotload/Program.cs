@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.IO;
 using System.Reflection;
@@ -13,21 +12,17 @@ public static class Program
 	public static string CurrentDirectory => Directory.GetCurrentDirectory();
 	public static ImmutableArray<string> CommandLineArguments { get; private set; }
 
-	private static HotloadableAssembly EngineAssembly { get; set; } = null!;
-	private static ConcurrentStack<HotloadableAssembly> CustomAssemblies { get; } = new();
-
-	private static void Main( string[] args )
+	private static async Task Main( string[] args )
 	{
 		AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
 		AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
 		CommandLineArguments = args.ToImmutableArray();
 
-		EngineAssembly = new HotloadableAssembly( new AssemblyInfo
+		await AddAssemblyAsync( new AssemblyInfo
 		{
 			Name = "Latte.Engine",
 			ProjectPath = "../Latte.Engine"
 		} );
-		EngineAssembly.InitAsync().Wait();
 
 		for ( var i = 0; i < 10; i++ )
 			Thread.Sleep( 1000 );
@@ -45,17 +40,13 @@ public static class Program
 
 	internal static async Task AddAssemblyAsync( AssemblyInfo assemblyInfo )
 	{
-		var assembly = new HotloadableAssembly( assemblyInfo );
-		CustomAssemblies.Push( assembly );
-
+		var assembly = HotloadableAssembly.New( assemblyInfo );
 		await assembly.InitAsync();
 	}
 
 	private static void OnProcessExit( object? sender, EventArgs e )
 	{
-		while ( CustomAssemblies.TryPop( out var assembly ) )
+		foreach ( var (_, assembly) in HotloadableAssembly.All )
 			assembly.Dispose();
-
-		EngineAssembly?.Dispose();
 	}
 }
