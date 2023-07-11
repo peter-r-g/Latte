@@ -23,9 +23,6 @@ public static class Program
 			Name = "Latte.Engine",
 			ProjectPath = "../Latte.Engine"
 		} );
-
-		for ( var i = 0; i < 10; i++ )
-			Thread.Sleep( 1000 );
 	}
 
 	private static Assembly? ResolveAssembly( object? sender, ResolveEventArgs args )
