@@ -12,7 +12,7 @@ public sealed class EngineEntryPoint : IEntryPoint
 	private static bool HasMainExecuted { get; set; } = false;
 	private int TimesHotloaded { get; set; } = 0;
 
-	public async void Main()
+	public void Main()
 	{
 		Log.Information( "Hello from engine!" );
 		HasMainExecuted = true;
