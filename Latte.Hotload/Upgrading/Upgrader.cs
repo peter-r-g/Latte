@@ -26,7 +26,7 @@ internal static class Upgrader
 		Upgraders = upgraders.OrderByDescending( upgrader => upgrader.Priority ).ToImmutableArray();
 	}
 
-	internal static void Upgrade( Assembly oldAssembly, IEntryPoint oldEntryPoint, Assembly newAssembly, IEntryPoint newEntryPoint )
+	internal static void Upgrade( Assembly oldAssembly, IEntryPoint? oldEntryPoint, Assembly newAssembly, IEntryPoint? newEntryPoint )
 	{
 		if ( Loggers.Hotloader.IsEnabled( LogLevel.Verbose ) )
 			Loggers.Hotloader.Verbose( $"Starting upgrade for {oldAssembly.GetName().Name}" );
@@ -43,7 +43,8 @@ internal static class Upgrader
 			UpgradeStaticInstance( oldType, newType );
 		}
 
-		UpgradeInstance( oldEntryPoint, newEntryPoint );
+		if ( oldEntryPoint is not null && newEntryPoint is not null )
+			UpgradeInstance( oldEntryPoint, newEntryPoint );
 
 		if ( Loggers.Hotloader.IsEnabled( LogLevel.Verbose ) )
 			Loggers.Hotloader.Verbose( $"Finished upgrade for {oldAssembly.GetName().Name}" );

@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -110,7 +111,10 @@ internal sealed class HotloadableAssembly : IDisposable
 		if ( Assembly is null )
 			await BuildAsync();
 		else
-			EntryPoint = GetEntryPoint( Assembly );
+		{
+			TryGetEntryPoint( Assembly, out var entryPoint );
+			EntryPoint = entryPoint;
+		}
 
 		EntryPoint?.Main();
 	}
@@ -157,13 +161,13 @@ internal sealed class HotloadableAssembly : IDisposable
 		Context = new AssemblyLoadContext( AssemblyInfo.Name, true );
 		Context.Resolving += ResolveContextAssembly;
 		var newAssembly = Context.LoadFromStream( compileResult.CompiledAssembly!, compileResult.CompiledAssemblySymbols );
-		var newEntryPoint = GetEntryPoint( newAssembly );
+		TryGetEntryPoint( newAssembly, out var newEntryPoint );
 
-		if ( oldAssembly is not null && oldEntryPoint is not null )
+		if ( oldAssembly is not null )
 		{
-			oldEntryPoint.PreHotload();
+			oldEntryPoint?.PreHotload();
 			Upgrader.Upgrade( oldAssembly, oldEntryPoint, newAssembly, newEntryPoint );
-			newEntryPoint.PostHotload();
+			newEntryPoint?.PostHotload();
 		}
 
 		Assembly = newAssembly;
@@ -202,22 +206,6 @@ internal sealed class HotloadableAssembly : IDisposable
 			incrementalBuildRequested = false;
 			await BuildAsync( true );
 		}
-	}
-
-	private IEntryPoint GetEntryPoint( Assembly assembly )
-	{
-		var entryPointType = assembly.ExportedTypes.FirstOrDefault( type =>
-		{
-			foreach ( var @interface in type.GetInterfaces() )
-			{
-				if ( @interface == typeof( IEntryPoint ) )
-					return true;
-			}
-
-			return false;
-		} ) ?? throw new EntryPointNotFoundException( $"No entry point type found for {AssemblyInfo.Name}" );
-
-		return (IEntryPoint)Activator.CreateInstance( entryPointType )!;
 	}
 
 	private void OnProjectChanged( object? sender, FileSystemEventArgs args )
@@ -305,6 +293,29 @@ internal sealed class HotloadableAssembly : IDisposable
 		Context = null;
 
 		GC.SuppressFinalize( this );
+	}
+
+	private static bool TryGetEntryPoint( Assembly assembly, [NotNullWhen( true )] out IEntryPoint? entryPoint )
+	{
+		var entryPointType = assembly.ExportedTypes.FirstOrDefault( type =>
+		{
+			foreach ( var @interface in type.GetInterfaces() )
+			{
+				if ( @interface == typeof( IEntryPoint ) )
+					return true;
+			}
+
+			return false;
+		} );
+
+		if ( entryPointType is null )
+		{
+			entryPoint = null;
+			return false;
+		}
+
+		entryPoint = (IEntryPoint)Activator.CreateInstance( entryPointType )!;
+		return true;
 	}
 
 	internal static HotloadableAssembly New( in AssemblyInfo assemblyInfo ) => new( assemblyInfo );
