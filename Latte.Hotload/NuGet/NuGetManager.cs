@@ -31,6 +31,9 @@ internal static class NuGetManager
 
 	internal static async ValueTask<Stream> DownloadPackageAsync( string id, NuGetVersion version, CancellationToken cancellationToken )
 	{
+		if ( Loggers.NuGet.IsEnabled( Logging.LogLevel.Verbose ) )
+			Loggers.NuGet.Verbose( $"Downloading package {id} @ {version} to in memory stream..." );
+
 		cancellationToken.ThrowIfCancellationRequested();
 
 		// Setup.
@@ -50,6 +53,8 @@ internal static class NuGetManager
 			cancellationToken );
 		cancellationToken.ThrowIfCancellationRequested();
 
+		if ( Loggers.NuGet.IsEnabled( Logging.LogLevel.Verbose ) )
+			Loggers.NuGet.Verbose( $"Downloaded {id} @ {version}" );
 		return packageStream;
 	}
 
@@ -166,12 +171,17 @@ internal static class NuGetManager
 		{
 			PackageId = packageId;
 			InstallingPackages.TryAdd( PackageId );
+
+			if ( Loggers.NuGet.IsEnabled( Logging.LogLevel.Verbose ) )
+				Loggers.NuGet.Verbose( $"Installing {PackageId}..." );
 		}
 
 		public void Dispose()
 		{
 			InstallingPackages.TryRemove( PackageId );
 
+			if ( Loggers.NuGet.IsEnabled( Logging.LogLevel.Verbose ) )
+				Loggers.NuGet.Verbose( $"Finished installing {PackageId}" );
 		}
 	}
 }
