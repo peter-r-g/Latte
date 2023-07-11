@@ -1,4 +1,5 @@
 ﻿using Latte.Hotload.NuGet;
+using Latte.Hotload.Util;
 using Latte.Logging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -74,6 +75,7 @@ internal static class Compiler
 
 		"System.Xml.ReaderWriter.dll" );
 
+	private static ConcurrentDictionary<string, ConcurrentHashSet<PortableExecutableReference>> AssemblyReferences { get; } = new();
 	private static ConcurrentDictionary<string, AdhocWorkspace> AssemblyWorkspaces { get; } = new();
 	private static ConcurrentDictionary<string, PortableExecutableReference> ReferenceCache { get; } = new();
 
@@ -134,12 +136,12 @@ internal static class Compiler
 		//
 		// Build up references.
 		//
-		var references = new HashSet<PortableExecutableReference>();
+		var references = new ConcurrentHashSet<PortableExecutableReference>();
 		{
 			// System references.
 			var dotnetBaseDir = Path.GetDirectoryName( typeof( object ).Assembly.Location )!;
 			foreach ( var systemReference in SystemReferences )
-				references.Add( CreateMetadataReferenceFromPath( Path.Combine( dotnetBaseDir, systemReference ) ) );
+				references.TryAdd( CreateMetadataReferenceFromPath( Path.Combine( dotnetBaseDir, systemReference ) ) );
 
 			// NuGet references.
 			{
@@ -176,16 +178,20 @@ internal static class Compiler
 
 				foreach ( var projectReference in csproj.ProjectReferences )
 				{
+					var projectAssemblyName = Path.GetFileNameWithoutExtension( projectReference );
 					if ( projectReference.Contains( "Latte.Hotload" ) )
-						references.Add( CreateMetadataReferenceFromPath( "Latte.Hotload.dll" ) );
+						references.TryAdd( CreateMetadataReferenceFromPath( "Latte.Hotload.dll" ) );
 					else
-						references.Add( CreateMetadataReferenceFromPath( projectReference ) );
+						references.TryAdd( CreateMetadataReferenceFromPath( projectReference ) );
+
+					if ( AssemblyReferences.TryGetValue( projectAssemblyName, out var projectsReferences ) )
+						references.AddRange( projectsReferences );
 				}
 			}
 
 			// Literal references.
 			foreach ( var reference in csproj.DllReferences )
-				references.Add( CreateMetadataReferenceFromPath( Path.GetFullPath( reference ) ) );
+				references.TryAdd( CreateMetadataReferenceFromPath( Path.GetFullPath( reference ) ) );
 		}
 
 		//
@@ -243,6 +249,7 @@ internal static class Compiler
 
 		if ( result.WasSuccessful )
 		{
+			AssemblyReferences.AddOrUpdate( assemblyInfo.Name, references, ( key, value ) => value );
 			AssemblyWorkspaces.AddOrUpdate( assemblyInfo.Name, workspace, ( key, val ) => val );
 
 			if ( Loggers.Compiler.IsEnabled( LogLevel.Information ) )
