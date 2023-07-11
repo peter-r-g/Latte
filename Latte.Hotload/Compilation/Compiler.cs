@@ -155,17 +155,32 @@ internal static class Compiler
 			}
 
 			// Project references.
-			// TODO: This is nightmare fuel, need a better solution long-term.
-			foreach ( var projectReference in csproj.ProjectReferences )
 			{
-				var referenceCsprojPath = Path.GetFullPath( Path.Combine( Path.GetDirectoryName( csproj.FilePath )!, projectReference ) );
-				var referenceProject = CSharpProject.FromFile( referenceCsprojPath );
-				var assemblyName = referenceProject.AssemblyName;
+				var projectTasks = new List<Task>( csproj.ProjectReferences.Length );
 
-				if ( !string.IsNullOrEmpty( assemblyName ) )
-					references.Add( CreateMetadataReferenceFromPath( assemblyName + ".dll" ) );
-				else
-					references.Add( CreateMetadataReferenceFromPath( Path.GetFileNameWithoutExtension( referenceCsprojPath ) + ".dll" ) );
+				foreach ( var projectReference in csproj.ProjectReferences )
+				{
+					var projectAssemblyName = Path.GetFileNameWithoutExtension( projectReference );
+					if ( HotloadableAssembly.All.ContainsKey( projectAssemblyName ) || projectReference.Contains( "Latte.Hotload" ) )
+						continue;
+
+					var projectAssembly = HotloadableAssembly.New( new AssemblyInfo
+					{
+						Name = projectAssemblyName,
+						ProjectPath = Path.GetDirectoryName( projectReference )
+					} );
+					projectTasks.Add( projectAssembly.InitAsync() );
+				}
+
+				await Task.WhenAll( projectTasks );
+
+				foreach ( var projectReference in csproj.ProjectReferences )
+				{
+					if ( projectReference.Contains( "Latte.Hotload" ) )
+						references.Add( CreateMetadataReferenceFromPath( "Latte.Hotload.dll" ) );
+					else
+						references.Add( CreateMetadataReferenceFromPath( projectReference ) );
+				}
 			}
 
 			// Literal references.
