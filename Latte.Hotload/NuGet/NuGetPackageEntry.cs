@@ -12,8 +12,8 @@ internal sealed class NuGetPackageEntry
 
 	internal string Id { get; init; } = string.Empty;
 	internal NuGetVersion Version { get; init; } = new NuGetVersion( 1, 0, 0 );
-	internal ImmutableArray<string> DllFilePaths { get; init; } = new ImmutableArray<string>();
-	internal ImmutableArray<NuGetPackageEntry> Dependencies { get; init; }
+	internal ImmutableArray<string> DllFilePaths { get; init; } = ImmutableArray<string>.Empty;
+	internal ImmutableArray<NuGetPackageEntry> Dependencies { get; init; } = ImmutableArray<NuGetPackageEntry>.Empty;
 
 	private ImmutableArray<string> CachedAllDllFilePaths { get; set; } = ImmutableArray<string>.Empty;
 	private bool CachedDllPaths { get; set; }

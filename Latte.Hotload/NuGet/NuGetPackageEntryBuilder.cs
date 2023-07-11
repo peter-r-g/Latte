@@ -8,8 +8,8 @@ internal sealed class NuGetPackageEntryBuilder
 {
 	private string Id { get; set; } = string.Empty;
 	private NuGetVersion Version { get; set; } = new NuGetVersion( 1, 0, 0 );
-	private List<string> DllFilePaths { get; set; } = new();
-	private List<NuGetPackageEntry> Dependencies { get; set; } = new();
+	private List<string> DllFilePaths { get; } = new();
+	private List<NuGetPackageEntry> Dependencies { get; } = new();
 
 	internal NuGetPackageEntryBuilder WithId( string packageId )
 	{
