@@ -1,4 +1,5 @@
 ﻿using Latte.Hotload.Compilation;
+using Latte.Hotload.NuGet;
 using Latte.Hotload.Upgrading;
 using Latte.Logging;
 using Microsoft.CodeAnalysis;
@@ -178,11 +179,11 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	private Assembly? ResolveContextAssembly( AssemblyLoadContext context, AssemblyName assemblyName )
 	{
-		var assemblyPath = Path.GetFullPath( Path.Combine( "nuget", assemblyName.Name + ".dll" ) );
-		if ( File.Exists( assemblyPath ) )
-			return Assembly.LoadFile( assemblyPath );
+		var assemblyFileName = assemblyName.Name ?? assemblyName.FullName;
+		if ( NuGetManager.IsDllInstalled( assemblyFileName ) )
+			return Assembly.LoadFile( NuGetManager.GetDllPath( assemblyFileName )! );
 
-		Loggers.Hotloader.Error( $"Failed to find assembly: {assemblyName}" );
+		Log.Error( $"Failed to find assembly: {assemblyName}" );
 		return null;
 	}
 

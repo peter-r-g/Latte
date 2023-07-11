@@ -29,6 +29,25 @@ internal static class NuGetManager
 	private static ILogger Logger { get; } = NullLogger.Instance;
 	private const string CacheDirectory = "nuget";
 
+	internal static bool IsDllInstalled( string dllName )
+	{
+		if ( !dllName.EndsWith( ".dll" ) )
+			dllName += ".dll";
+
+		return File.Exists( Path.Combine( CacheDirectory, dllName ) );
+	}
+
+	internal static string? GetDllPath( string dllName )
+	{
+		if ( !dllName.EndsWith( ".dll" ) )
+			dllName += ".dll";
+
+		if ( !IsDllInstalled( dllName ) )
+			return null;
+
+		return Path.Combine( CacheDirectory, dllName );
+	}
+
 	internal static async ValueTask<Stream> DownloadPackageAsync( string id, NuGetVersion version, CancellationToken cancellationToken )
 	{
 		if ( Loggers.NuGet.IsEnabled( Logging.LogLevel.Verbose ) )
