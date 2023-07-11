@@ -386,7 +386,10 @@ internal static class Compiler
 		}
 
 		if ( result.Success )
+		{
+			CreateMetadataReferenceFromStream( assemblyInfo.Name, new MemoryStream( assemblyStream.ToArray() ), true );
 			return CompileResult.Successful( result.Diagnostics, assemblyStream, symbolsStream );
+		}
 		else
 			return CompileResult.Failed( result.Diagnostics );
 	}
@@ -396,10 +399,10 @@ internal static class Compiler
 	/// </summary>
 	/// <param name="assemblyPaths">A set of relative paths to create references from.</param>
 	/// <returns>A set of <see cref="PortableExecutableReference"/> from a set of relative paths.</returns>
-	private static IEnumerable<PortableExecutableReference> CreateMetadataReferencesFromPaths( IEnumerable<string> assemblyPaths )
+	private static IEnumerable<PortableExecutableReference> CreateMetadataReferencesFromPaths( IEnumerable<string> assemblyPaths, bool ignoreCache = false )
 	{
 		foreach ( var assemblyPath in assemblyPaths )
-			yield return CreateMetadataReferenceFromPath( assemblyPath );
+			yield return CreateMetadataReferenceFromPath( assemblyPath, ignoreCache );
 	}
 
 	/// <summary>
@@ -407,13 +410,24 @@ internal static class Compiler
 	/// </summary>
 	/// <param name="assemblyPath">The relative path to create a reference from.</param>
 	/// <returns>A <see cref="PortableExecutableReference"/> from a relative path.</returns>
-	private static PortableExecutableReference CreateMetadataReferenceFromPath( string assemblyPath )
+	private static PortableExecutableReference CreateMetadataReferenceFromPath( string assemblyPath, bool ignoreCache = false )
 	{
-		if ( ReferenceCache.TryGetValue( assemblyPath, out var reference ) )
+		var cacheName = Path.GetFileNameWithoutExtension( assemblyPath );
+		if ( !ignoreCache && ReferenceCache.TryGetValue( cacheName, out var reference ) )
 			return reference;
 
 		var newReference = MetadataReference.CreateFromFile( assemblyPath );
-		ReferenceCache.TryAdd( assemblyPath, newReference );
+		ReferenceCache.AddOrUpdate( cacheName, newReference, (key, val) => val );
+		return newReference;
+	}
+
+	private static MetadataReference CreateMetadataReferenceFromStream( string assemblyName, Stream assemblyStream, bool ignoreCache = false )
+	{
+		if ( !ignoreCache && ReferenceCache.TryGetValue( assemblyName, out var reference ) )
+			return reference;
+
+		var newReference = MetadataReference.CreateFromStream( assemblyStream );
+		ReferenceCache.AddOrUpdate( assemblyName, newReference, ( key, val ) => val );
 		return newReference;
 	}
 }
