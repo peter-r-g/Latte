@@ -181,7 +181,7 @@ internal sealed class HotloadableAssembly : IDisposable
 	{
 		var assemblyFileName = assemblyName.Name ?? assemblyName.FullName;
 		if ( NuGetManager.IsDllInstalled( assemblyFileName ) )
-			return Assembly.LoadFile( NuGetManager.GetDllPath( assemblyFileName )! );
+			return Assembly.LoadFile( Path.GetFullPath( NuGetManager.GetDllPath( assemblyFileName )! ) );
 
 		Log.Error( $"Failed to find assembly: {assemblyName}" );
 		return null;
