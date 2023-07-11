@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.Hotload", "Latte.Hotl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.Engine", "Latte.Engine\Latte.Engine.csproj", "{B5B27639-0681-4318-8058-B5409D011108}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox", "Sandbox\Sandbox.csproj", "{17A12D09-3254-4A15-ADEE-974291A9CF93}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{B5B27639-0681-4318-8058-B5409D011108}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B5B27639-0681-4318-8058-B5409D011108}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B5B27639-0681-4318-8058-B5409D011108}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17A12D09-3254-4A15-ADEE-974291A9CF93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17A12D09-3254-4A15-ADEE-974291A9CF93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17A12D09-3254-4A15-ADEE-974291A9CF93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17A12D09-3254-4A15-ADEE-974291A9CF93}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -17,14 +17,4 @@
     <ProjectReference Include="..\Latte.Windowing\Latte.Windowing.csproj" />
   </ItemGroup>
 
-  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="call $(ProjectDir)compile_shaders_glsl.bat" />
-  </Target>
-
-  <ItemGroup>
-    <None Include="$(ProjectDir)\Assets\Models\**" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(ProjectDir)\Assets\Shaders\*.spv" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(ProjectDir)\Assets\Textures\**" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
 </Project>

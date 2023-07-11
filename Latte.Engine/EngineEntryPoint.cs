@@ -18,7 +18,7 @@ public sealed class EngineEntryPoint : IEntryPoint
 		HasMainExecuted = true;
 		NeverHotloaded = true;
 
-		var app = new TestWindow();
+		var app = new GameWindow();
 		app.Run();
 	}
 
