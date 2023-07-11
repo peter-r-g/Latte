@@ -154,12 +154,9 @@ internal sealed class HotloadableAssembly : IDisposable
 		var oldEntryPoint = EntryPoint;
 		Context?.Unload();
 
-		using var assemblyStream = new MemoryStream( compileResult.CompiledAssembly! );
-		using var symbolsStream = compileResult.HasSymbols ? new MemoryStream( compileResult.CompiledAssemblySymbols! ) : null;
-
 		Context = new AssemblyLoadContext( AssemblyInfo.Name, true );
 		Context.Resolving += ResolveContextAssembly;
-		var newAssembly = Context.LoadFromStream( assemblyStream, symbolsStream );
+		var newAssembly = Context.LoadFromStream( compileResult.CompiledAssembly!, compileResult.CompiledAssemblySymbols );
 		var newEntryPoint = GetEntryPoint( newAssembly );
 
 		if ( oldAssembly is not null && oldEntryPoint is not null )

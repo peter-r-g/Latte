@@ -382,7 +382,7 @@ internal static class Compiler
 		}
 
 		if ( result.Success )
-			return CompileResult.Successful( result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
+			return CompileResult.Successful( result.Diagnostics, assemblyStream, symbolsStream );
 		else
 			return CompileResult.Failed( result.Diagnostics );
 	}
