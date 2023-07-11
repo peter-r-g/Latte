@@ -1,4 +1,5 @@
-﻿using Latte.Windowing;
+﻿using Latte;
+using Latte.Windowing;
 using Latte.Windowing.Assets;
 using Latte.Windowing.Input;
 using Latte.Windowing.Options;
@@ -6,28 +7,28 @@ using System;
 using System.IO;
 using System.Numerics;
 
-namespace Latte;
+namespace Sandbox;
 
-internal sealed class TestWindow : Window
+public sealed class SandboxGame : IGame
 {
 	private static readonly string VertexShaderPath = Path.Combine( "Assets", "Shaders", "vert.spv" );
 	private static readonly string FragmentShaderPath = Path.Combine( "Assets", "Shaders", "frag.spv" );
 	private static readonly string VikingRoomModelPath = Path.Combine( "Assets", "Models", "viking_room.obj" );
 	private static readonly string VikingRoomTexturePath = Path.Combine( "Assets", "Textures", "viking_room.png" );
 
-	protected override bool EnableVulkanValidationLayers => true;
+	public InputManager Input { get; set; } = null!;
+	public IRenderingBackend Renderer { get; set; } = null!;
 
 	private Model VikingRoomModel { get; set; } = null!;
+	private Vector2 LastMousePosition { get; set; }
 
-	private Vector2 LastMousePosition;
-
-	protected override void Load()
+	public void Load()
 	{
 		VikingRoomModel = Model.FromPath( VikingRoomModelPath );
 		VikingRoomModel.Initialize( Renderer );
 	}
 
-	protected override void Update( double dt )
+	public void Update( double dt )
 	{
 		UpdateKeyboard( dt );
 		UpdateMouse( dt );
@@ -89,8 +90,8 @@ internal sealed class TestWindow : Window
 		}
 
 		// Close the application
-		if ( Input.Pressed( InputButton.KeyboardEscape ) )
-			Close();
+		//if ( Input.Pressed( InputButton.KeyboardEscape ) )
+		//	Close();
 	}
 
 	private void UpdateMouse( double dt )
@@ -123,7 +124,7 @@ internal sealed class TestWindow : Window
 		);
 	}
 
-	protected override void Render( double dt )
+	public void Draw( double dt )
 	{
 		for ( var x = 0; x < 100; x += 2 )
 		{

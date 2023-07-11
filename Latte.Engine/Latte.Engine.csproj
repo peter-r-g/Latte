@@ -3,9 +3,9 @@
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFramework>net7.0</TargetFramework>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
-    <RootNamespace>Latte.Windowing</RootNamespace>
+    <RootNamespace>Latte.Engine</RootNamespace>
+    <AssemblyName>Latte.Engine</AssemblyName>
 
     <OutputPath>$(SolutionDir)bin/</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -13,11 +13,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Silk.NET" Version="2.17.1" />
-    <PackageReference Include="Silk.NET.Assimp" Version="2.17.1" />
-    <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.17.1" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.0.1" />
+    <ProjectReference Include="..\Latte.Hotload\Latte.Hotload.csproj" />
+    <ProjectReference Include="..\Latte.Windowing\Latte.Windowing.csproj" />
   </ItemGroup>
 
 </Project>
-
