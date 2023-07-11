@@ -3,6 +3,7 @@ using Latte.Logging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
+using NuGet.Packaging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,6 +12,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Latte.Hotload.Compilation;
@@ -139,7 +141,7 @@ internal static class Compiler
 		//
 		// Build up references.
 		//
-		var references = new ConcurrentBag<PortableExecutableReference>();
+		var references = new HashSet<PortableExecutableReference>();
 		{
 			// System references.
 			var dotnetBaseDir = Path.GetDirectoryName( typeof( object ).Assembly.Location )!;
@@ -147,13 +149,17 @@ internal static class Compiler
 				references.Add( CreateMetadataReferenceFromPath( Path.Combine( dotnetBaseDir, systemReference ) ) );
 
 			// NuGet references.
-			foreach ( var packageReference in csproj.PackageReferences )
-				basicTasks.Add( NuGetHelper.FetchPackageAsync( packageReference.Key, packageReference.Value, references ) );
+			{
+				var installTasks = new List<Task<NuGetPackageEntry>>( csproj.PackageReferences.Count );
 
-			// Wait for all tasks to finish before continuing.
-			await Task.WhenAll( basicTasks );
-			// Clear this list for any users later on.
-			basicTasks.Clear();
+				foreach ( var (packageId, packageVersion) in csproj.PackageReferences )
+					installTasks.Add( NuGetManager.InstallPackageAsync( packageId, packageVersion, CancellationToken.None ) );
+
+				await Task.WhenAll( basicTasks );
+
+				foreach ( var installTask in installTasks )
+					references.AddRange( CreateMetadataReferencesFromPaths( installTask.Result.GetAllDllFilePaths() ) );
+			}
 
 			// Project references.
 			// TODO: This is nightmare fuel, need a better solution long-term.
@@ -275,7 +281,10 @@ internal static class Compiler
 		if ( result.Success )
 			return CompileResult.Successful( workspace, result.Diagnostics, assemblyStream.ToArray(), symbolsStream?.ToArray() );
 		else
+		{
+			Debugger.Break();
 			return CompileResult.Failed( result.Diagnostics );
+		}
 	}
 
 	/// <summary>
