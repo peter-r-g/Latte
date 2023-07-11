@@ -141,14 +141,24 @@ internal static class Compiler
 			// System references.
 			var dotnetBaseDir = Path.GetDirectoryName( typeof( object ).Assembly.Location )!;
 			foreach ( var systemReference in SystemReferences )
+			{
+				if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+					Loggers.Compiler.Verbose( "Adding system reference: " + systemReference );
+
 				references.TryAdd( CreateMetadataReferenceFromPath( Path.Combine( dotnetBaseDir, systemReference ) ) );
+			}
 
 			// NuGet references.
 			{
 				var installTasks = new List<Task<NuGetPackageEntry>>( csproj.PackageReferences.Count );
 
 				foreach ( var (packageId, packageVersion) in csproj.PackageReferences )
+				{
+					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+						Loggers.Compiler.Verbose( "Adding NuGet package reference: " + packageId );
+
 					installTasks.Add( NuGetManager.InstallPackageAsync( packageId, packageVersion, CancellationToken.None ) );
+				}
 
 				await Task.WhenAll( installTasks );
 
@@ -163,8 +173,14 @@ internal static class Compiler
 				foreach ( var projectReference in csproj.ProjectReferences )
 				{
 					var projectAssemblyName = Path.GetFileNameWithoutExtension( projectReference );
+					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+						Loggers.Compiler.Verbose( "Adding project reference: " + projectAssemblyName );
+
 					if ( HotloadableAssembly.All.ContainsKey( projectAssemblyName ) || projectReference.Contains( "Latte.Hotload" ) )
 						continue;
+
+					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+						Loggers.Compiler.Verbose( "Starting on-demand hotload of " + projectAssemblyName );
 
 					var projectAssembly = HotloadableAssembly.New( new AssemblyInfo
 					{
@@ -191,7 +207,12 @@ internal static class Compiler
 
 			// Literal references.
 			foreach ( var reference in csproj.DllReferences )
+			{
+				if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+					Loggers.Compiler.Verbose( "Adding DLL reference: " + reference );
+
 				references.TryAdd( CreateMetadataReferenceFromPath( Path.GetFullPath( reference ) ) );
+			}
 		}
 
 		//
