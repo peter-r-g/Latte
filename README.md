@@ -17,3 +17,6 @@ A work in progress 100% C# game engine.
 
 ## Contributing
 Contributions are welcomed! Please post an issue detailing what you will be solving and base your pull request around that issue. Thanks!
+
+## Credits
+Alex Guthrie's [Mocha](https://github.com/mocha-engine/mocha) project: Inspiration and some hotloading code.
