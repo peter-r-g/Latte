@@ -125,6 +125,12 @@ internal static class NuGetManager
 			builder.AddDllFilePath( destinationPath );
 		}
 
+		foreach ( var runtimeFilePath in GetRuntimeItemPaths( packageStream ) )
+		{
+			ExtractFile( packageStream, runtimeFilePath, runtimeFilePath );
+			builder.AddRuntimeFilePath( runtimeFilePath );
+		}
+
 		cancellationToken.ThrowIfCancellationRequested();
 
 		if ( !recursive )
@@ -179,6 +185,15 @@ internal static class NuGetManager
 
 		foreach ( var itemPath in itemGroup.Items.Where( itemPath => itemPath.EndsWith( ".dll" ) ) )
 			yield return itemPath;
+	}
+
+	private static IEnumerable<string> GetRuntimeItemPaths( Stream packageStream )
+	{
+		using var reader = new PackageArchiveReader( packageStream, true );
+		var runtimeItems = reader.GetItems( "runtimes" ).SelectMany( group => group.Items );
+
+		foreach ( var runtimeItem in runtimeItems )
+			yield return runtimeItem;
 	}
 
 	private readonly struct InstallPeg : IDisposable

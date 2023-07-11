@@ -9,6 +9,7 @@ internal sealed class NuGetPackageEntryBuilder
 	private string Id { get; set; } = string.Empty;
 	private NuGetVersion Version { get; set; } = new NuGetVersion( 1, 0, 0 );
 	private List<string> DllFilePaths { get; } = new();
+	private List<string> RuntimeFilePaths { get; } = new();
 	private List<NuGetPackageEntry> Dependencies { get; } = new();
 
 	internal NuGetPackageEntryBuilder WithId( string packageId )
@@ -29,6 +30,12 @@ internal sealed class NuGetPackageEntryBuilder
 		return this;
 	}
 
+	internal NuGetPackageEntryBuilder AddRuntimeFilePath( string filePath )
+	{
+		RuntimeFilePaths.Add( filePath );
+		return this;
+	}
+
 	internal NuGetPackageEntryBuilder AddDependency( NuGetPackageEntry packageEntry )
 	{
 		Dependencies.Add( packageEntry );
@@ -42,6 +49,7 @@ internal sealed class NuGetPackageEntryBuilder
 			Id = Id,
 			Version = Version,
 			DllFilePaths = DllFilePaths.ToImmutableArray(),
+			RuntimeFilePaths = RuntimeFilePaths.ToImmutableArray(),
 			Dependencies = Dependencies.ToImmutableArray()
 		};
 	}
