@@ -337,8 +337,8 @@ internal static class Compiler
 
 	private static CompileResult FinishCompile( in AssemblyInfo assemblyInfo, CompileOptions compileOptions, Microsoft.CodeAnalysis.Compilation compilation )
 	{
-		using var assemblyStream = new MemoryStream();
-		using var symbolsStream = compileOptions.GenerateSymbols ? new MemoryStream() : null;
+		var assemblyStream = new MemoryStream();
+		var symbolsStream = compileOptions.GenerateSymbols ? new MemoryStream() : null;
 
 		// Setup emit options.
 		EmitOptions? emitOptions = null;
@@ -355,6 +355,10 @@ internal static class Compiler
 			symbolsStream,
 			options: emitOptions
 		);
+
+		assemblyStream.Position = 0;
+		if ( symbolsStream is not null )
+			symbolsStream.Position = 0;
 
 		// Output all diagnostics that came from the compile.
 		foreach ( var diagnosticGroup in result.Diagnostics
