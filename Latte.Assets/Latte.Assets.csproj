@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Latte.AssetCompiler\Latte.AssetCompiler.csproj" />
     <ProjectReference Include="..\Latte.Hotload\Latte.Hotload.csproj" />
   </ItemGroup>
 

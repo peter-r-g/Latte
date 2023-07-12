@@ -1,4 +1,5 @@
-﻿using Latte.Hotload;
+﻿using Latte.AssetCompiler;
+using Latte.Hotload;
 using System.Collections.Concurrent;
 using Zio;
 using Zio.FileSystems;
@@ -50,11 +51,14 @@ public sealed class AssetsEntryPoint : IEntryPoint
 			return;
 
 		var projectPath = FileSystems.System.ConvertPathFromInternal( assemblyInfo.ProjectPath );
-		if ( !FileSystems.System.DirectoryExists( projectPath / "Assets" ) )
+		var assetsPath = projectPath / "Assets";
+		if ( !FileSystems.System.DirectoryExists( assetsPath ) )
 			return;
 
-		var fs = new SubFileSystem( FileSystems.System, projectPath / "Assets" );
+		var fs = new SubFileSystem( FileSystems.System, assetsPath );
 		AssemblyFileSystems.TryAdd( assemblyInfo.Name, fs );
 		FileSystems.InternalAssets.AddFileSystem( fs );
+
+		Compiler.CompileAsync( FileSystems.System.ConvertPathToInternal( assetsPath ) ).Wait();
 	}
 }
