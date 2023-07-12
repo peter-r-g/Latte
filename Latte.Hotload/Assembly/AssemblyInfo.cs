@@ -1,13 +1,13 @@
 ﻿namespace Latte.Hotload;
 
-internal readonly struct AssemblyInfo
+public readonly struct AssemblyInfo
 {
-	internal string Name { get; init; }
+	public string Name { get; internal init; }
 
-	internal string? Path
+	public string? Path
 	{
 		get => path;
-		init
+		internal init
 		{
 			if ( value is null )
 			{
@@ -23,10 +23,10 @@ internal readonly struct AssemblyInfo
 	}
 	private readonly string? path;
 
-	internal string? ProjectPath
+	public string? ProjectPath
 	{
 		get => projectPath;
-		init
+		internal init
 		{
 			if ( value is null )
 			{
