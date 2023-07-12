@@ -51,6 +51,11 @@ public sealed class HotloadableAssembly : IDisposable
 	/// </summary>
 	private bool incrementalBuildRequested;
 
+	static HotloadableAssembly()
+	{
+		AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+	}
+
 	private HotloadableAssembly( in AssemblyInfo assemblyInfo )
 	{
 		AllAssemblies.TryAdd( assemblyInfo.Name, this );
@@ -333,6 +338,12 @@ public sealed class HotloadableAssembly : IDisposable
 
 		entryPoint = (IEntryPoint)Activator.CreateInstance( entryPointType )!;
 		return true;
+	}
+
+	private static void OnProcessExit( object? sender, EventArgs e )
+	{
+		foreach ( var (_, assembly) in All )
+			assembly.Dispose();
 	}
 
 	internal static HotloadableAssembly New( in AssemblyInfo assemblyInfo ) => new( assemblyInfo );
