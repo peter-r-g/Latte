@@ -13,6 +13,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sandbox", "Sandbox\Sandbox.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Latte.Assets", "Latte.Assets\Latte.Assets.csproj", "{33C484F7-6D25-44BE-B16A-1CF34EDCC108}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Latte.AssetCompiler", "Latte.AssetCompiler\Latte.AssetCompiler.csproj", "{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
