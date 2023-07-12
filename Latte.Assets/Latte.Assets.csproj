@@ -1,11 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFramework>net7.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <RootNamespace>Latte.Engine</RootNamespace>
-    <AssemblyName>Latte.Engine</AssemblyName>
+    <RootNamespace>Latte.Assets</RootNamespace>
+    <AssemblyName>Latte.Assets</AssemblyName>
 
     <OutputPath>$(SolutionDir)bin/</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -13,9 +13,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Latte.Assets\Latte.Assets.csproj" />
+    <PackageReference Include="Zio" Version="0.16.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Latte.Hotload\Latte.Hotload.csproj" />
-    <ProjectReference Include="..\Latte.Windowing\Latte.Windowing.csproj" />
   </ItemGroup>
 
 </Project>
