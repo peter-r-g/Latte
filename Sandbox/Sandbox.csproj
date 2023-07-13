@@ -6,10 +6,6 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Sandbox</RootNamespace>
     <AssemblyName>Sandbox</AssemblyName>
-
-    <OutputPath>$(SolutionDir)bin/</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>

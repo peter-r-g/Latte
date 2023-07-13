@@ -7,10 +7,6 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Latte.Windowing</RootNamespace>
     <AssemblyName>Latte.Windowing</AssemblyName>
-
-    <OutputPath>$(SolutionDir)bin/</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>

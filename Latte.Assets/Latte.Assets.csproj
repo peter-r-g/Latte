@@ -7,10 +7,6 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Latte.Assets</RootNamespace>
     <AssemblyName>Latte.Assets</AssemblyName>
-
-    <OutputPath>$(SolutionDir)bin/</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
