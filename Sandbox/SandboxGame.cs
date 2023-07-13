@@ -1,20 +1,20 @@
 ﻿using Latte;
+using Latte.Assets;
 using Latte.Windowing;
-using Latte.Windowing.Assets;
 using Latte.Windowing.Input;
 using Latte.Windowing.Options;
 using System;
-using System.IO;
 using System.Numerics;
+using Zio;
 
 namespace Sandbox;
 
 public sealed class SandboxGame : IGame
 {
-	private static readonly string VertexShaderPath = Path.Combine( "Assets", "Shaders", "vert.spv" );
-	private static readonly string FragmentShaderPath = Path.Combine( "Assets", "Shaders", "frag.spv" );
-	private static readonly string VikingRoomModelPath = Path.Combine( "Assets", "Models", "viking_room.obj" );
-	private static readonly string VikingRoomTexturePath = Path.Combine( "Assets", "Textures", "viking_room.png" );
+	private static readonly UPath VertexShaderPath = UPath.Combine( "Shaders", "vert.spv" );
+	private static readonly UPath FragmentShaderPath = UPath.Combine( "Shaders", "frag.spv" );
+	private static readonly UPath VikingRoomModelPath = UPath.Combine( "Models", "viking_room.obj" );
+	private static readonly UPath VikingRoomTexturePath = UPath.Combine( "Textures", "viking_room.png" );
 
 	public InputManager Input { get; set; } = null!;
 	public IRenderingBackend Renderer { get; set; } = null!;
@@ -25,7 +25,6 @@ public sealed class SandboxGame : IGame
 	public void Load()
 	{
 		VikingRoomModel = Model.FromPath( VikingRoomModelPath );
-		VikingRoomModel.Initialize( Renderer );
 	}
 
 	public void Update( double dt )

@@ -9,10 +9,10 @@ using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.IO;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
 using Latte.Assets;
+using Zio;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -283,19 +283,18 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var vertexBuffers = stackalloc Buffer[1];
 		foreach ( var mesh in model.Meshes )
 		{
-			if ( mesh.VulkanVertexBuffer is null )
-				throw new NullReferenceException( "Models mesh vertex buffer is null. Was this model created with the Vulkan backend?" );
+			LogicalGpu.GetMeshGpuBuffers( this, mesh, out var gpuVertexBuffer, out var gpuIndexBuffer );
 
-			if ( mesh.VulkanVertexBuffer.Buffer.Handle != CurrentVertexBuffer.Handle )
+			if ( gpuVertexBuffer.Buffer.Handle != CurrentVertexBuffer.Handle )
 			{
-				var newVertexBuffer = mesh.VulkanVertexBuffer;
+				var newVertexBuffer = gpuVertexBuffer;
 				vertexBuffers[0] = newVertexBuffer.Buffer;
 				Vk.CmdBindVertexBuffers( CurrentCommandBuffer, 0, 1, vertexBuffers, newVertexBuffer.Offset );
 				CurrentVertexBuffer = newVertexBuffer.Buffer;
 			}
-			if ( mesh.VulkanIndexBuffer is not null && mesh.VulkanIndexBuffer.Buffer.Handle != CurrentIndexBuffer.Handle )
+			if ( gpuIndexBuffer is not null && gpuIndexBuffer.Buffer.Handle != CurrentIndexBuffer.Handle )
 			{
-				var newIndexBuffer = mesh.VulkanIndexBuffer;
+				var newIndexBuffer = gpuIndexBuffer;
 				Vk.CmdBindIndexBuffer( CurrentCommandBuffer, newIndexBuffer.Buffer, newIndexBuffer.Offset, IndexType.Uint32 );
 				CurrentIndexBuffer = newIndexBuffer.Buffer;
 			}
@@ -458,8 +457,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal,
 		ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 		MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
-
-	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode ) => LogicalGpu.CreateShaderModule( shaderCode );
 	#endregion
 
 	#region Internal
@@ -516,8 +513,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Vk.FreeMemory( LogicalGpu, TextureImageMemory, null );
 
 		Vk.DestroyCommandPool( LogicalGpu, CommandPool, null );
-		Vk.DestroyShaderModule( LogicalGpu, DefaultShader.VertexShaderModule, null );
-		Vk.DestroyShaderModule( LogicalGpu, DefaultShader.FragmentShaderModule, null );
 		Vk.DestroyDevice( LogicalGpu, null );
 	}
 
@@ -659,10 +654,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private void CreateDefaultShader()
 	{
 		DefaultShader = Shader.FromPath(
-			Path.Combine( "Assets", "Shaders", "vert.spv" ),
-			Path.Combine( "Assets", "Shaders", "frag.spv" )
-			);
-		DefaultShader.Initialize( this );
+			UPath.Combine( "Shaders", "vert.spv" ),
+			UPath.Combine( "Shaders", "frag.spv" ) );
 	}
 
 	private void CreateSwapChain()
@@ -777,7 +770,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private void CreateTextureImage()
 	{
 		// FIXME: Remove this
-		using var image = SixLabors.ImageSharp.Image.Load<Rgba32>( Path.Combine( "Assets", "Textures", "viking_room.png" ) );
+		using var image = SixLabors.ImageSharp.Image.Load<Rgba32>( FileSystems.Assets.ReadAllBytes( "/Textures/viking_room.png" ) );
 		var imageSize = (ulong)(image.Width * image.Height * image.PixelType.BitsPerPixel / 8);
 		MipLevels = (uint)MathF.Floor( MathF.Log2( Math.Max( image.Width, image.Height ) ) ) + 1;
 

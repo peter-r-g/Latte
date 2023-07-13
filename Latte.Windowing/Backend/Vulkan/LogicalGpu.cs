@@ -23,6 +23,9 @@ internal sealed class LogicalGpu : IDisposable
 	internal Queue PresentQueue { get; }
 
 	private ConcurrentQueue<Action> DisposeQueue { get; } = new();
+	private ConcurrentDictionary<Shader, ShaderPackage> ShaderCache { get; } = new();
+	private ConcurrentDictionary<Mesh, GpuBuffer<Vertex>> MeshVertexBuffers { get; } = new();
+	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
 
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
 	{
@@ -45,6 +48,7 @@ internal sealed class LogicalGpu : IDisposable
 		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
 			disposeCb();
 
+		ShaderCache.Clear();
 		Apis.Vk.DestroyDevice( LogicalDevice, null );
 		GC.SuppressFinalize( this );
 	}
@@ -130,11 +134,20 @@ internal sealed class LogicalGpu : IDisposable
 		ReadOnlySpan<DynamicState> dynamicStates, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts,
 		ReadOnlySpan<PushConstantRange> pushConstantRanges )
 	{
+		if ( !ShaderCache.TryGetValue( shader, out var package ) )
+		{
+			package = new ShaderPackage(
+				CreateShaderModule( shader.VertexShaderCode.Span ),
+				CreateShaderModule( shader.FragmentShaderCode.Span ) );
+
+			ShaderCache.TryAdd( shader, package );
+		}
+
 		var vertShaderStageInfo = new PipelineShaderStageCreateInfo
 		{
 			SType = StructureType.PipelineShaderStageCreateInfo,
 			Stage = ShaderStageFlags.VertexBit,
-			Module = shader.VertexShaderModule,
+			Module = package.VertexShaderModule,
 			PName = (byte*)Marshal.StringToHGlobalAnsi( shader.VertexShaderEntryPoint )
 		};
 
@@ -142,7 +155,7 @@ internal sealed class LogicalGpu : IDisposable
 		{
 			SType = StructureType.PipelineShaderStageCreateInfo,
 			Stage = ShaderStageFlags.FragmentBit,
-			Module = shader.FragmentShaderModule,
+			Module = package.FragmentShaderModule,
 			PName = (byte*)Marshal.StringToHGlobalAnsi( shader.FragmentShaderEntryPoint )
 		};
 
@@ -517,7 +530,22 @@ internal sealed class LogicalGpu : IDisposable
 		return textureSampler;
 	}
 
-	internal unsafe ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
+	internal unsafe void GetMeshGpuBuffers( VulkanBackend vulkanBackend, Mesh mesh, out GpuBuffer<Vertex> gpuVertexBuffer, out GpuBuffer<uint>? gpuIndexBuffer )
+	{
+		if ( !MeshVertexBuffers.TryGetValue( mesh, out gpuVertexBuffer! ) )
+		{
+			gpuVertexBuffer = new GpuBuffer<Vertex>( vulkanBackend, mesh.Vertices.AsSpan(), BufferUsageFlags.VertexBufferBit );
+			MeshVertexBuffers.TryAdd( mesh, gpuVertexBuffer );
+		}
+
+		if ( !MeshIndexBuffers.TryGetValue( mesh, out gpuIndexBuffer ) && mesh.Indices.Length > 0 )
+		{
+			gpuIndexBuffer = new GpuBuffer<uint>( vulkanBackend, mesh.Indices.AsSpan(), BufferUsageFlags.IndexBufferBit );
+			MeshIndexBuffers.TryAdd( mesh, gpuIndexBuffer );
+		}
+	}
+
+	private unsafe ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
 	{
 		var createInfo = new ShaderModuleCreateInfo
 		{
