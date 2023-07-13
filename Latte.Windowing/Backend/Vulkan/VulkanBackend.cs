@@ -701,8 +701,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateGraphicsPipeline()
 	{
-		var bindingDescriptions = Vertex.GetBindingDescriptions();
-		var attributeDescriptions = Vertex.GetAttributeDescriptions();
+		var bindingDescriptions = VertexDescriptions.GetBindingDescriptions();
+		var attributeDescriptions = VertexDescriptions.GetAttributeDescriptions();
 		var dynamicStates = new DynamicState[]
 		{
 			DynamicState.Viewport,
