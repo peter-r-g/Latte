@@ -24,8 +24,8 @@ public sealed class Shader
 	public static Shader FromPath( in UPath vertexShaderPath, in UPath fragmentShaderPath,
 		string vertexShaderEntryPoint = "main", string fragmentShaderEntryPoint = "main" )
 	{
-		var vertexShaderBytes = FileSystems.Assets.ReadAllBytes( vertexShaderPath );
-		var fragmentShaderBytes = FileSystems.Assets.ReadAllBytes( fragmentShaderPath );
+		var vertexShaderBytes = FileSystems.Assets.ReadAllBytes( vertexShaderPath.ToAbsolute() );
+		var fragmentShaderBytes = FileSystems.Assets.ReadAllBytes( fragmentShaderPath.ToAbsolute() );
 
 		return new Shader( vertexShaderBytes, vertexShaderEntryPoint, fragmentShaderBytes, fragmentShaderEntryPoint );
 	}

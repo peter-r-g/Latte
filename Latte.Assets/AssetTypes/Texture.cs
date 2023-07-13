@@ -34,8 +34,7 @@ public sealed class Texture
 	/// <returns>The parsed texture from disk.</returns>
 	public static Texture FromPath( in UPath path )
 	{
-		var absolutePath = FileSystems.Assets.ConvertPathToInternal( path );
-		using var image = Image.Load<Rgba32>( absolutePath );
+		using var image = Image.Load<Rgba32>( FileSystems.Assets.ReadAllBytes( path.ToAbsolute() ) );
 		return new Texture( image );
 	}
 }

@@ -31,6 +31,6 @@ public sealed class Model
 	/// <returns>The parsed model from disk.</returns>
 	public static Model FromPath( in UPath modelPath )
 	{
-		return ModelParser.FromPath( modelPath );
+		return ModelParser.FromPath( modelPath.ToAbsolute() );
 	}
 }
