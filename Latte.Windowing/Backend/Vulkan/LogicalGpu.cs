@@ -26,6 +26,7 @@ internal sealed class LogicalGpu : IDisposable
 	private ConcurrentDictionary<Shader, ShaderPackage> ShaderCache { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<Vertex>> MeshVertexBuffers { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
+	private ConcurrentDictionary<Texture, DescriptorSet[]> TextureDescriptorSets { get; } = new();
 
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
 	{
@@ -543,6 +544,93 @@ internal sealed class LogicalGpu : IDisposable
 			gpuIndexBuffer = new GpuBuffer<uint>( vulkanBackend, mesh.Indices.AsSpan(), BufferUsageFlags.IndexBufferBit );
 			MeshIndexBuffers.TryAdd( mesh, gpuIndexBuffer );
 		}
+	}
+
+	internal unsafe DescriptorSet[] GetTextureDescriptorSets( VulkanBackend vulkanBackend, Texture texture, in DescriptorSetLayout descriptorSetLayout,
+		in DescriptorPool descriptorPool, VulkanBuffer[] ubos, SampleCountFlags numSamples )
+	{
+		if ( TextureDescriptorSets.TryGetValue( texture, out var descriptorSets ) )
+			return descriptorSets;
+
+		descriptorSets = new DescriptorSet[(int)VulkanBackend.MaxFramesInFlight];
+
+		var layouts = stackalloc DescriptorSetLayout[(int)VulkanBackend.MaxFramesInFlight];
+		for ( var i = 0; i < VulkanBackend.MaxFramesInFlight; i++ )
+			layouts[i] = descriptorSetLayout;
+
+		var allocateInfo = new DescriptorSetAllocateInfo
+		{
+			SType = StructureType.DescriptorSetAllocateInfo,
+			DescriptorPool = descriptorPool,
+			DescriptorSetCount = VulkanBackend.MaxFramesInFlight,
+			PSetLayouts = layouts
+		};
+
+		if ( Apis.Vk.AllocateDescriptorSets( LogicalDevice, &allocateInfo, descriptorSets ) != Result.Success )
+			throw new ApplicationException( "Failed to allocate Vulkan descriptor sets" );
+
+		var textureImage = CreateImage( (uint)texture.Width, (uint)texture.Height, texture.MipLevels, SampleCountFlags.Count1Bit,
+			Format.R8G8B8A8Srgb, ImageTiling.Optimal,
+			ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
+
+		var textureSize = (ulong)texture.Width * (ulong)texture.Height * (ulong)texture.BytesPerPixel;
+		var stagingBuffer = CreateBuffer( textureSize, BufferUsageFlags.TransferSrcBit,
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
+		stagingBuffer.SetMemory( texture.PixelData.Span );
+
+		var commandBuffer = vulkanBackend.BeginOneTimeCommands();
+		textureImage.TransitionImageLayout( commandBuffer, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, texture.MipLevels );
+		textureImage.CopyBufferToImage( commandBuffer, stagingBuffer, (uint)texture.Width, (uint)texture.Height );
+		textureImage.GenerateMipMaps( commandBuffer, Format.R8G8B8A8Srgb, (uint)texture.Width, (uint)texture.Height, texture.MipLevels );
+		vulkanBackend.EndOneTimeCommands( commandBuffer );
+
+		var descriptorWrites = stackalloc WriteDescriptorSet[2];
+		for ( var i = 0; i < VulkanBackend.MaxFramesInFlight; i++ )
+		{
+			var bufferInfo = new DescriptorBufferInfo
+			{
+				Buffer = ubos[i],
+				Offset = 0,
+				Range = (ulong)sizeof( UniformBufferObject )
+			};
+
+			var imageInfo = new DescriptorImageInfo
+			{
+				ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
+				ImageView = textureImage.View,
+				Sampler = CreateTextureSampler( numSamples != SampleCountFlags.Count1Bit, texture.MipLevels )
+			};
+
+			var uboWrite = new WriteDescriptorSet
+			{
+				SType = StructureType.WriteDescriptorSet,
+				DstSet = descriptorSets[i],
+				DstBinding = 0,
+				DstArrayElement = 0,
+				DescriptorType = DescriptorType.UniformBuffer,
+				DescriptorCount = 1,
+				PBufferInfo = &bufferInfo
+			};
+			descriptorWrites[0] = uboWrite;
+
+			var imageWrite = new WriteDescriptorSet
+			{
+				SType = StructureType.WriteDescriptorSet,
+				DstSet = descriptorSets[i],
+				DstBinding = 1,
+				DstArrayElement = 0,
+				DescriptorType = DescriptorType.CombinedImageSampler,
+				DescriptorCount = 1,
+				PImageInfo = &imageInfo
+			};
+			descriptorWrites[1] = imageWrite;
+
+			Apis.Vk.UpdateDescriptorSets( LogicalDevice, 2, descriptorWrites, 0, null );
+		}
+
+		TextureDescriptorSets.TryAdd( texture, descriptorSets );
+		return descriptorSets;
 	}
 
 	private unsafe ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )

@@ -21,6 +21,12 @@ public interface IRenderingBackend
 	event OptionsAppliedHandler? OptionsApplied;
 
 	/// <summary>
+	/// Sets the current texture to draw in future renderer calls.
+	/// </summary>
+	/// <param name="texture">The texture to set.</param>
+	void SetTexture( Texture texture );
+
+	/// <summary>
 	/// Draws a model at <see cref="Vector3.Zero"/> in world co-ordinates.
 	/// </summary>
 	/// <param name="model">The model to draw.</param>
