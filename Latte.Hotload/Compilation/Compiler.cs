@@ -10,6 +10,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -179,18 +180,29 @@ internal static class Compiler
 					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
 						Loggers.Compiler.Verbose( "Adding project reference: " + projectAssemblyName );
 
-					if ( HotloadableAssembly.All.ContainsKey( projectAssemblyName ) || projectReference.Contains( "Latte.Hotload" ) )
+					if ( ReferenceCache.ContainsKey( projectAssemblyName ) || projectReference.Contains( "Latte.Hotload" ) )
 						continue;
 
-					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
-						Loggers.Compiler.Verbose( "Starting on-demand hotload of " + projectAssemblyName );
-
-					var projectAssembly = HotloadableAssembly.New( new AssemblyInfo
+					if ( !CompilingProjects.Contains( projectAssemblyName ) )
 					{
-						Name = projectAssemblyName,
-						ProjectPath = Path.GetDirectoryName( projectReference )
-					} );
-					projectTasks.Add( projectAssembly.InitAsync() );
+						if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+							Loggers.Compiler.Verbose( "Starting on-demand hotload of " + projectAssemblyName );
+
+						var projectAssembly = HotloadableAssembly.New( new AssemblyInfo
+						{
+							Name = projectAssemblyName,
+							ProjectPath = Path.GetDirectoryName( projectReference )
+						} );
+						projectTasks.Add( projectAssembly.InitAsync() );
+					}
+					else
+					{
+						projectTasks.Add( Task.Run( async () =>
+						{
+							while ( CompilingProjects.Contains( projectAssemblyName ) )
+								await Task.Delay( 1 );
+						} ) );
+					}
 				}
 
 				await Task.WhenAll( projectTasks );
@@ -198,10 +210,11 @@ internal static class Compiler
 				foreach ( var projectReference in csproj.ProjectReferences )
 				{
 					var projectAssemblyName = Path.GetFileNameWithoutExtension( projectReference );
+
 					if ( projectReference.Contains( "Latte.Hotload" ) )
 						references.TryAdd( CreateMetadataReferenceFromPath( "Latte.Hotload.dll" ) );
 					else
-						references.TryAdd( CreateMetadataReferenceFromPath( projectReference ) );
+						references.TryAdd( ReferenceCache[projectAssemblyName] );
 
 					if ( AssemblyReferences.TryGetValue( projectAssemblyName, out var projectsReferences ) )
 						references.AddRange( projectsReferences );
