@@ -75,6 +75,8 @@ internal static class Compiler
 
 		"System.Xml.ReaderWriter.dll" );
 
+	private static ConcurrentHashSet<string> CompilingProjects { get; } = new();
+
 	private static ConcurrentDictionary<string, ConcurrentHashSet<PortableExecutableReference>> AssemblyReferences { get; } = new();
 	private static ConcurrentDictionary<string, AdhocWorkspace> AssemblyWorkspaces { get; } = new();
 	private static ConcurrentDictionary<string, PortableExecutableReference> ReferenceCache { get; } = new();
@@ -92,6 +94,7 @@ internal static class Compiler
 			throw new ArgumentException( $"The assembly \"{assemblyInfo.Name}\" cannot be compiled", nameof( assemblyInfo ) );
 
 		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+		using var __ = new CompilePeg( assemblyInfo.Name );
 		compileOptions ??= CompileOptions.Default;
 
 		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
@@ -293,6 +296,7 @@ internal static class Compiler
 	internal static async Task<CompileResult> IncrementalCompileAsync( AssemblyInfo assemblyInfo, IReadOnlyDictionary<string, WatcherChangeTypes> changedFilePaths, CompileOptions? compileOptions = null )
 	{
 		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+		using var __ = new CompilePeg( assemblyInfo.Name );
 		compileOptions ??= CompileOptions.Default;
 
 		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
@@ -472,5 +476,22 @@ internal static class Compiler
 		var newReference = MetadataReference.CreateFromStream( assemblyStream );
 		ReferenceCache.AddOrUpdate( assemblyName, newReference, ( key, val ) => val );
 		return newReference;
+	}
+
+	private readonly struct CompilePeg : IDisposable
+	{
+		internal required string AssemblyName { get; init; }
+
+		[SetsRequiredMembers]
+		internal CompilePeg( string assemblyName )
+		{
+			AssemblyName = assemblyName;
+			CompilingProjects.TryAdd( AssemblyName );
+		}
+
+		public void Dispose()
+		{
+			CompilingProjects.TryRemove( AssemblyName );
+		}
 	}
 }
