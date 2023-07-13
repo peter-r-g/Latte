@@ -572,6 +572,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			Vk.CmdPushConstants( commandBuffer, PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
 			CurrentCommandBuffer = commandBuffer;
 
+			// TODO: Multiple textures crash Vulkan due to lack of descriptor set space.
+			//SetTexture( Texture.Missing );
+
 			Render?.Invoke( dt );
 
 			CurrentTexture = null;

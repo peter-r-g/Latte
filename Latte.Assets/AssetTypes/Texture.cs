@@ -8,6 +8,8 @@ namespace Latte.Assets;
 
 public sealed class Texture
 {
+	public static Texture Missing { get; } = Texture.FromPath( "/Textures/missing.png" );
+
 	public required ReadOnlyMemory<Rgba32> PixelData { get; init; }
 	public required int BytesPerPixel { get; init; }
 	public required int Width { get; init; }
