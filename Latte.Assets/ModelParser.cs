@@ -20,20 +20,30 @@ internal sealed unsafe class ModelParser
 
 	internal static Model FromPath( in UPath path )
 	{
-		var absolutePath = FileSystems.Assets.ConvertPathToInternal( path );
-		var scene = Assimp.ImportFile( absolutePath, (uint)PostProcessPreset.TargetRealTimeMaximumQuality );
-		if ( scene is null || scene->MFlags == Assimp.SceneFlagsIncomplete || scene->MRootNode is null )
+		var sceneBytes = FileSystems.Assets.ReadAllBytes( path.ToAbsolute() );
+		var extension = path.GetExtensionWithDot();
+		if ( extension is null )
+			extension = string.Empty;
+		else
+			extension = extension[1..];
+
+		fixed ( byte* sceneBytesPtr = sceneBytes )
 		{
+			var scene = Assimp.ImportFileFromMemory( sceneBytesPtr, (uint)sceneBytes.Length,
+				(uint)PostProcessPreset.TargetRealTimeMaximumQuality, extension );
+			if ( scene is null || scene->MFlags == Assimp.SceneFlagsIncomplete || scene->MRootNode is null )
+			{
+				Assimp.ReleaseImport( scene );
+				throw new ArgumentException( Assimp.GetErrorStringS(), nameof( path ) );
+			}
+
+			var builder = new ModelParser();
+			builder.ProcessNode( scene->MRootNode, scene );
 			Assimp.ReleaseImport( scene );
-			throw new ArgumentException( Assimp.GetErrorStringS(), nameof( path ) );
+
+			builder.Meshes.Capacity = builder.Meshes.Count;
+			return new Model( builder.Meshes.MoveToImmutable() );
 		}
-
-		var builder = new ModelParser();
-		builder.ProcessNode( scene->MRootNode, scene );
-		Assimp.ReleaseImport( scene );
-
-		builder.Meshes.Capacity = builder.Meshes.Count;
-		return new Model( builder.Meshes.MoveToImmutable() );
 	}
 
 	private void ProcessNode( Node* node, Scene* scene )
