@@ -1,5 +1,4 @@
-﻿using Latte.Windowing.Assets;
-using Latte.Windowing.Extensions;
+﻿using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
@@ -13,6 +12,7 @@ using System.Numerics;
 using System.IO;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
+using Latte.Assets;
 
 namespace Latte.Windowing.Backend.Vulkan;
 

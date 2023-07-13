@@ -1,4 +1,4 @@
-﻿using Latte.Windowing.Assets;
+﻿using Latte.Assets;
 using Latte.Windowing.Options;
 using System.Numerics;
 

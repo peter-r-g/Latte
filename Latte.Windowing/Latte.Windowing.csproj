@@ -16,5 +16,9 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="3.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Latte.Assets\Latte.Assets.csproj" />
+  </ItemGroup>
+
 </Project>
 
