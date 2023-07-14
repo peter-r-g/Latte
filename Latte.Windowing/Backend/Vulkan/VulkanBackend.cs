@@ -43,9 +43,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private Shader DefaultShader { get; set; } = null!;
 
 	private VulkanRenderPass RenderPass { get; set; } = null!;
-	private DescriptorSetLayout DescriptorSetLayout { get; set; }
+	private VulkanDescriptorSetLayout DescriptorSetLayout { get; set; } = null!;
 	private VulkanGraphicsPipeline GraphicsPipeline { get; set; } = null!;
-	private CommandPool CommandPool { get; set; }
+	private VulkanCommandPool CommandPool { get; set; } = null!;
 	private VulkanBuffer[] UniformBuffers { get; set; } = Array.Empty<VulkanBuffer>();
 	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
 	private Dictionary<BufferUsageFlags, List<ulong>> GpuBuffersOffsets { get; } = new();
@@ -55,9 +55,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private VulkanImage DepthImage { get; set; } = null!;
 	private VulkanImage ColorImage { get; set; } = null!;
 
-	private Semaphore[] ImageAvailableSemaphores { get; set; } = Array.Empty<Semaphore>();
-	private Semaphore[] RenderFinishedSemaphores { get; set; } = Array.Empty<Semaphore>();
-	private Fence[] InFlightFences { get; set; } = Array.Empty<Fence>();
+	private VulkanSemaphore[] ImageAvailableSemaphores { get; set; } = Array.Empty<VulkanSemaphore>();
+	private VulkanSemaphore[] RenderFinishedSemaphores { get; set; } = Array.Empty<VulkanSemaphore>();
+	private VulkanFence[] InFlightFences { get; set; } = Array.Empty<VulkanFence>();
 
 	private bool HasFrameBufferResized { get; set; }
 
@@ -573,7 +573,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			DynamicState.Viewport,
 			DynamicState.Scissor
 		};
-		ReadOnlySpan <DescriptorSetLayout> descriptorSetLayouts = stackalloc DescriptorSetLayout[]
+		ReadOnlySpan<VulkanDescriptorSetLayout> descriptorSetLayouts = new VulkanDescriptorSetLayout[]
 		{
 			DescriptorSetLayout
 		};
@@ -689,9 +689,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateSyncObjects()
 	{
-		ImageAvailableSemaphores = new Semaphore[MaxFramesInFlight];
-		RenderFinishedSemaphores = new Semaphore[MaxFramesInFlight];
-		InFlightFences = new Fence[MaxFramesInFlight];
+		ImageAvailableSemaphores = new VulkanSemaphore[MaxFramesInFlight];
+		RenderFinishedSemaphores = new VulkanSemaphore[MaxFramesInFlight];
+		InFlightFences = new VulkanFence[MaxFramesInFlight];
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{

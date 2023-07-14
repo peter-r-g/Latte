@@ -3,7 +3,7 @@ using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal class VulkanRenderPass : VulkanWrapper
+internal sealed class VulkanRenderPass : VulkanWrapper
 {
 	internal RenderPass RenderPass { get; }
 
