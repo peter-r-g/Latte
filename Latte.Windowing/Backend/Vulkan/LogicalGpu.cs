@@ -14,8 +14,6 @@ namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class LogicalGpu : IDisposable
 {
-	internal const int ExtraSwapImages = 1;
-
 	internal Gpu Gpu { get; }
 	internal Device LogicalDevice { get; }
 
@@ -73,7 +71,7 @@ internal sealed class LogicalGpu : IDisposable
 		var presentMode = ChooseSwapPresentMode( swapChainSupport.PresentModes );
 		var extent = ChooseSwapExtent( Gpu.Instance.Window, swapChainSupport.Capabilities );
 
-		var imageCount = swapChainSupport.Capabilities.MinImageCount + ExtraSwapImages;
+		var imageCount = swapChainSupport.Capabilities.MinImageCount + VulkanBackend.ExtraSwapImages;
 		if ( swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount )
 			imageCount = swapChainSupport.Capabilities.MaxImageCount;
 
@@ -135,10 +133,10 @@ internal sealed class LogicalGpu : IDisposable
 		return vulkanSwapchain;
 	}
 
-	internal unsafe VulkanGraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in Extent2D swapchainExtent, in RenderPass renderPass,
-		ReadOnlySpan<VertexInputBindingDescription> bindingDescriptions, ReadOnlySpan<VertexInputAttributeDescription> attributeDescriptions,
-		ReadOnlySpan<DynamicState> dynamicStates, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts,
-		ReadOnlySpan<PushConstantRange> pushConstantRanges )
+	internal unsafe VulkanGraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in Extent2D swapchainExtent,
+		in RenderPass renderPass, in ReadOnlySpan<VertexInputBindingDescription> bindingDescriptions,
+		in ReadOnlySpan<VertexInputAttributeDescription> attributeDescriptions, in ReadOnlySpan<DynamicState> dynamicStates,
+		in ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts, in ReadOnlySpan<PushConstantRange> pushConstantRanges )
 	{
 		if ( disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );

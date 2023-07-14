@@ -158,11 +158,9 @@ internal sealed class Gpu : IDisposable
 			if ( queueFamilies[i].QueueFlags.HasFlag( QueueFlags.GraphicsBit ) )
 				indices.GraphicsFamily = i;
 
-			{
-				Instance.SurfaceExtension.GetPhysicalDeviceSurfaceSupport( PhysicalDevice, i, Instance.Surface, out var presentSupported );
-				if ( presentSupported && ((requireUnique && indices.GraphicsFamily != i) || !requireUnique) )
-					indices.PresentFamily = i;
-			}
+			Instance.SurfaceExtension.GetPhysicalDeviceSurfaceSupport( PhysicalDevice, i, Instance.Surface, out var presentSupported );
+			if ( presentSupported && ((requireUnique && indices.GraphicsFamily != i) || !requireUnique) )
+				indices.PresentFamily = i;
 
 			if ( indices.IsComplete() )
 				break;

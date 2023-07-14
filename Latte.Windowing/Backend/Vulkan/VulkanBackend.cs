@@ -17,8 +17,8 @@ namespace Latte.Windowing.Backend.Vulkan;
 
 internal unsafe class VulkanBackend : IInternalRenderingBackend
 {
-	public const uint MaxFramesInFlight = 2;
-	private const uint ExtraSwapImages = 1;
+	internal const uint MaxFramesInFlight = 2;
+	internal const int ExtraSwapImages = 1;
 
 	public IRenderingOptions Options { get; }
 	public event IInternalRenderingBackend.RenderHandler? Render;
