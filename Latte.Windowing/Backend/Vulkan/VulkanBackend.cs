@@ -315,6 +315,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	public void SetTexture( Texture texture )
 	{
+		if ( CurrentCommandBuffer.Handle == nint.Zero )
+			throw new InvalidOperationException( "You cannot set textures outside of a rendering block" );
+
 		if ( texture == CurrentTexture )
 			return;
 
@@ -326,6 +329,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	public void DrawModel( Model model ) => DrawModel( model, Vector3.Zero );
 	public void DrawModel( Model model, in Vector3 position )
 	{
+		if ( CurrentCommandBuffer.Handle == nint.Zero )
+			throw new InvalidOperationException( "You cannot draw models outside of a rendering block" );
+
 		if ( position != CurrentModelPosition )
 		{
 			var pushConstants = new PushConstants( Matrix4x4.CreateTranslation( position ) );
