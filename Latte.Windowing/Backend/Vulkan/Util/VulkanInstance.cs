@@ -67,7 +67,7 @@ internal unsafe sealed class VulkanInstance
 		Apis.Vk.CreateInstance( createInfo, null, out var instance ).Verify();
 		Instance = instance;
 
-		if ( enableValidationLayers && !Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtilsExtension ) )
+		if ( enableValidationLayers && Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtilsExtension ) )
 		{
 			DebugUtilsExtension = debugUtilsExtension;
 
