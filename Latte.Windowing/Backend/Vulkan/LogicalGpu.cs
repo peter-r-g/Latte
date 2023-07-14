@@ -63,6 +63,12 @@ internal sealed class LogicalGpu : IDisposable
 		disposed = true;
 	}
 
+	internal void UpdateFromOptions( IRenderingOptions options )
+	{
+		if ( options.HasOptionsChanged( nameof( options.Msaa ) ) )
+			TextureDescriptorSets.Clear();
+	}
+
 	internal TemporaryCommandBuffer BeginOneTimeCommands()
 	{
 		var allocateInfo = new CommandBufferAllocateInfo
@@ -386,7 +392,7 @@ internal sealed class LogicalGpu : IDisposable
 		}
 	}
 
-	internal unsafe RenderPass CreateRenderPass( Format swapchainImageFormat, SampleCountFlags msaaSamples )
+	internal unsafe VulkanRenderPass CreateRenderPass( Format swapchainImageFormat, SampleCountFlags msaaSamples )
 	{
 		if ( disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
@@ -486,8 +492,9 @@ internal sealed class LogicalGpu : IDisposable
 
 		Apis.Vk.CreateRenderPass( LogicalDevice, renderPassInfo, null, out var renderPass ).Verify();
 
-		DisposeQueue.Enqueue( () => Apis.Vk.DestroyRenderPass( LogicalDevice, renderPass, null ) );
-		return renderPass;
+		var vulkanRenderPass = new VulkanRenderPass( renderPass, this );
+		DisposeQueue.Enqueue( vulkanRenderPass.Dispose );
+		return vulkanRenderPass;
 	}
 
 	internal unsafe CommandPool CreateCommandPool( uint queueFamilyIndex )
@@ -508,7 +515,7 @@ internal sealed class LogicalGpu : IDisposable
 		return commandPool;
 	}
 
-	internal unsafe DescriptorPool CreateDescriptorPool( in ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes, uint maxDescriptorSets )
+	internal unsafe VulkanDescriptorPool CreateDescriptorPool( in ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes, uint maxDescriptorSets )
 	{
 		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
 		{
@@ -522,10 +529,10 @@ internal sealed class LogicalGpu : IDisposable
 
 			Apis.Vk.CreateDescriptorPool( LogicalDevice, poolInfo, null, out var descriptorPool ).Verify();
 
-			DisposeQueue.Enqueue( () => Apis.Vk.DestroyDescriptorPool( LogicalDevice, descriptorPool, null ) );
-			return descriptorPool;
+			var vulkanDescriptorPool = new VulkanDescriptorPool( descriptorPool, this );
+			DisposeQueue.Enqueue( vulkanDescriptorPool.Dispose );
+			return vulkanDescriptorPool;
 		}
-		
 	}
 
 	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,

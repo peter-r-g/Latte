@@ -42,14 +42,14 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private Shader DefaultShader { get; set; } = null!;
 
-	private RenderPass RenderPass { get; set; }
+	private VulkanRenderPass RenderPass { get; set; } = null!;
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
 	private VulkanGraphicsPipeline GraphicsPipeline { get; set; } = null!;
 	private CommandPool CommandPool { get; set; }
 	private VulkanBuffer[] UniformBuffers { get; set; } = Array.Empty<VulkanBuffer>();
 	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
 	private Dictionary<BufferUsageFlags, List<ulong>> GpuBuffersOffsets { get; } = new();
-	private DescriptorPool DescriptorPool { get; set; }
+	private VulkanDescriptorPool DescriptorPool { get; set; } = null!;
 	private CommandBuffer[] CommandBuffers { get; set; } = Array.Empty<CommandBuffer>();
 
 	private VulkanImage DepthImage { get; set; } = null!;
@@ -360,12 +360,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		WaitForIdle();
 
+		LogicalGpu.UpdateFromOptions( Options );
+
 		if ( Options.HasOptionsChanged( nameof( Options.Msaa ) ) )
 		{
-			Apis.Vk.DestroyDescriptorPool( LogicalGpu, DescriptorPool, null );
-			Apis.Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
-			Apis.Vk.DestroyPipelineLayout( LogicalGpu, GraphicsPipeline.Layout, null );
-			Apis.Vk.DestroyRenderPass( LogicalGpu, RenderPass, null );
+			DescriptorPool.Dispose();
+			GraphicsPipeline.Dispose();
+			RenderPass.Dispose();
 			CleanupSwapChain();
 
 			CreateSwapChain();
@@ -378,9 +379,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		}
 		else if ( Options.HasOptionsChanged( nameof( Options.WireframeEnabled ) ) )
 		{
-			Apis.Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
-			Apis.Vk.DestroyPipelineLayout( LogicalGpu, GraphicsPipeline.Layout, null );
-
+			GraphicsPipeline.Dispose();
 			CreateGraphicsPipeline();
 		}
 
@@ -459,21 +458,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	#region Internal
 	private void CleanupSwapChain()
 	{
-		Apis.Vk.DestroyImageView( LogicalGpu, ColorImage.View, null );
-		Apis.Vk.DestroyImage( LogicalGpu, ColorImage, null );
-		Apis.Vk.FreeMemory( LogicalGpu, ColorImage.Memory, null );
-
-		Apis.Vk.DestroyImageView( LogicalGpu, DepthImage.View, null );
-		Apis.Vk.DestroyImage( LogicalGpu, DepthImage, null );
-		Apis.Vk.FreeMemory( LogicalGpu, DepthImage.Memory, null );
-
-		foreach ( var frameBuffer in Swapchain.FrameBuffers )
-			Apis.Vk.DestroyFramebuffer( LogicalGpu, frameBuffer, null );
-
-		foreach ( var imageView in Swapchain.ImageViews )
-			Apis.Vk.DestroyImageView( LogicalGpu, imageView, null );
-
-		Swapchain.Extension.DestroySwapchain( LogicalGpu, Swapchain, null );
+		ColorImage.Dispose();
+		DepthImage.Dispose();
+		Swapchain.Dispose();
 	}
 
 	private void RecreateSwapChain()
