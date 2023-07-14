@@ -421,20 +421,19 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		Apis.Vk.EndCommandBuffer( commandBuffer ).Verify();
 
-		var commandBuffers = stackalloc CommandBuffer[]
+		fixed( CommandBuffer* commandBufferPtr = &commandBuffer )
 		{
-			commandBuffer
-		};
-		var submitInfo = new SubmitInfo
-		{
-			SType = StructureType.SubmitInfo,
-			CommandBufferCount = 1,
-			PCommandBuffers = commandBuffers
-		};
+			var submitInfo = new SubmitInfo
+			{
+				SType = StructureType.SubmitInfo,
+				CommandBufferCount = 1,
+				PCommandBuffers = commandBufferPtr
+			};
 
-		Apis.Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ).Verify();
-		Apis.Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ).Verify();
-		Apis.Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
+			Apis.Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ).Verify();
+			Apis.Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ).Verify();
+			Apis.Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
+		}
 	}
 
 	internal VulkanBuffer GetCPUBuffer( ulong size, BufferUsageFlags usageFlags )
