@@ -613,7 +613,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateDescriptorSetLayout()
 	{
-		var bindings = new DescriptorSetLayoutBinding[]
+		ReadOnlySpan<DescriptorSetLayoutBinding> bindings = stackalloc DescriptorSetLayoutBinding[]
 		{
 			new DescriptorSetLayoutBinding
 			{
@@ -639,16 +639,16 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var bindingDescriptions = VertexDescriptions.GetBindingDescriptions();
 		var attributeDescriptions = VertexDescriptions.GetAttributeDescriptions();
-		var dynamicStates = new DynamicState[]
+		ReadOnlySpan<DynamicState> dynamicStates = stackalloc DynamicState[]
 		{
 			DynamicState.Viewport,
 			DynamicState.Scissor
 		};
-		var descriptorSetLayouts = new DescriptorSetLayout[]
+		ReadOnlySpan <DescriptorSetLayout> descriptorSetLayouts = stackalloc DescriptorSetLayout[]
 		{
 			DescriptorSetLayout
 		};
-		var pushConstantRanges = new PushConstantRange[]
+		ReadOnlySpan<PushConstantRange> pushConstantRanges = stackalloc PushConstantRange[]
 		{
 			new PushConstantRange
 			{
