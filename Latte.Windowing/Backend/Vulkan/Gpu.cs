@@ -51,7 +51,7 @@ internal sealed class Gpu : IDisposable
 			throw new ArgumentException( "No validation layers were passed", nameof( validationLayers ) );
 
 		if ( !familyIndices.IsComplete() )
-			throw new ApplicationException( "Attempted to create a logical device from indices that are not complete" );
+			throw new ArgumentException( "Attempted to create a logical device from indices that are not complete", nameof( familyIndices ) );
 
 		var queuePriority = 1f;
 		var uniqueIndices = familyIndices.GetUniqueFamilies();

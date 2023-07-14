@@ -311,7 +311,7 @@ internal sealed class LogicalGpu : IDisposable
 		return graphicsPipeline;
 	}
 
-	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
+	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( in ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
 	{
 		fixed( DescriptorSetLayoutBinding* bindingsPtr = bindings )
 		{
