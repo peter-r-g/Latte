@@ -3,35 +3,31 @@ using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class VulkanDescriptorPool : IDisposable
+internal sealed class VulkanDescriptorPool : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
-
 	internal DescriptorPool DescriptorPool { get; }
 
-	private bool disposed;
-
-	internal VulkanDescriptorPool( in DescriptorPool descriptorPool, LogicalGpu owner )
+	internal VulkanDescriptorPool( in DescriptorPool descriptorPool, LogicalGpu owner ) : base( owner )
 	{
 		DescriptorPool = descriptorPool;
-		Owner = owner;
 	}
 
-	~VulkanDescriptorPool()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
-		Apis.Vk.DestroyDescriptorPool( Owner, DescriptorPool, null );
+		Apis.Vk.DestroyDescriptorPool( LogicalGpu!, DescriptorPool, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
-	public static implicit operator DescriptorPool( VulkanDescriptorPool vulkanDescriptorPool ) => vulkanDescriptorPool.DescriptorPool;
+	public static implicit operator DescriptorPool( VulkanDescriptorPool vulkanDescriptorPool )
+	{
+		if ( vulkanDescriptorPool.Disposed )
+			throw new ObjectDisposedException( nameof( VulkanDescriptorPool ) );
+
+		return vulkanDescriptorPool.DescriptorPool;
+	}
 }

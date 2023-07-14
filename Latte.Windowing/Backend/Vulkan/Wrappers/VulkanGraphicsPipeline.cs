@@ -3,42 +3,32 @@ using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class VulkanGraphicsPipeline : IDisposable
+internal sealed class VulkanGraphicsPipeline : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
-
 	internal Pipeline Pipeline { get; }
 	internal PipelineLayout Layout { get; }
 
-	private bool disposed;
-
-	internal VulkanGraphicsPipeline( in Pipeline pipeline, in PipelineLayout layout, LogicalGpu owner )
+	internal VulkanGraphicsPipeline( in Pipeline pipeline, in PipelineLayout layout, LogicalGpu owner ) : base( owner )
 	{
 		Pipeline = pipeline;
 		Layout = layout;
-		Owner = owner;
 	}
 
-	~VulkanGraphicsPipeline()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
-		Apis.Vk.DestroyPipeline( Owner, Pipeline, null );
-		Apis.Vk.DestroyPipelineLayout( Owner, Layout, null );
+		Apis.Vk.DestroyPipeline( LogicalGpu!, Pipeline, null );
+		Apis.Vk.DestroyPipelineLayout( LogicalGpu!, Layout, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	public static implicit operator Pipeline( VulkanGraphicsPipeline graphicsPipeline )
 	{
-		if ( graphicsPipeline.disposed )
+		if ( graphicsPipeline.Disposed )
 			throw new ObjectDisposedException( nameof( VulkanGraphicsPipeline ) );
 
 		return graphicsPipeline.Pipeline;

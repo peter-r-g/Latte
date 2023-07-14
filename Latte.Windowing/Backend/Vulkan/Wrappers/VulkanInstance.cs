@@ -11,10 +11,10 @@ using Latte.Windowing.Extensions;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal unsafe sealed class VulkanInstance : IDisposable
+internal unsafe sealed class VulkanInstance : VulkanWrapper
 {
 	internal IWindow Window { get; }
-	internal Instance Instance { get; }
+	internal new Instance Instance { get; }
 	internal bool ValidationLayersEnabled { get; }
 
 	internal ExtDebugUtils? DebugUtilsExtension { get; } = null!;
@@ -22,8 +22,6 @@ internal unsafe sealed class VulkanInstance : IDisposable
 
 	internal KhrSurface SurfaceExtension { get; } = null!;
 	internal SurfaceKHR Surface { get; }
-
-	private bool disposed;
 
 	internal VulkanInstance( IWindow window, bool enableValidationLayers, string[]? validationLayers = null )
 	{
@@ -95,14 +93,9 @@ internal unsafe sealed class VulkanInstance : IDisposable
 			SilkMarshal.Free( (nint)createInfo.PpEnabledLayerNames );
 	}
 
-	~VulkanInstance()
+	public override void Dispose()
 	{
-		Dispose();
-	}
-
-	public void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
 		if ( ValidationLayersEnabled && DebugUtilsExtension is not null )
@@ -112,7 +105,7 @@ internal unsafe sealed class VulkanInstance : IDisposable
 		Apis.Vk.DestroyInstance( Instance, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	private bool CheckValidationLayerSupport( IEnumerable<string> validationLayers )
@@ -210,5 +203,11 @@ internal unsafe sealed class VulkanInstance : IDisposable
 		return Vk.False;
 	}
 
-	public static implicit operator Instance( VulkanInstance vulkanInstance ) => vulkanInstance.Instance;
+	public static implicit operator Instance( VulkanInstance vulkanInstance )
+	{
+		if ( vulkanInstance.Disposed )
+			throw new ObjectDisposedException( nameof( VulkanInstance ) );
+
+		return vulkanInstance.Instance;
+	}
 }

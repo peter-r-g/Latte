@@ -12,9 +12,8 @@ using System.Runtime.InteropServices;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class LogicalGpu : IDisposable
+internal sealed class LogicalGpu : VulkanWrapper
 {
-	internal Gpu Gpu { get; }
 	internal Device LogicalDevice { get; }
 
 	internal Queue GraphicsQueue { get; }
@@ -29,29 +28,21 @@ internal sealed class LogicalGpu : IDisposable
 	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
 	private ConcurrentDictionary<Texture, DescriptorSet[]> TextureDescriptorSets { get; } = new();
 
-	private bool disposed;
-
-	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
+	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices ) : base( gpu )
 	{
 		if ( !familyIndices.IsComplete() )
 			throw new ArgumentException( $"Cannot create {nameof( LogicalGpu )} with an incomplete {nameof( QueueFamilyIndices )}", nameof( familyIndices ) );
 
 		LogicalDevice = logicalDevice;
-		Gpu = gpu;
 		GraphicsQueue = Apis.Vk.GetDeviceQueue( LogicalDevice, familyIndices.GraphicsFamily.Value, 0 );
 		PresentQueue = Apis.Vk.GetDeviceQueue( LogicalDevice, familyIndices.PresentFamily.Value, 0 );
 
 		OneTimeCommandPool = CreateCommandPool( familyIndices.GraphicsFamily.Value );
 	}
 
-	~LogicalGpu()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
 		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
@@ -60,17 +51,23 @@ internal sealed class LogicalGpu : IDisposable
 		Apis.Vk.DestroyDevice( LogicalDevice, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	internal void UpdateFromOptions( IRenderingOptions options )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		if ( options.HasOptionsChanged( nameof( options.Msaa ) ) )
 			TextureDescriptorSets.Clear();
 	}
 
 	internal TemporaryCommandBuffer BeginOneTimeCommands()
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var allocateInfo = new CommandBufferAllocateInfo
 		{
 			SType = StructureType.CommandBufferAllocateInfo,
@@ -93,6 +90,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe void EndOneTimeCommands( ref TemporaryCommandBuffer temporaryCommandBuffer )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		temporaryCommandBuffer.Disposed = true;
 		var commandBuffer = temporaryCommandBuffer.CommandBuffer;
 		Apis.Vk.EndCommandBuffer( commandBuffer ).Verify();
@@ -111,15 +111,14 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe VulkanSwapchain CreateSwapchain()
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var instance = Gpu.Instance;
-		var swapChainSupport = Gpu.SwapchainSupportDetails;
+		var swapChainSupport = Gpu!.SwapchainSupportDetails;
 
 		var surfaceFormat = ChooseSwapSurfaceFormat( swapChainSupport.Formats );
 		var presentMode = ChooseSwapPresentMode( swapChainSupport.PresentModes );
-		var extent = ChooseSwapExtent( Gpu.Instance.Window, swapChainSupport.Capabilities );
+		var extent = ChooseSwapExtent( Instance!.Window, swapChainSupport.Capabilities );
 
 		var imageCount = swapChainSupport.Capabilities.MinImageCount + VulkanBackend.ExtraSwapImages;
 		if ( swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount )
@@ -128,7 +127,7 @@ internal sealed class LogicalGpu : IDisposable
 		var createInfo = new SwapchainCreateInfoKHR
 		{
 			SType = StructureType.SwapchainCreateInfoKhr,
-			Surface = instance.Surface,
+			Surface = Instance.Surface,
 			MinImageCount = imageCount,
 			ImageFormat = surfaceFormat.Format,
 			ImageColorSpace = surfaceFormat.ColorSpace,
@@ -161,7 +160,7 @@ internal sealed class LogicalGpu : IDisposable
 		createInfo.PresentMode = presentMode;
 		createInfo.Clipped = Vk.True;
 
-		if ( !Apis.Vk.TryGetDeviceExtension<KhrSwapchain>( instance, LogicalDevice, out var swapchainExtension ) )
+		if ( !Apis.Vk.TryGetDeviceExtension<KhrSwapchain>( Instance, LogicalDevice, out var swapchainExtension ) )
 			throw new ApplicationException( "Failed to get KHR_swapchain extension" );
 
 		swapchainExtension.CreateSwapchain( LogicalDevice, createInfo, null, out var swapchain ).Verify();
@@ -188,7 +187,7 @@ internal sealed class LogicalGpu : IDisposable
 		in ReadOnlySpan<VertexInputAttributeDescription> attributeDescriptions, in ReadOnlySpan<DynamicState> dynamicStates,
 		in ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts, in ReadOnlySpan<PushConstantRange> pushConstantRanges )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		if ( !ShaderCache.TryGetValue( shader, out var package ) )
@@ -373,7 +372,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( in ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		fixed ( DescriptorSetLayoutBinding* bindingsPtr = bindings )
@@ -394,7 +393,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe VulkanRenderPass CreateRenderPass( Format swapchainImageFormat, SampleCountFlags msaaSamples )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var useMsaa = msaaSamples != SampleCountFlags.Count1Bit;
@@ -499,7 +498,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe CommandPool CreateCommandPool( uint queueFamilyIndex )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var poolInfo = new CommandPoolCreateInfo
@@ -517,6 +516,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe VulkanDescriptorPool CreateDescriptorPool( in ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes, uint maxDescriptorSets )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
 		{
 			var poolInfo = new DescriptorPoolCreateInfo
@@ -538,7 +540,7 @@ internal sealed class LogicalGpu : IDisposable
 	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
 		SharingMode sharingMode = SharingMode.Exclusive )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		return VulkanBuffer.New( this, size, usageFlags, memoryFlags, sharingMode );
@@ -547,7 +549,7 @@ internal sealed class LogicalGpu : IDisposable
 	internal unsafe VulkanImage CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
 		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags, ImageAspectFlags aspectFlags )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		CreateImage( width, height, mipLevels, numSamples,
@@ -563,7 +565,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe Sampler CreateTextureSampler( bool enableMsaa, uint mipLevels )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var samplerInfo = new SamplerCreateInfo()
@@ -575,7 +577,7 @@ internal sealed class LogicalGpu : IDisposable
 			AddressModeV = SamplerAddressMode.Repeat,
 			AddressModeW = SamplerAddressMode.Repeat,
 			AnisotropyEnable = enableMsaa ? Vk.True : Vk.False,
-			MaxAnisotropy = Gpu.Properties.Limits.MaxSamplerAnisotropy,
+			MaxAnisotropy = Gpu!.Properties.Limits.MaxSamplerAnisotropy,
 			BorderColor = BorderColor.IntOpaqueBlack,
 			UnnormalizedCoordinates = Vk.False,
 			CompareEnable = Vk.False,
@@ -594,7 +596,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe Semaphore CreateSemaphore()
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var semaphoreCreateInfo = new SemaphoreCreateInfo
@@ -610,7 +612,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe Fence CreateFence( bool signaled = false )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var fenceInfo = new FenceCreateInfo
@@ -627,7 +629,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe void GetMeshGpuBuffers( VulkanBackend vulkanBackend, Mesh mesh, out GpuBuffer<Vertex> gpuVertexBuffer, out GpuBuffer<uint>? gpuIndexBuffer )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		if ( !MeshVertexBuffers.TryGetValue( mesh, out gpuVertexBuffer! ) )
@@ -646,7 +648,7 @@ internal sealed class LogicalGpu : IDisposable
 	internal unsafe DescriptorSet[] GetTextureDescriptorSets( VulkanBackend vulkanBackend, Texture texture, in DescriptorSetLayout descriptorSetLayout,
 		in DescriptorPool descriptorPool, VulkanBuffer[] ubos, SampleCountFlags numSamples )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		if ( TextureDescriptorSets.TryGetValue( texture, out var descriptorSets ) )
@@ -735,10 +737,10 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var memoryProperties = Gpu.MemoryProperties;
+		var memoryProperties = Gpu!.MemoryProperties;
 		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
 		{
 			if ( (typeFilter & (1 << i)) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
@@ -831,7 +833,7 @@ internal sealed class LogicalGpu : IDisposable
 	{
 		foreach ( var format in candidates )
 		{
-			var properties = Gpu.GetFormatProperties( format );
+			var properties = Gpu!.GetFormatProperties( format );
 
 			if ( tiling == ImageTiling.Linear && (properties.LinearTilingFeatures & features) == features )
 				return format;
@@ -900,7 +902,7 @@ internal sealed class LogicalGpu : IDisposable
 
 	public static implicit operator Device( LogicalGpu logicalGpu )
 	{
-		if ( logicalGpu.disposed )
+		if ( logicalGpu.Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		return logicalGpu.LogicalDevice;

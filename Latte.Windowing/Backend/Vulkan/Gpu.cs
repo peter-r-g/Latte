@@ -9,9 +9,8 @@ using System.Runtime.InteropServices;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class Gpu : IDisposable
+internal sealed class Gpu : VulkanWrapper
 {
-	internal VulkanInstance Instance { get; }
 	internal PhysicalDevice PhysicalDevice { get; }
 
 	internal IReadOnlyCollection<LogicalGpu> LogicalGpus => logicalGpus;
@@ -22,39 +21,31 @@ internal sealed class Gpu : IDisposable
 	internal PhysicalDeviceMemoryProperties MemoryProperties { get; }
 	internal SwapchainSupportDetails SwapchainSupportDetails => GetSwapchainSupport();
 
-	private bool disposed;
-
-	internal Gpu( in PhysicalDevice physicalDevice, VulkanInstance instance )
+	internal Gpu( in PhysicalDevice physicalDevice, VulkanInstance instance ) : base( instance )
 	{
 		PhysicalDevice = physicalDevice;
-		Instance = instance;
 
 		Features = Apis.Vk.GetPhysicalDeviceFeatures( physicalDevice );
 		Properties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );
 		MemoryProperties = Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice );
 	}
 
-	~Gpu()
+	public override void Dispose()
 	{
-		Dispose();
-	}
-
-	public void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
 		foreach ( var logicalGpu in LogicalGpus )
 			logicalGpu.Dispose();
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	internal unsafe LogicalGpu CreateLogicalGpu( in QueueFamilyIndices familyIndices, in PhysicalDeviceFeatures features,
 		string[] extensions, bool enableValidationLayers = false, string[]? validationLayers = null )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( Gpu ) );
 
 		if ( enableValidationLayers && (validationLayers is null || validationLayers.Length == 0) )
@@ -112,7 +103,7 @@ internal sealed class Gpu : IDisposable
 
 	internal unsafe bool SupportsExtensions( params string[] extensions )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( Gpu ) );
 
 		uint extensionCount;
@@ -134,7 +125,7 @@ internal sealed class Gpu : IDisposable
 
 	internal FormatProperties GetFormatProperties( Format format )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( Gpu ) );
 
 		return Apis.Vk.GetPhysicalDeviceFormatProperties( PhysicalDevice, format );
@@ -142,7 +133,7 @@ internal sealed class Gpu : IDisposable
 
 	internal unsafe QueueFamilyIndices GetQueueFamilyIndices( bool requireUnique = false )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( Gpu ) );
 
 		var indices = new QueueFamilyIndices();
@@ -158,7 +149,7 @@ internal sealed class Gpu : IDisposable
 			if ( queueFamilies[i].QueueFlags.HasFlag( QueueFlags.GraphicsBit ) )
 				indices.GraphicsFamily = i;
 
-			Instance.SurfaceExtension.GetPhysicalDeviceSurfaceSupport( PhysicalDevice, i, Instance.Surface, out var presentSupported );
+			Instance!.SurfaceExtension.GetPhysicalDeviceSurfaceSupport( PhysicalDevice, i, Instance.Surface, out var presentSupported );
 			if ( presentSupported && ((requireUnique && indices.GraphicsFamily != i) || !requireUnique) )
 				indices.PresentFamily = i;
 
@@ -173,7 +164,7 @@ internal sealed class Gpu : IDisposable
 	{
 		var details = new SwapchainSupportDetails();
 
-		var surfaceExtension = Instance.SurfaceExtension;
+		var surfaceExtension = Instance!.SurfaceExtension;
 		var surface = Instance.Surface;
 		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( PhysicalDevice, surface, out var capabilities ).Verify();
 		details.Capabilities = capabilities;
@@ -199,7 +190,7 @@ internal sealed class Gpu : IDisposable
 
 	public static implicit operator PhysicalDevice( Gpu gpu )
 	{
-		if ( gpu.disposed )
+		if ( gpu.Disposed )
 			throw new ObjectDisposedException( nameof( Gpu ) );
 
 		return gpu.PhysicalDevice;

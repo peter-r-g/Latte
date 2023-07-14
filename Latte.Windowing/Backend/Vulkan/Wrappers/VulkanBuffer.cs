@@ -5,55 +5,45 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class VulkanBuffer : IDisposable
+internal sealed class VulkanBuffer : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
-
 	internal Buffer Buffer { get; }
 	internal DeviceMemory Memory { get; }
 	internal ulong Size { get; }
 
-	private bool disposed;
-
-	private VulkanBuffer( in Buffer buffer, in DeviceMemory memory, ulong size, LogicalGpu owner )
+	private VulkanBuffer( in Buffer buffer, in DeviceMemory memory, ulong size, LogicalGpu owner ) : base( owner )
 	{
 		Buffer = buffer;
 		Memory = memory;
 		Size = size;
-		Owner = owner;
 	}
 
-	~VulkanBuffer()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
-		Apis.Vk.DestroyBuffer( Owner, Buffer, null );
-		Apis.Vk.FreeMemory( Owner, Memory, null );
+		Apis.Vk.DestroyBuffer( LogicalGpu!, Buffer, null );
+		Apis.Vk.FreeMemory( LogicalGpu!, Memory, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	internal unsafe void SetMemory<T>( ReadOnlySpan<T> data, ulong offset = 0 ) where T : unmanaged
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( VulkanBuffer ) );
 
 		void* dataPtr;
-		Apis.Vk.MapMemory( Owner, Memory, offset, Size, 0, &dataPtr ).Verify();
+		Apis.Vk.MapMemory( LogicalGpu!, Memory, offset, Size, 0, &dataPtr ).Verify();
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
-		Apis.Vk.UnmapMemory( Owner, Memory );
+		Apis.Vk.UnmapMemory( LogicalGpu!, Memory );
 	}
 
 	public static implicit operator Buffer( VulkanBuffer vulkanBuffer )
 	{
-		if ( vulkanBuffer.disposed )
+		if ( vulkanBuffer.Disposed )
 			throw new ObjectDisposedException( nameof( VulkanBuffer ) );
 
 		return vulkanBuffer.Buffer;

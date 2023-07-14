@@ -5,10 +5,8 @@ using Latte.Windowing.Extensions;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class VulkanSwapchain : IDisposable
+internal sealed class VulkanSwapchain : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
-
 	internal SwapchainKHR Swapchain { get; }
 	internal Image[] Images { get; }
 	internal ImageView[] ImageViews { get; }
@@ -18,10 +16,8 @@ internal sealed class VulkanSwapchain : IDisposable
 
 	internal Framebuffer[] FrameBuffers { get; private set; } = Array.Empty<Framebuffer>();
 
-	private bool disposed;
-
 	internal VulkanSwapchain( in SwapchainKHR swapchain, Image[] images, ImageView[] imageViews,
-		Format imageFormat, in Extent2D extent, KhrSwapchain extension, LogicalGpu owner )
+		Format imageFormat, in Extent2D extent, KhrSwapchain extension, LogicalGpu owner ) : base( owner )
 	{
 		Swapchain = swapchain;
 		Images = images;
@@ -29,35 +25,29 @@ internal sealed class VulkanSwapchain : IDisposable
 		ImageFormat = imageFormat;
 		Extent = extent;
 		Extension = extension;
-		Owner = owner;
 	}
 
-	~VulkanSwapchain()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
 		foreach ( var frameBuffer in FrameBuffers )
-			Apis.Vk.DestroyFramebuffer( Owner, frameBuffer, null );
+			Apis.Vk.DestroyFramebuffer( LogicalGpu!, frameBuffer, null );
 
 		foreach ( var imageView in ImageViews )
-			Apis.Vk.DestroyImageView( Owner, imageView, null );
+			Apis.Vk.DestroyImageView( LogicalGpu!, imageView, null );
 
-		Extension.DestroySwapchain( Owner, Swapchain, null );
+		Extension.DestroySwapchain( LogicalGpu!, Swapchain, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	internal unsafe void CreateFrameBuffers( in RenderPass renderPass, in ReadOnlySpan<ImageView> attachments,
 		Action<int>? frameBufferCreateCb = null )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( VulkanSwapchain ) );
 
 		FrameBuffers = new Framebuffer[ImageViews.Length];
@@ -80,7 +70,7 @@ internal sealed class VulkanSwapchain : IDisposable
 					Layers = 1
 				};
 
-				Apis.Vk.CreateFramebuffer( Owner, frameBufferInfo, null, out var frameBuffer ).Verify();
+				Apis.Vk.CreateFramebuffer( LogicalGpu!, frameBufferInfo, null, out var frameBuffer ).Verify();
 				FrameBuffers[i] = frameBuffer;
 			}
 		}
@@ -88,7 +78,7 @@ internal sealed class VulkanSwapchain : IDisposable
 
 	public static implicit operator SwapchainKHR( VulkanSwapchain vulkanSwapchain )
 	{
-		if ( vulkanSwapchain.disposed )
+		if ( vulkanSwapchain.Disposed )
 			throw new ObjectDisposedException( nameof( VulkanSwapchain ) );
 
 		return vulkanSwapchain.Swapchain;

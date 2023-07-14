@@ -3,35 +3,31 @@ using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal class VulkanRenderPass : IDisposable
+internal class VulkanRenderPass : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
-
 	internal RenderPass RenderPass { get; }
 
-	private bool disposed;
-
-	internal VulkanRenderPass( in RenderPass renderPass, LogicalGpu owner )
+	internal VulkanRenderPass( in RenderPass renderPass, LogicalGpu owner ) : base( owner )
 	{
 		RenderPass = renderPass;
-		Owner = owner;
 	}
 
-	~VulkanRenderPass()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
-		Apis.Vk.DestroyRenderPass( Owner, RenderPass, null );
+		Apis.Vk.DestroyRenderPass( LogicalGpu!, RenderPass, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
-	public static implicit operator RenderPass( VulkanRenderPass vulkanRenderPass ) => vulkanRenderPass.RenderPass;
+	public static implicit operator RenderPass( VulkanRenderPass vulkanRenderPass )
+	{
+		if ( vulkanRenderPass.Disposed )
+			throw new ObjectDisposedException( nameof( VulkanRenderPass ) );
+
+		return vulkanRenderPass.RenderPass;
+	}
 }

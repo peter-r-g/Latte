@@ -3,45 +3,35 @@ using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class VulkanImage : IDisposable
+internal sealed class VulkanImage : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
-
 	internal Image Image { get; set; }
 	internal DeviceMemory Memory { get; set; }
 	internal ImageView View { get; set; }
 
-	private bool disposed;
-
-	internal VulkanImage( in Image image, in DeviceMemory memory, in ImageView view, LogicalGpu owner )
+	internal VulkanImage( in Image image, in DeviceMemory memory, in ImageView view, LogicalGpu owner ) : base( owner )
 	{
 		Image = image;
 		Memory = memory;
 		View = view;
-		Owner = owner;
 	}
 
-	~VulkanImage()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
-		Apis.Vk.DestroyImageView( Owner, View, null );
-		Apis.Vk.DestroyImage( Owner, Image, null );
-		Apis.Vk.FreeMemory( Owner, Memory, null );
+		Apis.Vk.DestroyImageView( LogicalGpu!, View, null );
+		Apis.Vk.DestroyImage( LogicalGpu!, Image, null );
+		Apis.Vk.FreeMemory( LogicalGpu!, Memory, null );
 
 		GC.SuppressFinalize( this );
-		disposed = true;
+		Disposed = true;
 	}
 
 	internal void CopyBufferToImage( in CommandBuffer commandBuffer, VulkanBuffer buffer, uint width, uint height )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( VulkanImage ) );
 
 		var region = new BufferImageCopy
@@ -71,7 +61,7 @@ internal sealed class VulkanImage : IDisposable
 	internal unsafe void TransitionImageLayout( in CommandBuffer commandBuffer, Format format,
 		ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( VulkanImage ) );
 
 		var barrier = new ImageMemoryBarrier()
@@ -141,10 +131,10 @@ internal sealed class VulkanImage : IDisposable
 
 	internal unsafe void GenerateMipMaps( in CommandBuffer commandBuffer, Format format, uint width, uint height, uint mipLevels )
 	{
-		if ( disposed )
+		if ( Disposed )
 			throw new ObjectDisposedException( nameof( VulkanImage ) );
 
-		var formatProperties = Owner.Gpu.GetFormatProperties( format );
+		var formatProperties = Gpu!.GetFormatProperties( format );
 		if ( !formatProperties.OptimalTilingFeatures.HasFlag( FormatFeatureFlags.SampledImageFilterLinearBit ) )
 			throw new ApplicationException( "Texture image format does not support linear blitting" );
 
@@ -244,7 +234,7 @@ internal sealed class VulkanImage : IDisposable
 
 	public static implicit operator Image( VulkanImage vulkanImage )
 	{
-		if ( vulkanImage.disposed )
+		if ( vulkanImage.Disposed )
 			throw new ObjectDisposedException( nameof( VulkanImage ) );
 
 		return vulkanImage.Image;
