@@ -126,7 +126,7 @@ internal sealed class LogicalGpu : IDisposable
 		return vulkanSwapchain;
 	}
 
-	internal unsafe GraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in Extent2D swapchainExtent, in RenderPass renderPass,
+	internal unsafe VulkanGraphicsPipeline CreateGraphicsPipeline( IRenderingOptions options, Shader shader, in Extent2D swapchainExtent, in RenderPass renderPass,
 		ReadOnlySpan<VertexInputBindingDescription> bindingDescriptions, ReadOnlySpan<VertexInputAttributeDescription> attributeDescriptions,
 		ReadOnlySpan<DynamicState> dynamicStates, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts,
 		ReadOnlySpan<PushConstantRange> pushConstantRanges )
@@ -162,7 +162,7 @@ internal sealed class LogicalGpu : IDisposable
 			fragShaderStageInfo
 		};
 
-		GraphicsPipeline graphicsPipeline;
+		VulkanGraphicsPipeline graphicsPipeline;
 
 		fixed ( VertexInputAttributeDescription* attributeDescriptionsPtr = attributeDescriptions )
 		fixed( VertexInputBindingDescription* bindingDescriptionsPtr = bindingDescriptions )
@@ -301,7 +301,7 @@ internal sealed class LogicalGpu : IDisposable
 			};
 
 			Apis.Vk.CreateGraphicsPipelines( LogicalDevice, default, 1, &pipelineInfo, null, out var pipeline ).Verify();
-			graphicsPipeline = new GraphicsPipeline( pipeline, pipelineLayout, this );
+			graphicsPipeline = new VulkanGraphicsPipeline( pipeline, pipelineLayout, this );
 		}
 
 		Marshal.FreeHGlobal( (nint)vertShaderStageInfo.PName );

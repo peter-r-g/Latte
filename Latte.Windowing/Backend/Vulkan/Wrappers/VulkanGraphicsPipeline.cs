@@ -3,7 +3,7 @@ using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class GraphicsPipeline : IDisposable
+internal sealed class VulkanGraphicsPipeline : IDisposable
 {
 	internal LogicalGpu Owner { get; }
 
@@ -12,14 +12,14 @@ internal sealed class GraphicsPipeline : IDisposable
 
 	private bool disposed;
 
-	internal GraphicsPipeline( in Pipeline pipeline, in PipelineLayout layout, LogicalGpu owner )
+	internal VulkanGraphicsPipeline( in Pipeline pipeline, in PipelineLayout layout, LogicalGpu owner )
 	{
 		Pipeline = pipeline;
 		Layout = layout;
 		Owner = owner;
 	}
 
-	~GraphicsPipeline()
+	~VulkanGraphicsPipeline()
 	{
 		Dispose();
 	}
@@ -36,5 +36,5 @@ internal sealed class GraphicsPipeline : IDisposable
 		GC.SuppressFinalize( this );
 	}
 
-	public static implicit operator Pipeline( GraphicsPipeline graphicsPipeline ) => graphicsPipeline.Pipeline;
+	public static implicit operator Pipeline( VulkanGraphicsPipeline graphicsPipeline ) => graphicsPipeline.Pipeline;
 }

@@ -58,7 +58,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private RenderPass RenderPass { get; set; }
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
-	private GraphicsPipeline GraphicsPipeline { get; set; } = null!;
+	private VulkanGraphicsPipeline GraphicsPipeline { get; set; } = null!;
 	private PipelineLayout PipelineLayout => GraphicsPipeline.Layout;
 	private CommandPool CommandPool { get; set; }
 	private VulkanBuffer[] UniformBuffers { get; set; } = Array.Empty<VulkanBuffer>();
