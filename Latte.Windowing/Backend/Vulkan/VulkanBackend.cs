@@ -3,7 +3,6 @@ using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
@@ -35,22 +34,11 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private static bool StaticInitialized { get; set; }
 	private VulkanInstance Instance { get; set; } = null!;
-	private ExtDebugUtils? DebugUtilsExtension => Instance.DebugUtilsExtension;
-	private DebugUtilsMessengerEXT DebugMessenger => Instance.DebugMessenger;
-	private KhrSurface SurfaceExtension => Instance.SurfaceExtension;
-	private SurfaceKHR Surface => Instance.Surface;
 
 	private IWindow Window { get; }
 	private Gpu Gpu { get; set; } = null!;
-
 	private LogicalGpu LogicalGpu { get; set; } = null!;
 	private VulkanSwapchain Swapchain { get; set; } = null!;
-	private Image[] SwapchainImages => Swapchain.Images;
-	private ImageView[] SwapchainImageViews => Swapchain.ImageViews;
-	private Format SwapchainImageFormat => Swapchain.ImageFormat;
-	private Extent2D SwapchainExtent => Swapchain.Extent;
-	private Framebuffer[] SwapchainFrameBuffers => Swapchain.FrameBuffers;
-	private KhrSwapchain SwapchainExtension => Swapchain.Extension;
 
 	private Shader DefaultShader { get; set; } = null!;
 
@@ -66,12 +54,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private CommandBuffer[] CommandBuffers { get; set; } = Array.Empty<CommandBuffer>();
 
 	private VulkanImage DepthImage { get; set; } = null!;
-	private DeviceMemory DepthImageMemory => DepthImage.Memory;
-	private ImageView DepthImageView => DepthImage.View;
-
 	private VulkanImage ColorImage { get; set; } = null!;
-	private DeviceMemory ColorImageMemory => ColorImage.Memory;
-	private ImageView ColorImageView => ColorImage.View;
 
 	private Semaphore[] ImageAvailableSemaphores { get; set; } = Array.Empty<Semaphore>();
 	private Semaphore[] RenderFinishedSemaphores { get; set; } = Array.Empty<Semaphore>();
@@ -155,10 +138,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		Gpu.Dispose();
 
-		if ( EnableValidationLayers && DebugUtilsExtension is not null )
-			DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null );
+		if ( EnableValidationLayers && Instance.DebugUtilsExtension is not null )
+			Instance.DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, Instance.DebugMessenger, null );
 
-		SurfaceExtension.DestroySurface( Instance, Surface, null );
+		Instance.SurfaceExtension.DestroySurface( Instance, Instance.Surface, null );
 		Apis.Vk.DestroyInstance( Instance, null );
 		// TODO: Don't dispose of the API here, dispose when whole program is exiting.
 		Apis.Vk.Dispose();
@@ -169,7 +152,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Apis.Vk.WaitForFences( LogicalGpu, 1, InFlightFences[CurrentFrame], Vk.True, ulong.MaxValue ).Verify();
 
 		uint imageIndex;
-		var result = SwapchainExtension.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
+		var result = Swapchain.Extension.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue,
+			ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
 		CurrentImageIndex = imageIndex;
 		switch ( result )
 		{
@@ -202,12 +186,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			SType = StructureType.RenderPassBeginInfo,
 			RenderPass = RenderPass,
-			Framebuffer = SwapchainFrameBuffers[imageIndex],
+			Framebuffer = Swapchain.FrameBuffers[imageIndex],
 			ClearValueCount = 1,
 			RenderArea =
 			{
 				Offset = { X = 0, Y = 0 },
-				Extent = SwapchainExtent
+				Extent = Swapchain.Extent
 			}
 		};
 
@@ -226,8 +210,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			X = 0,
 			Y = 0,
-			Width = SwapchainExtent.Width,
-			Height = SwapchainExtent.Height,
+			Width = Swapchain.Extent.Width,
+			Height = Swapchain.Extent.Height,
 			MinDepth = 0,
 			MaxDepth = 1
 		};
@@ -236,7 +220,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var scissor = new Rect2D()
 		{
 			Offset = new Offset2D( 0, 0 ),
-			Extent = SwapchainExtent
+			Extent = Swapchain.Extent
 		};
 		Apis.Vk.CmdSetScissor( CurrentCommandBuffer, 0, 1, scissor );
 
@@ -306,7 +290,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PImageIndices = &currentImageIndex
 		};
 
-		var result = SwapchainExtension.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
+		var result = Swapchain.Extension.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -519,21 +503,21 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	#region Internal
 	private void CleanupSwapChain()
 	{
-		Apis.Vk.DestroyImageView( LogicalGpu, ColorImageView, null );
+		Apis.Vk.DestroyImageView( LogicalGpu, ColorImage.View, null );
 		Apis.Vk.DestroyImage( LogicalGpu, ColorImage, null );
-		Apis.Vk.FreeMemory( LogicalGpu, ColorImageMemory, null );
+		Apis.Vk.FreeMemory( LogicalGpu, ColorImage.Memory, null );
 
-		Apis.Vk.DestroyImageView( LogicalGpu, DepthImageView, null );
+		Apis.Vk.DestroyImageView( LogicalGpu, DepthImage.View, null );
 		Apis.Vk.DestroyImage( LogicalGpu, DepthImage, null );
-		Apis.Vk.FreeMemory( LogicalGpu, DepthImageMemory, null );
+		Apis.Vk.FreeMemory( LogicalGpu, DepthImage.Memory, null );
 
-		foreach ( var frameBuffer in SwapchainFrameBuffers )
+		foreach ( var frameBuffer in Swapchain.FrameBuffers )
 			Apis.Vk.DestroyFramebuffer( LogicalGpu, frameBuffer, null );
 
-		foreach ( var imageView in SwapchainImageViews )
+		foreach ( var imageView in Swapchain.ImageViews )
 			Apis.Vk.DestroyImageView( LogicalGpu, imageView, null );
 
-		SwapchainExtension.DestroySwapchain( LogicalGpu, Swapchain, null );
+		Swapchain.Extension.DestroySwapchain( LogicalGpu, Swapchain, null );
 	}
 
 	private void RecreateSwapChain()
@@ -660,7 +644,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			}
 		};
 
-		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, DefaultShader, SwapchainExtent, RenderPass,
+		GraphicsPipeline = LogicalGpu.CreateGraphicsPipeline( Options, DefaultShader, Swapchain.Extent, RenderPass,
 			bindingDescriptions, attributeDescriptions, dynamicStates,
 			descriptorSetLayouts, pushConstantRanges );
 	}
@@ -676,15 +660,15 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateColorResources()
 	{
-		ColorImage = LogicalGpu.CreateImage( SwapchainExtent.Width, SwapchainExtent.Height, 1, Options.Msaa.ToVulkan(),
-			SwapchainImageFormat, ImageTiling.Optimal, ImageUsageFlags.TransientAttachmentBit | ImageUsageFlags.ColorAttachmentBit,
+		ColorImage = LogicalGpu.CreateImage( Swapchain.Extent.Width, Swapchain.Extent.Height, 1, Options.Msaa.ToVulkan(),
+			Swapchain.ImageFormat, ImageTiling.Optimal, ImageUsageFlags.TransientAttachmentBit | ImageUsageFlags.ColorAttachmentBit,
 			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
 	}
 
 	private void CreateDepthResources()
 	{
 		var depthFormat = FindDepthFormat();
-		DepthImage = LogicalGpu.CreateImage( SwapchainExtent.Width, SwapchainExtent.Height, 1, Options.Msaa.ToVulkan(),
+		DepthImage = LogicalGpu.CreateImage( Swapchain.Extent.Width, Swapchain.Extent.Height, 1, Options.Msaa.ToVulkan(),
 			depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit,
 			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.DepthBit );
 
@@ -700,15 +684,15 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		var useMsaa = Options.Msaa != MsaaOption.One;
 		var attachments = new ImageView[useMsaa ? 3 : 2];
-		attachments[0] = ColorImageView;
-		attachments[1] = DepthImageView;
+		attachments[0] = ColorImage.View;
+		attachments[1] = DepthImage.View;
 
 		Swapchain.CreateFrameBuffers( RenderPass, attachments, frameBufferIndex =>
 		{
 			if ( useMsaa )
-				attachments[2] = SwapchainImageViews[frameBufferIndex];
+				attachments[2] = Swapchain.ImageViews[frameBufferIndex];
 			else
-				attachments[0] = SwapchainImageViews[frameBufferIndex];
+				attachments[0] = Swapchain.ImageViews[frameBufferIndex];
 		} );
 	}
 
