@@ -2,6 +2,7 @@
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -21,6 +22,8 @@ internal sealed class Gpu : IDisposable
 	internal PhysicalDeviceMemoryProperties MemoryProperties { get; }
 	internal SwapchainSupportDetails SwapchainSupportDetails => GetSwapchainSupport();
 
+	private bool disposed;
+
 	internal Gpu( in PhysicalDevice physicalDevice, VulkanInstance instance )
 	{
 		PhysicalDevice = physicalDevice;
@@ -38,6 +41,10 @@ internal sealed class Gpu : IDisposable
 
 	public void Dispose()
 	{
+		if ( disposed )
+			return;
+
+		disposed = true;
 		foreach ( var logicalGpu in LogicalGpus )
 			logicalGpu.Dispose();
 
@@ -47,6 +54,9 @@ internal sealed class Gpu : IDisposable
 	internal unsafe LogicalGpu CreateLogicalGpu( in QueueFamilyIndices familyIndices, in PhysicalDeviceFeatures features,
 		string[] extensions, bool enableValidationLayers = false, string[]? validationLayers = null )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		if ( enableValidationLayers && (validationLayers is null || validationLayers.Length == 0) )
 			throw new ArgumentException( "No validation layers were passed", nameof( validationLayers ) );
 
@@ -102,6 +112,9 @@ internal sealed class Gpu : IDisposable
 
 	internal unsafe bool SupportsExtensions( params string[] extensions )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		uint extensionCount;
 		Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, null ).Verify();
 
@@ -121,11 +134,17 @@ internal sealed class Gpu : IDisposable
 
 	internal FormatProperties GetFormatProperties( Format format )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		return Apis.Vk.GetPhysicalDeviceFormatProperties( PhysicalDevice, format );
 	}
 
 	internal unsafe QueueFamilyIndices GetQueueFamilyIndices( bool requireUnique = false )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		var indices = new QueueFamilyIndices();
 
 		uint queueFamilyCount;
@@ -180,5 +199,11 @@ internal sealed class Gpu : IDisposable
 		return details;
 	}
 
-	public static implicit operator PhysicalDevice( Gpu gpu ) => gpu.PhysicalDevice;
+	public static implicit operator PhysicalDevice( Gpu gpu )
+	{
+		if ( gpu.disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
+		return gpu.PhysicalDevice;
+	}
 }

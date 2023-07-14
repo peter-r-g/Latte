@@ -57,6 +57,9 @@ internal sealed class VulkanSwapchain : IDisposable
 	internal unsafe void CreateFrameBuffers( in RenderPass renderPass, in ReadOnlySpan<ImageView> attachments,
 		Action<int>? frameBufferCreateCb = null )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( VulkanSwapchain ) );
+
 		FrameBuffers = new Framebuffer[ImageViews.Length];
 
 		fixed( ImageView* attachmentsPtr = attachments )
@@ -83,5 +86,11 @@ internal sealed class VulkanSwapchain : IDisposable
 		}
 	}
 
-	public static implicit operator SwapchainKHR( VulkanSwapchain vulkanSwapchain ) => vulkanSwapchain.Swapchain;
+	public static implicit operator SwapchainKHR( VulkanSwapchain vulkanSwapchain )
+	{
+		if ( vulkanSwapchain.disposed )
+			throw new ObjectDisposedException( nameof( VulkanSwapchain ) );
+
+		return vulkanSwapchain.Swapchain;
+	}
 }

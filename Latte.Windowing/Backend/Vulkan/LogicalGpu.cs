@@ -29,6 +29,8 @@ internal sealed class LogicalGpu : IDisposable
 	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
 	private ConcurrentDictionary<Texture, DescriptorSet[]> TextureDescriptorSets { get; } = new();
 
+	private bool disposed;
+
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices )
 	{
 		if ( !familyIndices.IsComplete() )
@@ -47,16 +49,23 @@ internal sealed class LogicalGpu : IDisposable
 
 	public unsafe void Dispose()
 	{
+		if ( disposed )
+			return;
+
+		disposed = true;
 		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
 			disposeCb();
 
-		ShaderCache.Clear();
 		Apis.Vk.DestroyDevice( LogicalDevice, null );
+
 		GC.SuppressFinalize( this );
 	}
 
 	internal unsafe VulkanSwapchain CreateSwapchain()
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var instance = Gpu.Instance;
 		var swapChainSupport = Gpu.SwapchainSupportDetails;
 
@@ -131,6 +140,9 @@ internal sealed class LogicalGpu : IDisposable
 		ReadOnlySpan<DynamicState> dynamicStates, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts,
 		ReadOnlySpan<PushConstantRange> pushConstantRanges )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		if ( !ShaderCache.TryGetValue( shader, out var package ) )
 		{
 			package = new ShaderPackage(
@@ -313,7 +325,10 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe DescriptorSetLayout CreateDescriptorSetLayout( in ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
 	{
-		fixed( DescriptorSetLayoutBinding* bindingsPtr = bindings )
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
+		fixed ( DescriptorSetLayoutBinding* bindingsPtr = bindings )
 		{
 			var layoutInfo = new DescriptorSetLayoutCreateInfo()
 			{
@@ -331,6 +346,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe RenderPass CreateRenderPass( Format swapchainImageFormat, SampleCountFlags msaaSamples )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var useMsaa = msaaSamples != SampleCountFlags.Count1Bit;
 		var colorAttachment = new AttachmentDescription()
 		{
@@ -432,6 +450,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe CommandPool CreateCommandPool( uint queueFamilyIndex )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var poolInfo = new CommandPoolCreateInfo
 		{
 			SType = StructureType.CommandPoolCreateInfo,
@@ -448,12 +469,18 @@ internal sealed class LogicalGpu : IDisposable
 	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
 		SharingMode sharingMode = SharingMode.Exclusive )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		return VulkanBuffer.New( this, size, usageFlags, memoryFlags, sharingMode );
 	}
 
 	internal unsafe VulkanImage CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
 		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags, ImageAspectFlags aspectFlags )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		CreateImage( width, height, mipLevels, numSamples,
 			format, tiling, usageFlags, memoryPropertyFlags,
 			out var image, out var imageMemory );
@@ -467,6 +494,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe Sampler CreateTextureSampler( bool enableMsaa, uint mipLevels )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var samplerInfo = new SamplerCreateInfo()
 		{
 			SType = StructureType.SamplerCreateInfo,
@@ -495,6 +525,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal unsafe void GetMeshGpuBuffers( VulkanBackend vulkanBackend, Mesh mesh, out GpuBuffer<Vertex> gpuVertexBuffer, out GpuBuffer<uint>? gpuIndexBuffer )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		if ( !MeshVertexBuffers.TryGetValue( mesh, out gpuVertexBuffer! ) )
 		{
 			gpuVertexBuffer = new GpuBuffer<Vertex>( vulkanBackend, mesh.Vertices.AsSpan(), BufferUsageFlags.VertexBufferBit );
@@ -511,6 +544,9 @@ internal sealed class LogicalGpu : IDisposable
 	internal unsafe DescriptorSet[] GetTextureDescriptorSets( VulkanBackend vulkanBackend, Texture texture, in DescriptorSetLayout descriptorSetLayout,
 		in DescriptorPool descriptorPool, VulkanBuffer[] ubos, SampleCountFlags numSamples )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		if ( TextureDescriptorSets.TryGetValue( texture, out var descriptorSets ) )
 			return descriptorSets;
 
@@ -596,6 +632,9 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var memoryProperties = Gpu.MemoryProperties;
 		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
 		{
@@ -756,5 +795,11 @@ internal sealed class LogicalGpu : IDisposable
 	}
 
 
-	public static implicit operator Device( LogicalGpu logicalGpu ) => logicalGpu.LogicalDevice;
+	public static implicit operator Device( LogicalGpu logicalGpu )
+	{
+		if ( logicalGpu.disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
+		return logicalGpu.LogicalDevice;
+	}
 }

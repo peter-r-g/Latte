@@ -41,6 +41,9 @@ internal sealed class VulkanImage : IDisposable
 
 	internal void CopyBufferToImage( in CommandBuffer commandBuffer, VulkanBuffer buffer, uint width, uint height )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
 		var region = new BufferImageCopy
 		{
 			BufferOffset = 0,
@@ -68,6 +71,9 @@ internal sealed class VulkanImage : IDisposable
 	internal unsafe void TransitionImageLayout( in CommandBuffer commandBuffer, Format format,
 		ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
 		var barrier = new ImageMemoryBarrier()
 		{
 			SType = StructureType.ImageMemoryBarrier,
@@ -135,6 +141,9 @@ internal sealed class VulkanImage : IDisposable
 
 	internal unsafe void GenerateMipMaps( in CommandBuffer commandBuffer, Format format, uint width, uint height, uint mipLevels )
 	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
 		var formatProperties = Owner.Gpu.GetFormatProperties( format );
 		if ( !formatProperties.OptimalTilingFeatures.HasFlag( FormatFeatureFlags.SampledImageFilterLinearBit ) )
 			throw new ApplicationException( "Texture image format does not support linear blitting" );
@@ -233,5 +242,11 @@ internal sealed class VulkanImage : IDisposable
 		return format == Format.D32Sfloat || format == Format.D24UnormS8Uint;
 	}
 
-	public static implicit operator Image( VulkanImage vulkanImage ) => vulkanImage.Image;
+	public static implicit operator Image( VulkanImage vulkanImage )
+	{
+		if ( vulkanImage.disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
+		return vulkanImage.Image;
+	}
 }

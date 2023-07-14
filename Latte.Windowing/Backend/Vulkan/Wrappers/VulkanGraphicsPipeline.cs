@@ -36,5 +36,11 @@ internal sealed class VulkanGraphicsPipeline : IDisposable
 		GC.SuppressFinalize( this );
 	}
 
-	public static implicit operator Pipeline( VulkanGraphicsPipeline graphicsPipeline ) => graphicsPipeline.Pipeline;
+	public static implicit operator Pipeline( VulkanGraphicsPipeline graphicsPipeline )
+	{
+		if ( graphicsPipeline.disposed )
+			throw new ObjectDisposedException( nameof( VulkanGraphicsPipeline ) );
+
+		return graphicsPipeline.Pipeline;
+	}
 }
