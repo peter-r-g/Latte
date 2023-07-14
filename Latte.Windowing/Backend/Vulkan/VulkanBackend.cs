@@ -45,7 +45,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private RenderPass RenderPass { get; set; }
 	private DescriptorSetLayout DescriptorSetLayout { get; set; }
 	private VulkanGraphicsPipeline GraphicsPipeline { get; set; } = null!;
-	private PipelineLayout PipelineLayout => GraphicsPipeline.Layout;
 	private CommandPool CommandPool { get; set; }
 	private VulkanBuffer[] UniformBuffers { get; set; } = Array.Empty<VulkanBuffer>();
 	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
@@ -226,7 +225,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		CurrentModelPosition = Vector3.Zero;
 		var defaultConstants = new PushConstants( Matrix4x4.CreateTranslation( CurrentModelPosition ) );
-		Apis.Vk.CmdPushConstants( CurrentCommandBuffer, PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
+		Apis.Vk.CmdPushConstants( CurrentCommandBuffer, GraphicsPipeline.Layout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
 
 		// TODO: Multiple textures crash Vulkan due to lack of descriptor set space.
 		//SetTexture( Texture.Missing );
@@ -323,7 +322,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		CurrentTexture = texture;
 		var descriptorSets = LogicalGpu.GetTextureDescriptorSets( this, texture, DescriptorSetLayout, DescriptorPool, UniformBuffers, Options.Msaa.ToVulkan() );
-		Apis.Vk.CmdBindDescriptorSets( CurrentCommandBuffer, PipelineBindPoint.Graphics, PipelineLayout, 0, 1, descriptorSets[CurrentFrame], 0, null );
+		Apis.Vk.CmdBindDescriptorSets( CurrentCommandBuffer, PipelineBindPoint.Graphics, GraphicsPipeline.Layout, 0, 1, descriptorSets[CurrentFrame], 0, null );
 	}
 
 	public void DrawModel( Model model ) => DrawModel( model, Vector3.Zero );
@@ -335,7 +334,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( position != CurrentModelPosition )
 		{
 			var pushConstants = new PushConstants( Matrix4x4.CreateTranslation( position ) );
-			Apis.Vk.CmdPushConstants( CurrentCommandBuffer, PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &pushConstants );
+			Apis.Vk.CmdPushConstants( CurrentCommandBuffer, GraphicsPipeline.Layout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &pushConstants );
 		}
 
 		var vertexBuffers = stackalloc Buffer[1];
@@ -372,7 +371,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			Apis.Vk.DestroyDescriptorPool( LogicalGpu, DescriptorPool, null );
 			Apis.Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
-			Apis.Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
+			Apis.Vk.DestroyPipelineLayout( LogicalGpu, GraphicsPipeline.Layout, null );
 			Apis.Vk.DestroyRenderPass( LogicalGpu, RenderPass, null );
 			CleanupSwapChain();
 
@@ -387,7 +386,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		else if ( Options.HasOptionsChanged( nameof( Options.WireframeEnabled ) ) )
 		{
 			Apis.Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
-			Apis.Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
+			Apis.Vk.DestroyPipelineLayout( LogicalGpu, GraphicsPipeline.Layout, null );
 
 			CreateGraphicsPipeline();
 		}
