@@ -1,6 +1,7 @@
 ﻿using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Vulkan;
 using System;
+using Latte.Windowing.Extensions;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -76,9 +77,7 @@ internal sealed class VulkanSwapchain : IDisposable
 					Layers = 1
 				};
 
-				if ( Apis.Vk.CreateFramebuffer( Owner, frameBufferInfo, null, out var frameBuffer ) != Result.Success )
-					throw new ApplicationException( $"Failed to create Vulkan frame buffer [{i}]" );
-
+				Apis.Vk.CreateFramebuffer( Owner, frameBufferInfo, null, out var frameBuffer ).Verify();
 				FrameBuffers[i] = frameBuffer;
 			}
 		}

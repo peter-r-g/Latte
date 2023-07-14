@@ -107,21 +107,16 @@ internal sealed class LogicalGpu : IDisposable
 		if ( !Apis.Vk.TryGetDeviceExtension<KhrSwapchain>( instance, LogicalDevice, out var swapchainExtension ) )
 			throw new ApplicationException( "Failed to get KHR_swapchain extension" );
 
-		if ( swapchainExtension.CreateSwapchain( LogicalDevice, createInfo, null, out var swapchain ) != Result.Success )
-			throw new ApplicationException( "Failed to create swap chain" );
-
-		if ( swapchainExtension.GetSwapchainImages( LogicalDevice, swapchain, &imageCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to get swap chain images (1)" );
+		swapchainExtension.CreateSwapchain( LogicalDevice, createInfo, null, out var swapchain ).Verify();
+		swapchainExtension.GetSwapchainImages( LogicalDevice, swapchain, &imageCount, null ).Verify();
 
 		var swapchainImages = new Image[imageCount];
-		if ( swapchainExtension.GetSwapchainImages( LogicalDevice, swapchain, &imageCount, swapchainImages ) != Result.Success )
-			throw new ApplicationException( "Failed to get swap chain images (2)" );
+		swapchainExtension.GetSwapchainImages( LogicalDevice, swapchain, &imageCount, swapchainImages ).Verify();
 
 		var swapchainImageFormat = surfaceFormat.Format;
 		var swapchainExtent = extent;
 
 		var swapchainImageViews = new ImageView[imageCount];
-
 		for ( var i = 0; i < swapchainImages.Length; i++ )
 			swapchainImageViews[i] = CreateImageView( swapchainImages[i], swapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
 
@@ -285,8 +280,7 @@ internal sealed class LogicalGpu : IDisposable
 				PPushConstantRanges = pushConstantRangesPtr
 			};
 
-			if ( Apis.Vk.CreatePipelineLayout( LogicalDevice, pipelineLayoutInfo, null, out var pipelineLayout ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan pipeline layout" );
+			Apis.Vk.CreatePipelineLayout( LogicalDevice, pipelineLayoutInfo, null, out var pipelineLayout ).Verify();
 
 			var pipelineInfo = new GraphicsPipelineCreateInfo
 			{
@@ -306,9 +300,7 @@ internal sealed class LogicalGpu : IDisposable
 				Subpass = 0
 			};
 
-			if ( Apis.Vk.CreateGraphicsPipelines( LogicalDevice, default, 1, &pipelineInfo, null, out var pipeline ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan graphics pipeline" );
-
+			Apis.Vk.CreateGraphicsPipelines( LogicalDevice, default, 1, &pipelineInfo, null, out var pipeline ).Verify();
 			graphicsPipeline = new GraphicsPipeline( pipeline, pipelineLayout, this );
 		}
 
@@ -330,8 +322,7 @@ internal sealed class LogicalGpu : IDisposable
 				PBindings = bindingsPtr
 			};
 
-			if ( Apis.Vk.CreateDescriptorSetLayout( LogicalDevice, layoutInfo, null, out var descriptorSetLayout ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan descriptor set layout" );
+			Apis.Vk.CreateDescriptorSetLayout( LogicalDevice, layoutInfo, null, out var descriptorSetLayout ).Verify();
 
 			DisposeQueue.Enqueue( () => Apis.Vk.DestroyDescriptorSetLayout( LogicalDevice, descriptorSetLayout, null ) );
 			return descriptorSetLayout;
@@ -433,8 +424,7 @@ internal sealed class LogicalGpu : IDisposable
 			PDependencies = &subpassDependency
 		};
 
-		if ( Apis.Vk.CreateRenderPass( LogicalDevice, renderPassInfo, null, out var renderPass ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan render pass" );
+		Apis.Vk.CreateRenderPass( LogicalDevice, renderPassInfo, null, out var renderPass ).Verify();
 
 		DisposeQueue.Enqueue( () => Apis.Vk.DestroyRenderPass( LogicalDevice, renderPass, null ) );
 		return renderPass;
@@ -449,8 +439,7 @@ internal sealed class LogicalGpu : IDisposable
 			QueueFamilyIndex = queueFamilyIndex
 		};
 
-		if ( Apis.Vk.CreateCommandPool( LogicalDevice, poolInfo, null, out var commandPool ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan command pool" );
+		Apis.Vk.CreateCommandPool( LogicalDevice, poolInfo, null, out var commandPool ).Verify();
 
 		DisposeQueue.Enqueue( () => Apis.Vk.DestroyCommandPool( LogicalDevice, commandPool, null ) );
 		return commandPool;
@@ -498,8 +487,7 @@ internal sealed class LogicalGpu : IDisposable
 			MaxLod = mipLevels
 		};
 
-		if ( Apis.Vk.CreateSampler( LogicalDevice, samplerInfo, null, out var textureSampler ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan texture sampler" );
+		Apis.Vk.CreateSampler( LogicalDevice, samplerInfo, null, out var textureSampler ).Verify();
 
 		DisposeQueue.Enqueue( () => Apis.Vk.DestroySampler( LogicalDevice, textureSampler, null ) );
 		return textureSampler;
@@ -540,8 +528,7 @@ internal sealed class LogicalGpu : IDisposable
 			PSetLayouts = layouts
 		};
 
-		if ( Apis.Vk.AllocateDescriptorSets( LogicalDevice, &allocateInfo, descriptorSets ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate Vulkan descriptor sets" );
+		Apis.Vk.AllocateDescriptorSets( LogicalDevice, &allocateInfo, descriptorSets ).Verify();
 
 		var textureImage = CreateImage( (uint)texture.Width, (uint)texture.Height, texture.MipLevels, SampleCountFlags.Count1Bit,
 			Format.R8G8B8A8Srgb, ImageTiling.Optimal,
@@ -631,8 +618,7 @@ internal sealed class LogicalGpu : IDisposable
 		{
 			createInfo.PCode = (uint*)shaderCodePtr;
 
-			if ( Apis.Vk.CreateShaderModule( LogicalDevice, createInfo, null, out var shaderModule ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan shader module" );
+			Apis.Vk.CreateShaderModule( LogicalDevice, createInfo, null, out var shaderModule ).Verify();
 
 			DisposeQueue.Enqueue( () => Apis.Vk.DestroyShaderModule( LogicalDevice, shaderModule, null ) );
 			return shaderModule;
@@ -663,11 +649,9 @@ internal sealed class LogicalGpu : IDisposable
 			Samples = numSamples
 		};
 
-		if ( Apis.Vk.CreateImage( LogicalDevice, imageInfo, null, out image ) != Result.Success )
-			throw new ApplicationException( "Failed to create image" );
+		Apis.Vk.CreateImage( LogicalDevice, imageInfo, null, out image ).Verify();
 
 		var requirements = Apis.Vk.GetImageMemoryRequirements( LogicalDevice, image );
-
 		var allocateInfo = new MemoryAllocateInfo()
 		{
 			SType = StructureType.MemoryAllocateInfo,
@@ -675,11 +659,8 @@ internal sealed class LogicalGpu : IDisposable
 			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
 		};
 
-		if ( Apis.Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out imageMemory ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate image memory" );
-
-		if ( Apis.Vk.BindImageMemory( LogicalDevice, image, imageMemory, 0 ) != Result.Success )
-			throw new ApplicationException( "Failed to bind image memory" );
+		Apis.Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out imageMemory ).Verify();
+		Apis.Vk.BindImageMemory( LogicalDevice, image, imageMemory, 0 ).Verify();
 	}
 
 	private unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
@@ -700,9 +681,7 @@ internal sealed class LogicalGpu : IDisposable
 			}
 		};
 
-		if ( Apis.Vk.CreateImageView( LogicalDevice, viewInfo, null, out var imageView ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan texture image view" );
-
+		Apis.Vk.CreateImageView( LogicalDevice, viewInfo, null, out var imageView ).Verify();
 		return imageView;
 	}
 

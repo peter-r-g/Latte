@@ -93,15 +93,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		get
 		{
 			uint deviceCount;
-			if ( Vk.EnumeratePhysicalDevices( Instance, &deviceCount, null ) != Result.Success )
-				throw new ApplicationException( "Failed to enumerate Vulkan physical devices (1)" );
+			Vk.EnumeratePhysicalDevices( Instance, &deviceCount, null ).Verify();
 
 			if ( deviceCount == 0 )
 				return Array.Empty<Gpu>();
 
 			var devices = stackalloc PhysicalDevice[(int)deviceCount];
-			if ( Vk.EnumeratePhysicalDevices( Instance, &deviceCount, devices ) != Result.Success )
-				throw new ApplicationException( "Failed to enumerate Vulkan physical devices (2)" );
+			Vk.EnumeratePhysicalDevices( Instance, &deviceCount, devices ).Verify();
 
 			var gpus = new Gpu[(int)deviceCount];
 			for ( var i = 0; i < deviceCount; i++ )
@@ -169,8 +167,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	public void DrawFrame( double dt )
 	{
-		if ( Vk.WaitForFences( LogicalGpu, 1, InFlightFences[CurrentFrame], Vk.True, ulong.MaxValue ) != Result.Success )
-			throw new ApplicationException( "Failed to wait for in flight fence" );
+		Vk.WaitForFences( LogicalGpu, 1, InFlightFences[CurrentFrame], Vk.True, ulong.MaxValue ).Verify();
 
 		uint imageIndex;
 		var result = SwapchainExtension.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
@@ -187,11 +184,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				throw new ApplicationException( "Failed to acquire next image in the swap chain" );
 		}
 
-		if ( Vk.ResetFences( LogicalGpu, 1, InFlightFences[CurrentFrame] ) != Result.Success )
-			throw new ApplicationException( "Failed to reset in flight fence" );
-
-		if ( Vk.ResetCommandBuffer( CommandBuffers[CurrentFrame], 0 ) != Result.Success )
-			throw new ApplicationException( "Failed to reset the command buffer" );
+		Vk.ResetFences( LogicalGpu, 1, InFlightFences[CurrentFrame] ).Verify();
+		Vk.ResetCommandBuffer( CommandBuffers[CurrentFrame], 0 ).Verify();
 
 		UpdateUniformBuffer( CurrentFrame );
 
@@ -222,8 +216,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		submitInfo.SignalSemaphoreCount = (uint)signalSemaphoreCount;
 		submitInfo.PSignalSemaphores = signalSemaphores;
 
-		if ( Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, InFlightFences[CurrentFrame] ) != Result.Success )
-			throw new ApplicationException( "Failed to submit command buffers to graphics queue" );
+		Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, InFlightFences[CurrentFrame] ).Verify();
 
 		var swapchainCount = 1;
 		SwapchainKHR* swapchains = stackalloc SwapchainKHR[swapchainCount];
@@ -347,8 +340,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			CommandPool = CommandPool
 		};
 
-		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate command buffer for one time use" );
+		Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ).Verify();
 
 		var beginInfo = new CommandBufferBeginInfo
 		{
@@ -356,16 +348,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			Flags = CommandBufferUsageFlags.OneTimeSubmitBit
 		};
 
-		if ( Vk.BeginCommandBuffer( commandBuffer, beginInfo ) != Result.Success )
-			throw new ApplicationException( "Failed to begin command buffer for one time use" );
-
+		Vk.BeginCommandBuffer( commandBuffer, beginInfo ).Verify();
 		return commandBuffer;
 	}
 
 	internal void EndOneTimeCommands( in CommandBuffer commandBuffer )
 	{
-		if ( Vk.EndCommandBuffer( commandBuffer ) != Result.Success )
-			throw new ApplicationException( "Failed to end command buffer for one time use" );
+		Vk.EndCommandBuffer( commandBuffer ).Verify();
 
 		var commandBuffers = stackalloc CommandBuffer[]
 		{
@@ -378,12 +367,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PCommandBuffers = commandBuffers
 		};
 
-		if ( Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ) != Result.Success )
-			throw new ApplicationException( "Failed to submit command buffer to queue for one time use" );
-
-		if ( Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ) != Result.Success )
-			throw new ApplicationException( "Failed to wait for queue to idle for one time use" );
-
+		Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ).Verify();
+		Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ).Verify();
 		Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
 	}
 
@@ -520,8 +505,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			SType = StructureType.CommandBufferBeginInfo
 		};
 
-		if ( Vk.BeginCommandBuffer( commandBuffer, beginInfo ) != Result.Success )
-			throw new ApplicationException( "Failed to start recording a command buffer" );
+		Vk.BeginCommandBuffer( commandBuffer, beginInfo ).Verify();
 
 		var renderPassInfo = new RenderPassBeginInfo
 		{
@@ -585,9 +569,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		}
 
 		Vk.CmdEndRenderPass( commandBuffer );
-
-		if ( Vk.EndCommandBuffer( commandBuffer ) != Result.Success )
-			throw new ApplicationException( "Failed to record command buffer" );
+		Vk.EndCommandBuffer( commandBuffer ).Verify();
 	}
 
 	#region Initialization stages
@@ -766,9 +748,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			MaxSets = MaxFramesInFlight
 		};
 
-		if ( Vk.CreateDescriptorPool( LogicalGpu, poolInfo, null, out var descriptorPool ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan descriptor pool" );
-
+		Vk.CreateDescriptorPool( LogicalGpu, poolInfo, null, out var descriptorPool ).Verify();
 		DescriptorPool = descriptorPool;
 	}
 
@@ -784,8 +764,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			CommandBufferCount = MaxFramesInFlight
 		};
 
-		if ( Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, commandBuffers ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan command buffers" );
+		Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, commandBuffers ).Verify();
 
 		CommandBuffers = new CommandBuffer[MaxFramesInFlight];
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
@@ -811,10 +790,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			if ( Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var imageAvailableSemaphore ) != Result.Success ||
-				Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var renderFinishedSemaphore ) != Result.Success ||
-				Vk.CreateFence( LogicalGpu, fenceInfo, null, out var inFlightFence ) != Result.Success )
-				throw new ApplicationException( "Failed to create Vulkan synchronization objects" );
+			Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var imageAvailableSemaphore ).Verify();
+			Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var renderFinishedSemaphore ).Verify();
+			Vk.CreateFence( LogicalGpu, fenceInfo, null, out var inFlightFence ).Verify();
 
 			ImageAvailableSemaphores[i] = imageAvailableSemaphore;
 			RenderFinishedSemaphores[i] = renderFinishedSemaphore;

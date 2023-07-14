@@ -1,4 +1,5 @@
-﻿using Silk.NET.Core.Native;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
@@ -87,8 +88,7 @@ internal sealed class Gpu : IDisposable
 			else
 				deviceCreateInfo.EnabledLayerCount = 0;
 
-			if ( Apis.Vk.CreateDevice( PhysicalDevice, deviceCreateInfo, null, out var logicalDevice ) != Result.Success )
-				throw new ApplicationException( "Failed to create logical Vulkan device" );
+			Apis.Vk.CreateDevice( PhysicalDevice, deviceCreateInfo, null, out var logicalDevice ).Verify();
 
 			var logicalGpu = new LogicalGpu( logicalDevice, this, familyIndices );
 			logicalGpus.Add( logicalGpu );
@@ -103,12 +103,10 @@ internal sealed class Gpu : IDisposable
 	internal unsafe bool SupportsExtensions( params string[] extensions )
 	{
 		uint extensionCount;
-		if ( Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan device extensions (1)" );
+		Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, null ).Verify();
 
 		var availableExtensions = stackalloc ExtensionProperties[(int)extensionCount];
-		if ( Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, availableExtensions ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan device extensions (2)" );
+		Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, availableExtensions ).Verify();
 
 		var matches = 0;
 		for ( var i = 0; i < extensionCount; i++ )
@@ -160,32 +158,23 @@ internal sealed class Gpu : IDisposable
 
 		var surfaceExtension = Instance.SurfaceExtension;
 		var surface = Instance.Surface;
-		if ( surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( PhysicalDevice, surface, out var capabilities ) != Result.Success )
-			throw new ApplicationException( "Failed to query physical device surface capabilities" );
+		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( PhysicalDevice, surface, out var capabilities ).Verify();
 		details.Capabilities = capabilities;
 
 		uint formatCount;
-		if ( surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to query physical device surface formats (1)" );
+		surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, null ).Verify();
 
 		var formats = new SurfaceFormatKHR[formatCount];
 		fixed ( SurfaceFormatKHR* formatsPtr = formats )
-		{
-			if ( surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, formatsPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to query physical device surface formats (2)" );
-		}
+			surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, formatsPtr ).Verify();
 		details.Formats = formats;
 
 		uint presentModeCount;
-		if ( surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to query physical device present modes (1)" );
+		surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, null ).Verify();
 
 		var presentModes = new PresentModeKHR[presentModeCount];
 		fixed ( PresentModeKHR* presentModesPtr = presentModes )
-		{
-			if ( surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, presentModesPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to query physical device present modes (2)" );
-		}
+			surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, presentModesPtr ).Verify();
 		details.PresentModes = presentModes;
 
 		return details;

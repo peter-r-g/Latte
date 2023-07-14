@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System;
 using Silk.NET.Windowing;
 using System.Collections.Generic;
+using Latte.Windowing.Extensions;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -63,21 +64,17 @@ internal unsafe sealed class VulkanInstance
 		else
 			createInfo.EnabledLayerCount = 0;
 
-		if ( Apis.Vk.CreateInstance( createInfo, null, out var instance ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan instance" );
-
+		Apis.Vk.CreateInstance( createInfo, null, out var instance ).Verify();
 		Instance = instance;
 
-		if ( enableValidationLayers &&
-			!Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtilsExtension ) )
+		if ( enableValidationLayers && !Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtilsExtension ) )
 		{
 			DebugUtilsExtension = debugUtilsExtension;
 
 			var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
 			PopulateDebugMessengerCreateInfo( ref debugCreateInfo );
-			if ( debugUtilsExtension.CreateDebugUtilsMessenger( instance, &debugCreateInfo, null, out var debugMessenger ) != Result.Success )
-				throw new ApplicationException( "Failed to setup Vulkan debug messenger" );
 
+			debugUtilsExtension.CreateDebugUtilsMessenger( instance, &debugCreateInfo, null, out var debugMessenger ).Verify();
 			DebugMessenger = debugMessenger;
 		}
 
@@ -97,15 +94,11 @@ internal unsafe sealed class VulkanInstance
 	private bool CheckValidationLayerSupport( IEnumerable<string> validationLayers )
 	{
 		uint layerCount = 0;
-		if ( Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan layer properties (1)" );
+		Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, null ).Verify();
 
 		var availableLayers = new LayerProperties[layerCount];
 		fixed ( LayerProperties* availableLayersPtr = availableLayers )
-		{
-			if ( Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, availableLayersPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to enumerate Vulkan layer properties (2)" );
-		}
+			Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, availableLayersPtr ).Verify();
 
 		foreach ( var layerName in validationLayers )
 		{

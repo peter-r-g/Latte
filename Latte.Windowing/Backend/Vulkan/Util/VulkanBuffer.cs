@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Vulkan;
 using System;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
@@ -33,9 +34,7 @@ internal sealed class VulkanBuffer : IDisposable
 			throw new ObjectDisposedException( nameof( VulkanBuffer ) );
 
 		void* dataPtr;
-		if ( Apis.Vk.MapMemory( Owner, Memory, offset, Size, 0, &dataPtr ) != Result.Success )
-			throw new ApplicationException( "Failed to map buffer memory" );
-
+		Apis.Vk.MapMemory( Owner, Memory, offset, Size, 0, &dataPtr ).Verify();
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
 		Apis.Vk.UnmapMemory( Owner, Memory );
 	}
@@ -71,8 +70,7 @@ internal sealed class VulkanBuffer : IDisposable
 			SharingMode = sharingMode
 		};
 
-		if ( Apis.Vk.CreateBuffer( logicalGpu, bufferInfo, null, out var buffer ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan buffer" );
+		Apis.Vk.CreateBuffer( logicalGpu, bufferInfo, null, out var buffer ).Verify();
 
 		var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalGpu, buffer );
 		var allocateInfo = new MemoryAllocateInfo
@@ -82,11 +80,8 @@ internal sealed class VulkanBuffer : IDisposable
 			MemoryTypeIndex = logicalGpu.FindMemoryType( requirements.MemoryTypeBits, memoryFlags )
 		};
 
-		if ( Apis.Vk.AllocateMemory( logicalGpu, allocateInfo, null, out var bufferMemory ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate Vulkan buffer memory" );
-
-		if ( Apis.Vk.BindBufferMemory( logicalGpu, buffer, bufferMemory, 0 ) != Result.Success )
-			throw new ApplicationException( "Failed to bind buffer memory to buffer" );
+		Apis.Vk.AllocateMemory( logicalGpu, allocateInfo, null, out var bufferMemory ).Verify();
+		Apis.Vk.BindBufferMemory( logicalGpu, buffer, bufferMemory, 0 ).Verify();
 
 		var vulkanBuffer = new VulkanBuffer( buffer, bufferMemory, size, logicalGpu );
 		logicalGpu.DisposeQueue.Enqueue( vulkanBuffer.Dispose );
