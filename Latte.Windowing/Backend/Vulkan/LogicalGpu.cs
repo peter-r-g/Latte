@@ -22,7 +22,8 @@ internal sealed class LogicalGpu : IDisposable
 	internal Queue GraphicsQueue { get; }
 	internal Queue PresentQueue { get; }
 
-	private ConcurrentQueue<Action> DisposeQueue { get; } = new();
+	internal ConcurrentQueue<Action> DisposeQueue { get; } = new();
+
 	private ConcurrentDictionary<Shader, ShaderPackage> ShaderCache { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<Vertex>> MeshVertexBuffers { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
@@ -455,37 +456,10 @@ internal sealed class LogicalGpu : IDisposable
 		return commandPool;
 	}
 
-	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags )
+	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
+		SharingMode sharingMode = SharingMode.Exclusive )
 	{
-		var bufferInfo = new BufferCreateInfo
-		{
-			SType = StructureType.BufferCreateInfo,
-			Size = size,
-			Usage = usageFlags,
-			SharingMode = SharingMode.Exclusive
-		};
-
-		if ( Apis.Vk.CreateBuffer( LogicalDevice, bufferInfo, null, out var buffer ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan buffer" );
-
-		var requirements = Apis.Vk.GetBufferMemoryRequirements( LogicalDevice, buffer );
-
-		var allocateInfo = new MemoryAllocateInfo
-		{
-			SType = StructureType.MemoryAllocateInfo,
-			AllocationSize = requirements.Size,
-			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
-		};
-
-		if ( Apis.Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out var bufferMemory ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate Vulkan buffer memory" );
-
-		if ( Apis.Vk.BindBufferMemory( LogicalDevice, buffer, bufferMemory, 0 ) != Result.Success )
-			throw new ApplicationException( "Failed to bind buffer memory to buffer" );
-
-		var vulkanBuffer = new VulkanBuffer( buffer, bufferMemory, size, this );
-		DisposeQueue.Enqueue( vulkanBuffer.Dispose );
-		return vulkanBuffer;
+		return VulkanBuffer.New( this, size, usageFlags, memoryFlags, sharingMode );
 	}
 
 	internal unsafe VulkanImage CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
@@ -633,6 +607,18 @@ internal sealed class LogicalGpu : IDisposable
 		return descriptorSets;
 	}
 
+	internal uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
+	{
+		var memoryProperties = Gpu.MemoryProperties;
+		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
+		{
+			if ( (typeFilter & (1 << i)) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
+				return (uint)i;
+		}
+
+		throw new ApplicationException( "Failed to find suitable memory type" );
+	}
+
 	private unsafe ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
 	{
 		var createInfo = new ShaderModuleCreateInfo
@@ -718,18 +704,6 @@ internal sealed class LogicalGpu : IDisposable
 			throw new ApplicationException( "Failed to create Vulkan texture image view" );
 
 		return imageView;
-	}
-
-	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
-	{
-		var memoryProperties = Gpu.MemoryProperties;
-		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
-		{
-			if ( (typeFilter & (1 << i)) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
-				return (uint)i;
-		}
-
-		throw new ApplicationException( "Failed to find suitable memory type" );
 	}
 
 	private Format FindSupportedFormat( IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features )
