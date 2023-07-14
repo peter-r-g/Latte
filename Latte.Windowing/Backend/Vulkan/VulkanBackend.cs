@@ -395,47 +395,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		OptionsApplied?.Invoke( this );
 	}
 
-	internal CommandBuffer BeginOneTimeCommands()
-	{
-		var allocateInfo = new CommandBufferAllocateInfo
-		{
-			SType = StructureType.CommandBufferAllocateInfo,
-			Level = CommandBufferLevel.Primary,
-			CommandBufferCount = 1,
-			CommandPool = CommandPool
-		};
-
-		Apis.Vk.AllocateCommandBuffers( LogicalGpu, allocateInfo, out var commandBuffer ).Verify();
-
-		var beginInfo = new CommandBufferBeginInfo
-		{
-			SType = StructureType.CommandBufferBeginInfo,
-			Flags = CommandBufferUsageFlags.OneTimeSubmitBit
-		};
-
-		Apis.Vk.BeginCommandBuffer( commandBuffer, beginInfo ).Verify();
-		return commandBuffer;
-	}
-
-	internal void EndOneTimeCommands( in CommandBuffer commandBuffer )
-	{
-		Apis.Vk.EndCommandBuffer( commandBuffer ).Verify();
-
-		fixed( CommandBuffer* commandBufferPtr = &commandBuffer )
-		{
-			var submitInfo = new SubmitInfo
-			{
-				SType = StructureType.SubmitInfo,
-				CommandBufferCount = 1,
-				PCommandBuffers = commandBufferPtr
-			};
-
-			Apis.Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, default ).Verify();
-			Apis.Vk.QueueWaitIdle( LogicalGpu.GraphicsQueue ).Verify();
-			Apis.Vk.FreeCommandBuffers( LogicalGpu, CommandPool, 1, commandBuffer );
-		}
-	}
-
 	internal VulkanBuffer GetCPUBuffer( ulong size, BufferUsageFlags usageFlags )
 	{
 		return LogicalGpu.CreateBuffer( size, usageFlags, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
@@ -677,12 +636,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit,
 			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.DepthBit );
 
-		var commandBuffer = BeginOneTimeCommands();
-
+		using var commandBuffer = LogicalGpu.BeginOneTimeCommands();
 		DepthImage.TransitionImageLayout( commandBuffer, depthFormat,
 			ImageLayout.Undefined, ImageLayout.DepthStencilAttachmentOptimal, 1 );
-
-		EndOneTimeCommands( commandBuffer );
 	}
 
 	private void CreateFrameBuffers()
@@ -824,7 +780,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CopyBuffer( in Buffer srcBuffer, in Buffer dstBuffer, ulong size )
 	{
-		var commandBuffer = BeginOneTimeCommands();
+		using var commandBuffer = LogicalGpu.BeginOneTimeCommands();
 
 		var copyRegion = new BufferCopy
 		{
@@ -832,8 +788,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		};
 
 		Apis.Vk.CmdCopyBuffer( commandBuffer, srcBuffer, dstBuffer, 1, copyRegion );
-
-		EndOneTimeCommands( commandBuffer );
 	}
 	#endregion
 	#endregion

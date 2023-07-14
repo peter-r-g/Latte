@@ -22,6 +22,8 @@ internal sealed class LogicalGpu : IDisposable
 
 	internal ConcurrentQueue<Action> DisposeQueue { get; } = new();
 
+	private CommandPool OneTimeCommandPool { get; }
+
 	private ConcurrentDictionary<Shader, ShaderPackage> ShaderCache { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<Vertex>> MeshVertexBuffers { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
@@ -38,6 +40,8 @@ internal sealed class LogicalGpu : IDisposable
 		Gpu = gpu;
 		GraphicsQueue = Apis.Vk.GetDeviceQueue( LogicalDevice, familyIndices.GraphicsFamily.Value, 0 );
 		PresentQueue = Apis.Vk.GetDeviceQueue( LogicalDevice, familyIndices.PresentFamily.Value, 0 );
+
+		OneTimeCommandPool = CreateCommandPool( familyIndices.GraphicsFamily.Value );
 	}
 
 	~LogicalGpu()
@@ -57,6 +61,46 @@ internal sealed class LogicalGpu : IDisposable
 
 		GC.SuppressFinalize( this );
 		disposed = true;
+	}
+
+	internal TemporaryCommandBuffer BeginOneTimeCommands()
+	{
+		var allocateInfo = new CommandBufferAllocateInfo
+		{
+			SType = StructureType.CommandBufferAllocateInfo,
+			Level = CommandBufferLevel.Primary,
+			CommandBufferCount = 1,
+			CommandPool = OneTimeCommandPool
+		};
+
+		Apis.Vk.AllocateCommandBuffers( LogicalDevice, allocateInfo, out var commandBuffer ).Verify();
+
+		var beginInfo = new CommandBufferBeginInfo
+		{
+			SType = StructureType.CommandBufferBeginInfo,
+			Flags = CommandBufferUsageFlags.OneTimeSubmitBit
+		};
+
+		Apis.Vk.BeginCommandBuffer( commandBuffer, beginInfo ).Verify();
+		return new TemporaryCommandBuffer( this, commandBuffer );
+	}
+
+	internal unsafe void EndOneTimeCommands( ref TemporaryCommandBuffer temporaryCommandBuffer )
+	{
+		temporaryCommandBuffer.Disposed = true;
+		var commandBuffer = temporaryCommandBuffer.CommandBuffer;
+		Apis.Vk.EndCommandBuffer( commandBuffer ).Verify();
+
+		var submitInfo = new SubmitInfo
+		{
+			SType = StructureType.SubmitInfo,
+			CommandBufferCount = 1,
+			PCommandBuffers = &commandBuffer
+		};
+
+		Apis.Vk.QueueSubmit( GraphicsQueue, 1, submitInfo, default ).Verify();
+		Apis.Vk.QueueWaitIdle( GraphicsQueue ).Verify();
+		Apis.Vk.FreeCommandBuffers( LogicalDevice, OneTimeCommandPool, 1, commandBuffer );
 	}
 
 	internal unsafe VulkanSwapchain CreateSwapchain()
@@ -627,11 +671,12 @@ internal sealed class LogicalGpu : IDisposable
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
 		stagingBuffer.SetMemory( texture.PixelData.Span );
 
-		var commandBuffer = vulkanBackend.BeginOneTimeCommands();
-		textureImage.TransitionImageLayout( commandBuffer, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, texture.MipLevels );
-		textureImage.CopyBufferToImage( commandBuffer, stagingBuffer, (uint)texture.Width, (uint)texture.Height );
-		textureImage.GenerateMipMaps( commandBuffer, Format.R8G8B8A8Srgb, (uint)texture.Width, (uint)texture.Height, texture.MipLevels );
-		vulkanBackend.EndOneTimeCommands( commandBuffer );
+		using ( var commandBuffer = BeginOneTimeCommands() )
+		{
+			textureImage.TransitionImageLayout( commandBuffer, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, texture.MipLevels );
+			textureImage.CopyBufferToImage( commandBuffer, stagingBuffer, (uint)texture.Width, (uint)texture.Height );
+			textureImage.GenerateMipMaps( commandBuffer, Format.R8G8B8A8Srgb, (uint)texture.Width, (uint)texture.Height, texture.MipLevels );
+		}
 
 		var descriptorWrites = stackalloc WriteDescriptorSet[2];
 		for ( var i = 0; i < VulkanBackend.MaxFramesInFlight; i++ )
