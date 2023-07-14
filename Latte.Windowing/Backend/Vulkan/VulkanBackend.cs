@@ -136,14 +136,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Window.FramebufferResize -= OnFrameBufferResize;
 
 		Gpu.Dispose();
-
-		if ( EnableValidationLayers && Instance.DebugUtilsExtension is not null )
-			Instance.DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, Instance.DebugMessenger, null );
-
-		Instance.SurfaceExtension.DestroySurface( Instance, Instance.Surface, null );
-		Apis.Vk.DestroyInstance( Instance, null );
-		// TODO: Don't dispose of the API here, dispose when whole program is exiting.
-		Apis.Vk.Dispose();
+		Instance.Dispose();
 	}
 
 	public void BeginFrame()

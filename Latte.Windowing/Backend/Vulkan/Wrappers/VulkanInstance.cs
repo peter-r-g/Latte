@@ -11,10 +11,11 @@ using Latte.Windowing.Extensions;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal unsafe sealed class VulkanInstance
+internal unsafe sealed class VulkanInstance : IDisposable
 {
 	internal IWindow Window { get; }
 	internal Instance Instance { get; }
+	internal bool ValidationLayersEnabled { get; }
 
 	internal ExtDebugUtils? DebugUtilsExtension { get; } = null!;
 	internal DebugUtilsMessengerEXT DebugMessenger { get; }
@@ -22,8 +23,11 @@ internal unsafe sealed class VulkanInstance
 	internal KhrSurface SurfaceExtension { get; } = null!;
 	internal SurfaceKHR Surface { get; }
 
+	private bool disposed;
+
 	internal VulkanInstance( IWindow window, bool enableValidationLayers, string[]? validationLayers = null )
 	{
+		ValidationLayersEnabled = enableValidationLayers;
 		if ( enableValidationLayers && (validationLayers is null || validationLayers.Length == 0) )
 			throw new ArgumentException( "No validation layers were passed", nameof(validationLayers) );
 
@@ -89,6 +93,26 @@ internal unsafe sealed class VulkanInstance
 		SilkMarshal.Free( (nint)createInfo.PpEnabledExtensionNames );
 		if ( enableValidationLayers )
 			SilkMarshal.Free( (nint)createInfo.PpEnabledLayerNames );
+	}
+
+	~VulkanInstance()
+	{
+		Dispose();
+	}
+
+	public void Dispose()
+	{
+		if ( disposed )
+			return;
+
+		if ( ValidationLayersEnabled && DebugUtilsExtension is not null )
+			DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null );
+
+		SurfaceExtension.DestroySurface( Instance, Surface, null );
+		Apis.Vk.DestroyInstance( Instance, null );
+
+		GC.SuppressFinalize( this );
+		disposed = true;
 	}
 
 	private bool CheckValidationLayerSupport( IEnumerable<string> validationLayers )
