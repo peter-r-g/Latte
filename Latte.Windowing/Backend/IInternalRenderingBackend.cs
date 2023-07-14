@@ -2,11 +2,9 @@
 
 internal interface IInternalRenderingBackend : IRenderingBackend
 {
-	delegate void RenderHandler( double dt );
-	event RenderHandler? Render;
-
 	void Inititalize();
 	void Cleanup();
-	void DrawFrame( double dt );
+	void BeginFrame();
+	void EndFrame();
 	void WaitForIdle();
 }

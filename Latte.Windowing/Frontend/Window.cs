@@ -77,7 +77,6 @@ public class Window : IDisposable
 		UnderlyingWindow.StateChanged += OnStateChanged;
 		UnderlyingWindow.FocusChanged += OnFocusChanged;
 		UnderlyingWindow.FileDrop += OnFileDrop;
-		InternalRenderer.Render += Render;
 
 		UnderlyingWindow.Initialize();
 		Input.Initialize();
@@ -200,7 +199,9 @@ public class Window : IDisposable
 	/// <param name="dt"></param>
 	private void RenderInternal( double dt )
 	{
-		InternalRenderer.DrawFrame( dt );
+		InternalRenderer.BeginFrame();
+		Render( dt );
+		InternalRenderer.EndFrame();
 	}
 
 	/// <inheritdoc/>
@@ -218,7 +219,6 @@ public class Window : IDisposable
 		UnderlyingWindow.StateChanged -= OnStateChanged;
 		UnderlyingWindow.FocusChanged -= OnFocusChanged;
 		UnderlyingWindow.FileDrop -= OnFileDrop;
-		InternalRenderer.Render -= Render;
 
 		InternalRenderer.WaitForIdle();
 		Unload();

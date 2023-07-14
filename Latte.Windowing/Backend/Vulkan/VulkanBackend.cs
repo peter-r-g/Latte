@@ -1,4 +1,5 @@
-﻿using Latte.Windowing.Extensions;
+﻿using Latte.Assets;
+using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
@@ -8,10 +9,9 @@ using Silk.NET.Windowing;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Zio;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
-using Latte.Assets;
-using Zio;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -21,7 +21,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	internal const int ExtraSwapImages = 1;
 
 	public IRenderingOptions Options { get; }
-	public event IInternalRenderingBackend.RenderHandler? Render;
 	public event IRenderingBackend.OptionsAppliedHandler? OptionsApplied;
 
 	private bool EnableValidationLayers { get; set; }
@@ -80,6 +79,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private bool HasFrameBufferResized { get; set; }
 
+	private uint CurrentImageIndex { get; set; }
 	private CommandBuffer CurrentCommandBuffer { get; set; }
 	private uint CurrentFrame { get; set; }
 	private Texture? CurrentTexture { get; set; }
@@ -164,12 +164,13 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Apis.Vk.Dispose();
 	}
 
-	public void DrawFrame( double dt )
+	public void BeginFrame()
 	{
 		Apis.Vk.WaitForFences( LogicalGpu, 1, InFlightFences[CurrentFrame], Vk.True, ulong.MaxValue ).Verify();
 
 		uint imageIndex;
 		var result = SwapchainExtension.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue, ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
+		CurrentImageIndex = imageIndex;
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -188,7 +189,74 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		UpdateUniformBuffer( CurrentFrame );
 
-		RecordCommandBuffer( CommandBuffers[CurrentFrame], imageIndex, dt );
+		CurrentCommandBuffer = CommandBuffers[CurrentFrame];
+
+		var beginInfo = new CommandBufferBeginInfo
+		{
+			SType = StructureType.CommandBufferBeginInfo
+		};
+
+		Apis.Vk.BeginCommandBuffer( CurrentCommandBuffer, beginInfo ).Verify();
+
+		var renderPassInfo = new RenderPassBeginInfo
+		{
+			SType = StructureType.RenderPassBeginInfo,
+			RenderPass = RenderPass,
+			Framebuffer = SwapchainFrameBuffers[imageIndex],
+			ClearValueCount = 1,
+			RenderArea =
+			{
+				Offset = { X = 0, Y = 0 },
+				Extent = SwapchainExtent
+			}
+		};
+
+		var clearValues = stackalloc ClearValue[]
+		{
+			new ClearValue( new ClearColorValue( 0.0f, 0.0f, 0.0f, 1.0f ) ),
+			new ClearValue( null, new ClearDepthStencilValue( 1, 0 ) )
+		};
+		renderPassInfo.ClearValueCount = 2;
+		renderPassInfo.PClearValues = clearValues;
+
+		Apis.Vk.CmdBeginRenderPass( CurrentCommandBuffer, renderPassInfo, SubpassContents.Inline );
+		Apis.Vk.CmdBindPipeline( CurrentCommandBuffer, PipelineBindPoint.Graphics, GraphicsPipeline );
+
+		var viewport = new Viewport()
+		{
+			X = 0,
+			Y = 0,
+			Width = SwapchainExtent.Width,
+			Height = SwapchainExtent.Height,
+			MinDepth = 0,
+			MaxDepth = 1
+		};
+		Apis.Vk.CmdSetViewport( CurrentCommandBuffer, 0, 1, viewport );
+
+		var scissor = new Rect2D()
+		{
+			Offset = new Offset2D( 0, 0 ),
+			Extent = SwapchainExtent
+		};
+		Apis.Vk.CmdSetScissor( CurrentCommandBuffer, 0, 1, scissor );
+
+		CurrentModelPosition = Vector3.Zero;
+		var defaultConstants = new PushConstants( Matrix4x4.CreateTranslation( CurrentModelPosition ) );
+		Apis.Vk.CmdPushConstants( CurrentCommandBuffer, PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
+
+		// TODO: Multiple textures crash Vulkan due to lack of descriptor set space.
+		//SetTexture( Texture.Missing );
+	}
+
+	public void EndFrame()
+	{
+		CurrentTexture = null;
+		CurrentIndexBuffer = default;
+		CurrentVertexBuffer = default;
+		CurrentModelPosition = default;
+
+		Apis.Vk.CmdEndRenderPass( CurrentCommandBuffer );
+		Apis.Vk.EndCommandBuffer( CurrentCommandBuffer ).Verify();
 
 		var submitInfo = new SubmitInfo
 		{
@@ -199,28 +267,35 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		waitStages[0] = PipelineStageFlags.ColorAttachmentOutputBit;
 		submitInfo.PWaitDstStageMask = waitStages;
 
-		var buffer = CommandBuffers[CurrentFrame];
+		var currentCommandBuffer = CurrentCommandBuffer;
 		submitInfo.CommandBufferCount = 1;
-		submitInfo.PCommandBuffers = &buffer;
+		submitInfo.PCommandBuffers = &currentCommandBuffer;
 
 		var waitSemaphoreCount = 1;
-		Semaphore* waitSemaphores = stackalloc Semaphore[waitSemaphoreCount];
-		waitSemaphores[0] = ImageAvailableSemaphores[CurrentFrame];
+		var waitSemaphores = stackalloc Semaphore[]
+		{
+			ImageAvailableSemaphores[CurrentFrame]
+		};
 		submitInfo.WaitSemaphoreCount = (uint)waitSemaphoreCount;
 		submitInfo.PWaitSemaphores = waitSemaphores;
 
 		var signalSemaphoreCount = 1;
-		Semaphore* signalSemaphores = stackalloc Semaphore[signalSemaphoreCount];
-		signalSemaphores[0] = RenderFinishedSemaphores[CurrentFrame];
+		var signalSemaphores = stackalloc Semaphore[]
+		{
+			RenderFinishedSemaphores[CurrentFrame]
+		};
 		submitInfo.SignalSemaphoreCount = (uint)signalSemaphoreCount;
 		submitInfo.PSignalSemaphores = signalSemaphores;
 
 		Apis.Vk.QueueSubmit( LogicalGpu.GraphicsQueue, 1, submitInfo, InFlightFences[CurrentFrame] ).Verify();
 
 		var swapchainCount = 1;
-		SwapchainKHR* swapchains = stackalloc SwapchainKHR[swapchainCount];
-		swapchains[0] = Swapchain;
+		var swapchains = stackalloc SwapchainKHR[]
+		{
+			Swapchain
+		};
 
+		var currentImageIndex = CurrentImageIndex;
 		var presentInfo = new PresentInfoKHR
 		{
 			SType = StructureType.PresentInfoKhr,
@@ -228,10 +303,10 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			PWaitSemaphores = signalSemaphores,
 			SwapchainCount = (uint)swapchainCount,
 			PSwapchains = swapchains,
-			PImageIndices = &imageIndex
+			PImageIndices = &currentImageIndex
 		};
 
-		result = SwapchainExtension.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
+		var result = SwapchainExtension.QueuePresent( LogicalGpu.PresentQueue, presentInfo );
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -245,6 +320,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				throw new ApplicationException( "Failed to present queue" );
 		}
 
+		CurrentCommandBuffer = default;
 		CurrentFrame = (CurrentFrame + 1) % MaxFramesInFlight;
 	}
 
@@ -495,80 +571,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			ubo
 		};
 		UniformBuffers[currentImage].SetMemory<UniformBufferObject>( data );
-	}
-
-	private void RecordCommandBuffer( in CommandBuffer commandBuffer, uint imageIndex, double dt )
-	{
-		var beginInfo = new CommandBufferBeginInfo
-		{
-			SType = StructureType.CommandBufferBeginInfo
-		};
-
-		Apis.Vk.BeginCommandBuffer( commandBuffer, beginInfo ).Verify();
-
-		var renderPassInfo = new RenderPassBeginInfo
-		{
-			SType = StructureType.RenderPassBeginInfo,
-			RenderPass = RenderPass,
-			Framebuffer = SwapchainFrameBuffers[imageIndex],
-			ClearValueCount = 1,
-			RenderArea =
-			{
-				Offset = { X = 0, Y = 0 },
-				Extent = SwapchainExtent
-			}
-		};
-
-		var clearValues = stackalloc ClearValue[]
-		{
-			new ClearValue( new ClearColorValue( 0.0f, 0.0f, 0.0f, 1.0f ) ),
-			new ClearValue( null, new ClearDepthStencilValue( 1, 0 ) )
-		};
-		renderPassInfo.ClearValueCount = 2;
-		renderPassInfo.PClearValues = clearValues;
-
-		Apis.Vk.CmdBeginRenderPass( commandBuffer, renderPassInfo, SubpassContents.Inline );
-		Apis.Vk.CmdBindPipeline( commandBuffer, PipelineBindPoint.Graphics, GraphicsPipeline );
-
-		var viewport = new Viewport()
-		{
-			X = 0,
-			Y = 0,
-			Width = SwapchainExtent.Width,
-			Height = SwapchainExtent.Height,
-			MinDepth = 0,
-			MaxDepth = 1
-		};
-		Apis.Vk.CmdSetViewport( commandBuffer, 0, 1, viewport );
-
-		var scissor = new Rect2D()
-		{
-			Offset = new Offset2D( 0, 0 ),
-			Extent = SwapchainExtent
-		};
-		Apis.Vk.CmdSetScissor( commandBuffer, 0, 1, scissor );
-
-		// User level drawing
-		{
-			CurrentModelPosition = Vector3.Zero;
-			var defaultConstants = new PushConstants( Matrix4x4.CreateTranslation( CurrentModelPosition ) );
-			Apis.Vk.CmdPushConstants( commandBuffer, PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
-			CurrentCommandBuffer = commandBuffer;
-
-			// TODO: Multiple textures crash Vulkan due to lack of descriptor set space.
-			//SetTexture( Texture.Missing );
-
-			Render?.Invoke( dt );
-
-			CurrentTexture = null;
-			CurrentIndexBuffer = default;
-			CurrentVertexBuffer = default;
-			CurrentCommandBuffer = default;
-			CurrentModelPosition = default;
-		}
-
-		Apis.Vk.CmdEndRenderPass( commandBuffer );
-		Apis.Vk.EndCommandBuffer( commandBuffer ).Verify();
 	}
 
 	#region Initialization stages
