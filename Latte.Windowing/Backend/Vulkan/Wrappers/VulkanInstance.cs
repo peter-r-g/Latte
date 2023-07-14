@@ -117,7 +117,8 @@ internal unsafe sealed class VulkanInstance
 			if ( layerFound )
 				continue;
 
-			Console.WriteLine( $"ERROR: Failed to find Vulkan validation layer \"{layerName}\"" );
+			if ( Loggers.Vulkan.IsEnabled( Logging.LogLevel.Error ) )
+				Loggers.Vulkan.Error( $"Failed to find Vulkan validation layer \"{layerName}\"" );
 			return false;
 		}
 
@@ -161,7 +162,26 @@ internal unsafe sealed class VulkanInstance
 		DebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData )
 	{
-		Console.WriteLine( $"VULKAN: {Marshal.PtrToStringAnsi( (nint)pCallbackData->PMessage )}" );
+		var message = Marshal.PtrToStringAnsi( (nint)pCallbackData->PMessage );
+		if ( message is null )
+			return Vk.False;
+
+		switch ( messageSeverity )
+		{
+			case DebugUtilsMessageSeverityFlagsEXT.None:
+			case DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt:
+				Loggers.Vulkan.Verbose( message );
+				break;
+			case DebugUtilsMessageSeverityFlagsEXT.InfoBitExt:
+				Loggers.Vulkan.Information( message );
+				break;
+			case DebugUtilsMessageSeverityFlagsEXT.WarningBitExt:
+				Loggers.Vulkan.Warning( message );
+				break;
+			case DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt:
+				Loggers.Vulkan.Error( message );
+				break;
+		}
 
 		return Vk.False;
 	}
