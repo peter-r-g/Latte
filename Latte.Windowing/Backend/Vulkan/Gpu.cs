@@ -14,8 +14,8 @@ internal sealed class Gpu : IDisposable
 	internal VulkanInstance Instance { get; }
 	internal PhysicalDevice PhysicalDevice { get; }
 
-	internal IReadOnlyList<LogicalGpu> LogicalGpus => logicalGpus;
-	private readonly List<LogicalGpu> logicalGpus = new();
+	internal IReadOnlyCollection<LogicalGpu> LogicalGpus => logicalGpus;
+	private readonly ConcurrentBag<LogicalGpu> logicalGpus = new();
 
 	internal PhysicalDeviceFeatures Features { get; }
 	internal PhysicalDeviceProperties Properties { get; }
