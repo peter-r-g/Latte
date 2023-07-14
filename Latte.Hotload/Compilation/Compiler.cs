@@ -10,6 +10,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -75,6 +76,8 @@ internal static class Compiler
 
 		"System.Xml.ReaderWriter.dll" );
 
+	private static ConcurrentHashSet<string> CompilingProjects { get; } = new();
+
 	private static ConcurrentDictionary<string, ConcurrentHashSet<PortableExecutableReference>> AssemblyReferences { get; } = new();
 	private static ConcurrentDictionary<string, AdhocWorkspace> AssemblyWorkspaces { get; } = new();
 	private static ConcurrentDictionary<string, PortableExecutableReference> ReferenceCache { get; } = new();
@@ -92,6 +95,7 @@ internal static class Compiler
 			throw new ArgumentException( $"The assembly \"{assemblyInfo.Name}\" cannot be compiled", nameof( assemblyInfo ) );
 
 		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+		using var __ = new CompilePeg( assemblyInfo.Name );
 		compileOptions ??= CompileOptions.Default;
 
 		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
@@ -176,18 +180,29 @@ internal static class Compiler
 					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
 						Loggers.Compiler.Verbose( "Adding project reference: " + projectAssemblyName );
 
-					if ( HotloadableAssembly.All.ContainsKey( projectAssemblyName ) || projectReference.Contains( "Latte.Hotload" ) )
+					if ( ReferenceCache.ContainsKey( projectAssemblyName ) || projectReference.Contains( "Latte.Hotload" ) )
 						continue;
 
-					if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
-						Loggers.Compiler.Verbose( "Starting on-demand hotload of " + projectAssemblyName );
-
-					var projectAssembly = HotloadableAssembly.New( new AssemblyInfo
+					if ( !CompilingProjects.Contains( projectAssemblyName ) )
 					{
-						Name = projectAssemblyName,
-						ProjectPath = Path.GetDirectoryName( projectReference )
-					} );
-					projectTasks.Add( projectAssembly.InitAsync() );
+						if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
+							Loggers.Compiler.Verbose( "Starting on-demand hotload of " + projectAssemblyName );
+
+						var projectAssembly = HotloadableAssembly.New( new AssemblyInfo
+						{
+							Name = projectAssemblyName,
+							ProjectPath = Path.GetDirectoryName( projectReference )
+						} );
+						projectTasks.Add( projectAssembly.InitAsync() );
+					}
+					else
+					{
+						projectTasks.Add( Task.Run( async () =>
+						{
+							while ( CompilingProjects.Contains( projectAssemblyName ) )
+								await Task.Delay( 1 );
+						} ) );
+					}
 				}
 
 				await Task.WhenAll( projectTasks );
@@ -195,10 +210,11 @@ internal static class Compiler
 				foreach ( var projectReference in csproj.ProjectReferences )
 				{
 					var projectAssemblyName = Path.GetFileNameWithoutExtension( projectReference );
+
 					if ( projectReference.Contains( "Latte.Hotload" ) )
 						references.TryAdd( CreateMetadataReferenceFromPath( "Latte.Hotload.dll" ) );
 					else
-						references.TryAdd( CreateMetadataReferenceFromPath( projectReference ) );
+						references.TryAdd( ReferenceCache[projectAssemblyName] );
 
 					if ( AssemblyReferences.TryGetValue( projectAssemblyName, out var projectsReferences ) )
 						references.AddRange( projectsReferences );
@@ -293,6 +309,7 @@ internal static class Compiler
 	internal static async Task<CompileResult> IncrementalCompileAsync( AssemblyInfo assemblyInfo, IReadOnlyDictionary<string, WatcherChangeTypes> changedFilePaths, CompileOptions? compileOptions = null )
 	{
 		using var _ = new ScopedTimingLogger( Loggers.Compiler );
+		using var __ = new CompilePeg( assemblyInfo.Name );
 		compileOptions ??= CompileOptions.Default;
 
 		if ( Loggers.Compiler.IsEnabled( LogLevel.Verbose ) )
@@ -472,5 +489,22 @@ internal static class Compiler
 		var newReference = MetadataReference.CreateFromStream( assemblyStream );
 		ReferenceCache.AddOrUpdate( assemblyName, newReference, ( key, val ) => val );
 		return newReference;
+	}
+
+	private readonly struct CompilePeg : IDisposable
+	{
+		internal required string AssemblyName { get; init; }
+
+		[SetsRequiredMembers]
+		internal CompilePeg( string assemblyName )
+		{
+			AssemblyName = assemblyName;
+			CompilingProjects.TryAdd( AssemblyName );
+		}
+
+		public void Dispose()
+		{
+			CompilingProjects.TryRemove( AssemblyName );
+		}
 	}
 }

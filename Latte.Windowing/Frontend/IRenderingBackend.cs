@@ -1,4 +1,4 @@
-﻿using Latte.Windowing.Assets;
+﻿using Latte.Assets;
 using Latte.Windowing.Options;
 using System.Numerics;
 
@@ -19,6 +19,12 @@ public interface IRenderingBackend
 	/// An event that is invoked once the rendering API has applied all changed options.
 	/// </summary>
 	event OptionsAppliedHandler? OptionsApplied;
+
+	/// <summary>
+	/// Sets the current texture to draw in future renderer calls.
+	/// </summary>
+	/// <param name="texture">The texture to set.</param>
+	void SetTexture( Texture texture );
 
 	/// <summary>
 	/// Draws a model at <see cref="Vector3.Zero"/> in world co-ordinates.

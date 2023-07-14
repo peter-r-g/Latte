@@ -1,23 +1,25 @@
-﻿using Latte.Windowing.Assets;
-using Latte.Windowing.Extensions;
+﻿using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
-using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.IO;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using Semaphore = Silk.NET.Vulkan.Semaphore;
+using Latte.Assets;
+using Zio;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal unsafe class VulkanBackend : IInternalRenderingBackend
 {
+	public const uint MaxFramesInFlight = 2;
+	private const uint ExtraSwapImages = 1;
+
 	public IRenderingOptions Options { get; }
 	public event IInternalRenderingBackend.RenderHandler? Render;
 	public event IRenderingBackend.OptionsAppliedHandler? OptionsApplied;
@@ -31,8 +33,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	{
 		KhrSwapchain.ExtensionName
 	};
-	private const uint ExtraSwapImages = 1;
-	private const uint MaxFramesInFlight = 2;
 
 	private static Vk Vk => Apis.Vk;
 	private static bool StaticInitialized { get; set; }
@@ -65,14 +65,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
 	private Dictionary<BufferUsageFlags, List<ulong>> GpuBuffersOffsets { get; } = new();
 	private DescriptorPool DescriptorPool { get; set; }
-	private DescriptorSet[] DescriptorSets { get; set; } = Array.Empty<DescriptorSet>();
 	private CommandBuffer[] CommandBuffers { get; set; } = Array.Empty<CommandBuffer>();
-
-	private uint MipLevels { get; set; }
-	private Image TextureImage { get; set; }
-	private DeviceMemory TextureImageMemory { get; set; }
-	private ImageView TextureImageView { get; set; }
-	private Sampler TextureSampler { get; set; }
 
 	private VulkanImage DepthImage { get; set; } = null!;
 	private DeviceMemory DepthImageMemory => DepthImage.Memory;
@@ -90,6 +83,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private CommandBuffer CurrentCommandBuffer { get; set; }
 	private uint CurrentFrame { get; set; }
+	private Texture? CurrentTexture { get; set; }
 	private Vector3 CurrentModelPosition { get; set; }
 	private Buffer CurrentVertexBuffer { get; set; }
 	private Buffer CurrentIndexBuffer { get; set; }
@@ -149,12 +143,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		CreateColorResources();
 		CreateDepthResources();
 		CreateFrameBuffers();
-		CreateTextureImage();
-		CreateTextureImageView();
-		CreateTextureSampler();
 		CreateUniformBuffers();
 		CreateDescriptorPool();
-		CreateDescriptorSets();
 		CreateCommandBuffer();
 		CreateSyncObjects();
 
@@ -271,6 +261,16 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Vk.DeviceWaitIdle( LogicalGpu );
 	}
 
+	public void SetTexture( Texture texture )
+	{
+		if ( texture == CurrentTexture )
+			return;
+
+		CurrentTexture = texture;
+		var descriptorSets = LogicalGpu.GetTextureDescriptorSets( this, texture, DescriptorSetLayout, DescriptorPool, UniformBuffers, Options.Msaa.ToVulkan() );
+		Vk.CmdBindDescriptorSets( CurrentCommandBuffer, PipelineBindPoint.Graphics, PipelineLayout, 0, 1, descriptorSets[CurrentFrame], 0, null );
+	}
+
 	public void DrawModel( Model model ) => DrawModel( model, Vector3.Zero );
 	public void DrawModel( Model model, in Vector3 position )
 	{
@@ -283,19 +283,18 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		var vertexBuffers = stackalloc Buffer[1];
 		foreach ( var mesh in model.Meshes )
 		{
-			if ( mesh.VulkanVertexBuffer is null )
-				throw new NullReferenceException( "Models mesh vertex buffer is null. Was this model created with the Vulkan backend?" );
+			LogicalGpu.GetMeshGpuBuffers( this, mesh, out var gpuVertexBuffer, out var gpuIndexBuffer );
 
-			if ( mesh.VulkanVertexBuffer.Buffer.Handle != CurrentVertexBuffer.Handle )
+			if ( gpuVertexBuffer.Buffer.Handle != CurrentVertexBuffer.Handle )
 			{
-				var newVertexBuffer = mesh.VulkanVertexBuffer;
+				var newVertexBuffer = gpuVertexBuffer;
 				vertexBuffers[0] = newVertexBuffer.Buffer;
 				Vk.CmdBindVertexBuffers( CurrentCommandBuffer, 0, 1, vertexBuffers, newVertexBuffer.Offset );
 				CurrentVertexBuffer = newVertexBuffer.Buffer;
 			}
-			if ( mesh.VulkanIndexBuffer is not null && mesh.VulkanIndexBuffer.Buffer.Handle != CurrentIndexBuffer.Handle )
+			if ( gpuIndexBuffer is not null && gpuIndexBuffer.Buffer.Handle != CurrentIndexBuffer.Handle )
 			{
-				var newIndexBuffer = mesh.VulkanIndexBuffer;
+				var newIndexBuffer = gpuIndexBuffer;
 				Vk.CmdBindIndexBuffer( CurrentCommandBuffer, newIndexBuffer.Buffer, newIndexBuffer.Offset, IndexType.Uint32 );
 				CurrentIndexBuffer = newIndexBuffer.Buffer;
 			}
@@ -314,7 +313,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( Options.HasOptionsChanged( nameof( Options.Msaa ) ) )
 		{
 			Vk.DestroyDescriptorPool( LogicalGpu, DescriptorPool, null );
-			Vk.DestroySampler( LogicalGpu, TextureSampler, null );
 			Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
 			Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
 			Vk.DestroyRenderPass( LogicalGpu, RenderPass, null );
@@ -326,9 +324,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			CreateColorResources();
 			CreateDepthResources();
 			CreateFrameBuffers();
-			CreateTextureSampler();
 			CreateDescriptorPool();
-			CreateDescriptorSets();
 		}
 		else if ( Options.HasOptionsChanged( nameof( Options.WireframeEnabled ) ) )
 		{
@@ -458,8 +454,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal,
 		ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 		MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
-
-	internal ShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode ) => LogicalGpu.CreateShaderModule( shaderCode );
 	#endregion
 
 	#region Internal
@@ -480,45 +474,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			Vk.DestroyImageView( LogicalGpu, imageView, null );
 
 		SwapchainExtension.DestroySwapchain( LogicalGpu, Swapchain, null );
-	}
-
-	private void CleanupLogicalDevice()
-	{
-		CleanupSwapChain();
-
-		Vk.DestroyDescriptorPool( LogicalGpu, DescriptorPool, null );
-		Vk.DestroyDescriptorSetLayout( LogicalGpu, DescriptorSetLayout, null );
-		Vk.DestroyPipeline( LogicalGpu, GraphicsPipeline, null );
-		Vk.DestroyPipelineLayout( LogicalGpu, PipelineLayout, null );
-		Vk.DestroyRenderPass( LogicalGpu, RenderPass, null );
-
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-		{
-			Vk.DestroySemaphore( LogicalGpu, ImageAvailableSemaphores[i], null );
-			Vk.DestroySemaphore( LogicalGpu, RenderFinishedSemaphores[i], null );
-			Vk.DestroyFence( LogicalGpu, InFlightFences[i], null );
-		}
-
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-			Vk.DestroyBuffer( LogicalGpu, UniformBuffers[i], null );
-
-		foreach ( var (_, buffers) in GpuBuffers )
-		{
-			for ( var i = 0; i < buffers.Count; i++ )
-				Vk.DestroyBuffer( LogicalGpu, buffers[i], null );
-		}
-		GpuBuffers.Clear();
-		GpuBuffersOffsets.Clear();
-
-		Vk.DestroySampler( LogicalGpu, TextureSampler, null );
-		Vk.DestroyImageView( LogicalGpu, TextureImageView, null );
-		Vk.DestroyImage( LogicalGpu, TextureImage, null );
-		Vk.FreeMemory( LogicalGpu, TextureImageMemory, null );
-
-		Vk.DestroyCommandPool( LogicalGpu, CommandPool, null );
-		Vk.DestroyShaderModule( LogicalGpu, DefaultShader.VertexShaderModule, null );
-		Vk.DestroyShaderModule( LogicalGpu, DefaultShader.FragmentShaderModule, null );
-		Vk.DestroyDevice( LogicalGpu, null );
 	}
 
 	private void RecreateSwapChain()
@@ -610,8 +565,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		};
 		Vk.CmdSetScissor( commandBuffer, 0, 1, scissor );
 
-		Vk.CmdBindDescriptorSets( commandBuffer, PipelineBindPoint.Graphics, PipelineLayout, 0, 1, DescriptorSets[CurrentFrame], 0, null );
-
 		// User level drawing
 		{
 			CurrentModelPosition = Vector3.Zero;
@@ -619,8 +572,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			Vk.CmdPushConstants( commandBuffer, PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
 			CurrentCommandBuffer = commandBuffer;
 
+			// TODO: Multiple textures crash Vulkan due to lack of descriptor set space.
+			//SetTexture( Texture.Missing );
+
 			Render?.Invoke( dt );
 
+			CurrentTexture = null;
 			CurrentIndexBuffer = default;
 			CurrentVertexBuffer = default;
 			CurrentCommandBuffer = default;
@@ -659,10 +616,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private void CreateDefaultShader()
 	{
 		DefaultShader = Shader.FromPath(
-			Path.Combine( "Assets", "Shaders", "vert.spv" ),
-			Path.Combine( "Assets", "Shaders", "frag.spv" )
-			);
-		DefaultShader.Initialize( this );
+			UPath.Combine( "Shaders", "vert.spv" ),
+			UPath.Combine( "Shaders", "frag.spv" ) );
 	}
 
 	private void CreateSwapChain()
@@ -701,8 +656,8 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateGraphicsPipeline()
 	{
-		var bindingDescriptions = Vertex.GetBindingDescriptions();
-		var attributeDescriptions = Vertex.GetAttributeDescriptions();
+		var bindingDescriptions = VertexDescriptions.GetBindingDescriptions();
+		var attributeDescriptions = VertexDescriptions.GetAttributeDescriptions();
 		var dynamicStates = new DynamicState[]
 		{
 			DynamicState.Viewport,
@@ -774,47 +729,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		} );
 	}
 
-	private void CreateTextureImage()
-	{
-		// FIXME: Remove this
-		using var image = SixLabors.ImageSharp.Image.Load<Rgba32>( Path.Combine( "Assets", "Textures", "viking_room.png" ) );
-		var imageSize = (ulong)(image.Width * image.Height * image.PixelType.BitsPerPixel / 8);
-		MipLevels = (uint)MathF.Floor( MathF.Log2( Math.Max( image.Width, image.Height ) ) ) + 1;
-
-		using var stagingBuffer = LogicalGpu.CreateBuffer( imageSize, BufferUsageFlags.TransferSrcBit,
-			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
-
-		void* data;
-		if ( Vk.MapMemory( LogicalGpu, stagingBuffer.Memory, 0, imageSize, 0, &data ) != Result.Success )
-			throw new ApplicationException( "Failed to map memory for texture loading" );
-
-		image.CopyPixelDataTo( new Span<Rgba32>( data, (int)imageSize ) );
-
-		Vk.UnmapMemory( LogicalGpu, stagingBuffer.Memory );
-
-		CreateImage( (uint)image.Width, (uint)image.Height, MipLevels, SampleCountFlags.Count1Bit, Format.R8G8B8A8Srgb,
-			ImageTiling.Optimal, ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-			MemoryPropertyFlags.DeviceLocalBit,
-			out var textureImage, out var textureImageMemory );
-
-		TextureImage = textureImage;
-		TextureImageMemory = textureImageMemory;
-
-		TransitionImageLayout( textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, MipLevels );
-		CopyBufferToImage( stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height );
-		GenerateMipMaps( textureImage, Format.R8G8B8A8Srgb, (uint)image.Width, (uint)image.Height, MipLevels );
-	}
-
-	private void CreateTextureImageView()
-	{
-		TextureImageView = CreateImageView( TextureImage, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit, MipLevels );
-	}
-
-	private void CreateTextureSampler()
-	{
-		TextureSampler = LogicalGpu.CreateTextureSampler( Options.Msaa != MsaaOption.One, MipLevels );
-	}
-
 	private void CreateUniformBuffers()
 	{
 		var bufferSize = (ulong)sizeof( UniformBufferObject );
@@ -856,74 +770,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			throw new ApplicationException( "Failed to create Vulkan descriptor pool" );
 
 		DescriptorPool = descriptorPool;
-	}
-
-	private void CreateDescriptorSets()
-	{
-		var descriptorSets = stackalloc DescriptorSet[(int)MaxFramesInFlight];
-
-		var layouts = stackalloc DescriptorSetLayout[(int)MaxFramesInFlight];
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-			layouts[i] = DescriptorSetLayout;
-
-		var allocateInfo = new DescriptorSetAllocateInfo
-		{
-			SType = StructureType.DescriptorSetAllocateInfo,
-			DescriptorPool = DescriptorPool,
-			DescriptorSetCount = MaxFramesInFlight,
-			PSetLayouts = layouts
-		};
-
-		if ( Vk.AllocateDescriptorSets( LogicalGpu, allocateInfo, descriptorSets ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate Vulkan descriptor sets" );
-
-		DescriptorSets = new DescriptorSet[MaxFramesInFlight];
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-			DescriptorSets[i] = descriptorSets[i];
-
-		var descriptorWrites = stackalloc WriteDescriptorSet[2];
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-		{
-			var bufferInfo = new DescriptorBufferInfo
-			{
-				Buffer = UniformBuffers[i],
-				Offset = 0,
-				Range = (ulong)sizeof( UniformBufferObject )
-			};
-
-			var imageInfo = new DescriptorImageInfo
-			{
-				ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
-				ImageView = TextureImageView,
-				Sampler = TextureSampler
-			};
-
-			var uboWrite = new WriteDescriptorSet
-			{
-				SType = StructureType.WriteDescriptorSet,
-				DstSet = DescriptorSets[i],
-				DstBinding = 0,
-				DstArrayElement = 0,
-				DescriptorType = DescriptorType.UniformBuffer,
-				DescriptorCount = 1,
-				PBufferInfo = &bufferInfo
-			};
-			descriptorWrites[0] = uboWrite;
-
-			var imageWrite = new WriteDescriptorSet
-			{
-				SType = StructureType.WriteDescriptorSet,
-				DstSet = DescriptorSets[i],
-				DstBinding = 1,
-				DstArrayElement = 0,
-				DescriptorType = DescriptorType.CombinedImageSampler,
-				DescriptorCount = 1,
-				PImageInfo = &imageInfo
-			};
-			descriptorWrites[1] = imageWrite;
-
-			Vk.UpdateDescriptorSets( LogicalGpu, 2, descriptorWrites, 0, null );
-		}
 	}
 
 	private void CreateCommandBuffer()
@@ -1032,150 +878,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		return FindSupportedFormat( formats, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit );
 	}
 
-	private static bool HasStencilComponent( Format format )
-	{
-		return format == Format.D32Sfloat || format == Format.D24UnormS8Uint;
-	}
-
-	private void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
-		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
-		out Image image, out DeviceMemory imageMemory )
-	{
-		var imageInfo = new ImageCreateInfo
-		{
-			SType = StructureType.ImageCreateInfo,
-			ImageType = ImageType.Type2D,
-			Extent =
-			{
-				Width = width,
-				Height = height,
-				Depth = 1
-			},
-			MipLevels = mipLevels,
-			ArrayLayers = 1,
-			Format = format,
-			Tiling = tiling,
-			InitialLayout = ImageLayout.Undefined,
-			Usage = usageFlags,
-			SharingMode = SharingMode.Exclusive,
-			Samples = numSamples
-		};
-
-		if ( Vk.CreateImage( LogicalGpu, imageInfo, null, out image ) != Result.Success )
-			throw new ApplicationException( "Failed to create image" );
-
-		var requirements = Vk.GetImageMemoryRequirements( LogicalGpu, image );
-
-		var allocateInfo = new MemoryAllocateInfo
-		{
-			SType = StructureType.MemoryAllocateInfo,
-			AllocationSize = requirements.Size,
-			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
-		};
-
-		if ( Vk.AllocateMemory( LogicalGpu, allocateInfo, null, out imageMemory ) != Result.Success )
-			throw new ApplicationException( "Failed to allocate image memory" );
-
-		if ( Vk.BindImageMemory( LogicalGpu, image, imageMemory, 0 ) != Result.Success )
-			throw new ApplicationException( "Failed to bind image memory" );
-	}
-
-	private ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
-	{
-		var viewInfo = new ImageViewCreateInfo
-		{
-			SType = StructureType.ImageViewCreateInfo,
-			Image = image,
-			ViewType = ImageViewType.Type2D,
-			Format = format,
-			SubresourceRange =
-			{
-				AspectMask = aspectFlags,
-				BaseMipLevel = 0,
-				LevelCount = mipLevels,
-				BaseArrayLayer = 0,
-				LayerCount = 1
-			}
-		};
-
-		if ( Vk.CreateImageView( LogicalGpu, viewInfo, null, out var imageView ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan texture image view" );
-
-		return imageView;
-	}
-
-	private void TransitionImageLayout( in Image image, Format format,
-		ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels )
-	{
-		var commandBuffer = BeginOneTimeCommands();
-
-		var barrier = new ImageMemoryBarrier
-		{
-			SType = StructureType.ImageMemoryBarrier,
-			OldLayout = oldLayout,
-			NewLayout = newLayout,
-			SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
-			DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
-			Image = image,
-			SubresourceRange =
-			{
-				AspectMask = ImageAspectFlags.ColorBit,
-				BaseMipLevel = 0,
-				LevelCount = mipLevels,
-				BaseArrayLayer = 0,
-				LayerCount = 1
-			}
-		};
-
-		if ( newLayout == ImageLayout.DepthStencilAttachmentOptimal )
-		{
-			barrier.SubresourceRange.AspectMask = ImageAspectFlags.DepthBit;
-
-			// FIXME: Adding this causes a validation error.
-			/*if ( HasStencilComponent( format ) )
-				barrier.SubresourceRange.AspectMask |= ImageAspectFlags.StencilBit;*/
-		}
-		else
-			barrier.SubresourceRange.AspectMask = ImageAspectFlags.ColorBit;
-
-		PipelineStageFlags sourceStage;
-		PipelineStageFlags destinationStage;
-
-		if ( oldLayout == ImageLayout.Undefined && newLayout == ImageLayout.TransferDstOptimal )
-		{
-			barrier.SrcAccessMask = 0;
-			barrier.DstAccessMask = AccessFlags.TransferWriteBit;
-
-			sourceStage = PipelineStageFlags.TopOfPipeBit;
-			destinationStage = PipelineStageFlags.TransferBit;
-		}
-		else if ( oldLayout == ImageLayout.TransferDstOptimal && newLayout == ImageLayout.ShaderReadOnlyOptimal )
-		{
-			barrier.SrcAccessMask = AccessFlags.TransferWriteBit;
-			barrier.DstAccessMask = AccessFlags.ShaderReadBit;
-
-			sourceStage = PipelineStageFlags.TransferBit;
-			destinationStage = PipelineStageFlags.FragmentShaderBit;
-		}
-		else if ( oldLayout == ImageLayout.Undefined && newLayout == ImageLayout.DepthStencilAttachmentOptimal )
-		{
-			barrier.SrcAccessMask = 0;
-			barrier.DstAccessMask = AccessFlags.DepthStencilAttachmentReadBit | AccessFlags.DepthStencilAttachmentWriteBit;
-
-			sourceStage = PipelineStageFlags.TopOfPipeBit;
-			destinationStage = PipelineStageFlags.EarlyFragmentTestsBit;
-		}
-		else
-			throw new ArgumentException( "Received unsupported layout transition", $"{nameof( oldLayout )}, {nameof( newLayout )}" );
-
-		Vk.CmdPipelineBarrier( commandBuffer, sourceStage, destinationStage, 0,
-			0, null,
-			0, null,
-			1, barrier );
-
-		EndOneTimeCommands( commandBuffer );
-	}
-
 	private void CopyBuffer( in Buffer srcBuffer, in Buffer dstBuffer, ulong size )
 	{
 		var commandBuffer = BeginOneTimeCommands();
@@ -1186,135 +888,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		};
 
 		Vk.CmdCopyBuffer( commandBuffer, srcBuffer, dstBuffer, 1, copyRegion );
-
-		EndOneTimeCommands( commandBuffer );
-	}
-
-	private void CopyBufferToImage( in Buffer buffer, in Image image, uint width, uint height )
-	{
-		var commandBuffer = BeginOneTimeCommands();
-
-		var region = new BufferImageCopy
-		{
-			BufferOffset = 0,
-			BufferRowLength = 0,
-			BufferImageHeight = 0,
-			ImageOffset = new Offset3D( 0, 0, 0 ),
-			ImageExtent =
-			{
-				Width = width,
-				Height = height,
-				Depth = 1
-			},
-			ImageSubresource =
-			{
-				AspectMask = ImageAspectFlags.ColorBit,
-				MipLevel = 0,
-				BaseArrayLayer = 0,
-				LayerCount = 1
-			}
-		};
-
-		Vk.CmdCopyBufferToImage( commandBuffer, buffer, image, ImageLayout.TransferDstOptimal, 1, region );
-
-		EndOneTimeCommands( commandBuffer );
-	}
-
-	private void GenerateMipMaps( in Image image, Format format, uint width, uint height, uint mipLevels )
-	{
-		var formatProperties = Gpu.GetFormatProperties( format );
-		if ( !formatProperties.OptimalTilingFeatures.HasFlag( FormatFeatureFlags.SampledImageFilterLinearBit ) )
-			throw new ApplicationException( "Texture image format does not support linear blitting" );
-
-		var commandBuffer = BeginOneTimeCommands();
-
-		var barrier = new ImageMemoryBarrier
-		{
-			SType = StructureType.ImageMemoryBarrier,
-			Image = image,
-			SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
-			DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
-			SubresourceRange =
-			{
-				AspectMask = ImageAspectFlags.ColorBit,
-				BaseArrayLayer = 0,
-				LayerCount = 1,
-				LevelCount = 1,
-			}
-		};
-
-		var mipWidth = (int)width;
-		var mipHeight = (int)height;
-		for ( uint i = 1; i < mipLevels; i++ )
-		{
-			barrier.SubresourceRange.BaseMipLevel = i - 1;
-			barrier.OldLayout = ImageLayout.TransferDstOptimal;
-			barrier.NewLayout = ImageLayout.TransferSrcOptimal;
-			barrier.SrcAccessMask = AccessFlags.TransferWriteBit;
-			barrier.DstAccessMask = AccessFlags.TransferReadBit;
-
-			Vk.CmdPipelineBarrier( commandBuffer,
-				PipelineStageFlags.TransferBit, PipelineStageFlags.TransferBit, 0,
-				0, null,
-				0, null,
-				1, barrier );
-
-			var blit = new ImageBlit
-			{
-				SrcSubresource =
-				{
-					AspectMask = ImageAspectFlags.ColorBit,
-					MipLevel = i - 1,
-					BaseArrayLayer = 0,
-					LayerCount = 1
-				},
-				DstSubresource =
-				{
-					AspectMask = ImageAspectFlags.ColorBit,
-					MipLevel = i,
-					BaseArrayLayer = 0,
-					LayerCount = 1
-				}
-			};
-			blit.SrcOffsets[0] = new Offset3D( 0, 0, 0 );
-			blit.SrcOffsets[1] = new Offset3D( mipWidth, mipHeight, 1 );
-			blit.DstOffsets[0] = new Offset3D( 0, 0, 0 );
-			blit.DstOffsets[1] = new Offset3D(
-				mipWidth > 1 ? mipWidth / 2 : 1,
-				mipHeight > 1 ? mipHeight / 2 : 1,
-				1 );
-
-			Vk.CmdBlitImage( commandBuffer,
-				image, ImageLayout.TransferSrcOptimal,
-				image, ImageLayout.TransferDstOptimal,
-				1, blit, Filter.Linear );
-
-			barrier.OldLayout = ImageLayout.TransferSrcOptimal;
-			barrier.NewLayout = ImageLayout.ShaderReadOnlyOptimal;
-			barrier.SrcAccessMask = AccessFlags.TransferReadBit;
-			barrier.DstAccessMask = AccessFlags.ShaderReadBit;
-
-			Vk.CmdPipelineBarrier( commandBuffer,
-				PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit, 0,
-				0, null,
-				0, null,
-				1, barrier );
-
-			if ( mipWidth > 1 ) mipWidth /= 2;
-			if ( mipHeight > 1 ) mipHeight /= 2;
-		}
-
-		barrier.SubresourceRange.BaseMipLevel = MipLevels - 1;
-		barrier.OldLayout = ImageLayout.TransferDstOptimal;
-		barrier.NewLayout = ImageLayout.ShaderReadOnlyOptimal;
-		barrier.SrcAccessMask = AccessFlags.TransferWriteBit;
-		barrier.DstAccessMask = AccessFlags.ShaderReadBit;
-
-		Vk.CmdPipelineBarrier( commandBuffer,
-			PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit, 0,
-			0, null,
-			0, null,
-			1, barrier );
 
 		EndOneTimeCommands( commandBuffer );
 	}

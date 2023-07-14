@@ -1,31 +1,30 @@
 ﻿using Latte;
+using Latte.Assets;
 using Latte.Windowing;
-using Latte.Windowing.Assets;
 using Latte.Windowing.Input;
 using Latte.Windowing.Options;
 using System;
-using System.IO;
 using System.Numerics;
+using Zio;
 
 namespace Sandbox;
 
 public sealed class SandboxGame : IGame
 {
-	private static readonly string VertexShaderPath = Path.Combine( "Assets", "Shaders", "vert.spv" );
-	private static readonly string FragmentShaderPath = Path.Combine( "Assets", "Shaders", "frag.spv" );
-	private static readonly string VikingRoomModelPath = Path.Combine( "Assets", "Models", "viking_room.obj" );
-	private static readonly string VikingRoomTexturePath = Path.Combine( "Assets", "Textures", "viking_room.png" );
+	private static readonly UPath VikingRoomModelPath = "/Models/viking_room.obj";
+	private static readonly UPath VikingRoomTexturePath = "/Textures/viking_room.png";
 
 	public InputManager Input { get; set; } = null!;
 	public IRenderingBackend Renderer { get; set; } = null!;
 
+	private Texture VikingRoomTexture { get; set; } = null!;
 	private Model VikingRoomModel { get; set; } = null!;
 	private Vector2 LastMousePosition { get; set; }
 
 	public void Load()
 	{
+		VikingRoomTexture = Texture.FromPath( VikingRoomTexturePath );
 		VikingRoomModel = Model.FromPath( VikingRoomModelPath );
-		VikingRoomModel.Initialize( Renderer );
 	}
 
 	public void Update( double dt )
@@ -126,13 +125,8 @@ public sealed class SandboxGame : IGame
 
 	public void Draw( double dt )
 	{
-		for ( var x = 0; x < 100; x += 2 )
-		{
-			for ( var z = 0; z < 100; z += 2 )
-			{
-				Renderer.DrawModel( VikingRoomModel, new Vector3( x, 0, z ) );
-			}
-		}
+		Renderer.SetTexture( VikingRoomTexture );
+		Renderer.DrawModel( VikingRoomModel );
 	}
 
 	private static float DegreesToRadians( float degrees )

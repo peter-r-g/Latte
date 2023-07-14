@@ -15,12 +15,16 @@ using System.Threading.Tasks;
 
 namespace Latte.Hotload;
 
-internal sealed class HotloadableAssembly : IDisposable
+public sealed class HotloadableAssembly : IDisposable
 {
-	internal static IReadOnlyDictionary<string, HotloadableAssembly> All => AllAssemblies;
+	public static IReadOnlyDictionary<string, HotloadableAssembly> All => AllAssemblies;
 	private static ConcurrentDictionary<string, HotloadableAssembly> AllAssemblies = new();
 
-	internal AssemblyInfo AssemblyInfo { get; }
+	public delegate void HotloadableAssemblyHandler( HotloadableAssembly hotloadableAssembly ); 
+	public static event HotloadableAssemblyHandler? OnAdded;
+	public static event HotloadableAssemblyHandler? OnRemoved;
+
+	public AssemblyInfo AssemblyInfo { get; }
 	internal Assembly? Assembly { get; private set; }
 	internal IEntryPoint? EntryPoint { get; private set; }
 
@@ -47,6 +51,11 @@ internal sealed class HotloadableAssembly : IDisposable
 	/// </summary>
 	private bool incrementalBuildRequested;
 
+	static HotloadableAssembly()
+	{
+		AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+	}
+
 	private HotloadableAssembly( in AssemblyInfo assemblyInfo )
 	{
 		AllAssemblies.TryAdd( assemblyInfo.Name, this );
@@ -55,7 +64,10 @@ internal sealed class HotloadableAssembly : IDisposable
 		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
 
 		if ( assemblyInfo.ProjectPath is null )
+		{
+			OnAdded?.Invoke( this );
 			return;
+		}
 
 		CsProjectWatcher = new FileSystemWatcher( Path.GetFullPath( Path.Combine( Program.CurrentDirectory, assemblyInfo.ProjectPath ) ), "*.csproj" )
 		{
@@ -85,6 +97,8 @@ internal sealed class HotloadableAssembly : IDisposable
 		CodeWatcher.Renamed += OnFileChanged;
 		CodeWatcher.IncludeSubdirectories = true;
 		CodeWatcher.EnableRaisingEvents = true;
+
+		OnAdded?.Invoke( this );
 	}
 
 	private HotloadableAssembly( Assembly assembly )
@@ -99,6 +113,8 @@ internal sealed class HotloadableAssembly : IDisposable
 
 		Log = new Logger( $"Hotloader ({AssemblyInfo.Name})", LogLevel.Verbose );
 		Assembly = assembly;
+
+		OnAdded?.Invoke( this );
 	}
 
 	~HotloadableAssembly()
@@ -290,6 +306,8 @@ internal sealed class HotloadableAssembly : IDisposable
 
 	public void Dispose()
 	{
+		OnRemoved?.Invoke( this );
+
 		AllAssemblies.TryRemove( AssemblyInfo.Name, out _ );
 		CsProjectWatcher?.Dispose();
 		CodeWatcher?.Dispose();
@@ -320,6 +338,12 @@ internal sealed class HotloadableAssembly : IDisposable
 
 		entryPoint = (IEntryPoint)Activator.CreateInstance( entryPointType )!;
 		return true;
+	}
+
+	private static void OnProcessExit( object? sender, EventArgs e )
+	{
+		foreach ( var (_, assembly) in All )
+			assembly.Dispose();
 	}
 
 	internal static HotloadableAssembly New( in AssemblyInfo assemblyInfo ) => new( assemblyInfo );

@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -28,6 +29,11 @@ internal static class NuGetManager
 	private static SourceCacheContext Cache { get; } = new();
 	private static ILogger Logger { get; } = NullLogger.Instance;
 	private const string CacheDirectory = "nuget";
+
+	static NuGetManager()
+	{
+		AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
+	}
 
 	internal static bool IsDllInstalled( string dllName )
 	{
@@ -194,6 +200,16 @@ internal static class NuGetManager
 
 		foreach ( var runtimeItem in runtimeItems )
 			yield return runtimeItem;
+	}
+
+	private static Assembly? ResolveAssembly( object? sender, ResolveEventArgs args )
+	{
+		var assemblyName = args.Name[..args.Name.IndexOf( ',' )];
+		var assemblyPath = Path.GetFullPath( Path.Combine( "nuget", assemblyName + ".dll" ) );
+		if ( File.Exists( assemblyPath ) )
+			return Assembly.LoadFile( assemblyPath );
+
+		return null;
 	}
 
 	private readonly struct InstallPeg : IDisposable

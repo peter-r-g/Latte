@@ -1,7 +1,6 @@
 ﻿using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Vulkan;
 using System;
-using Latte.Windowing.Options;
 
 namespace Latte.Windowing.Backend.Vulkan;
 

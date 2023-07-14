@@ -6,25 +6,11 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Sandbox</RootNamespace>
     <AssemblyName>Sandbox</AssemblyName>
-
-    <OutputPath>$(SolutionDir)bin/</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Latte.Engine\Latte.Engine.csproj" />
     <ProjectReference Include="..\Latte.Windowing\Latte.Windowing.csproj" />
-  </ItemGroup>
-  
-  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="call $(ProjectDir)compile_shaders_glsl.bat" />
-  </Target>
-
-  <ItemGroup>
-    <None Include="$(ProjectDir)\Assets\Models\**" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(ProjectDir)\Assets\Shaders\*.spv" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(ProjectDir)\Assets\Textures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

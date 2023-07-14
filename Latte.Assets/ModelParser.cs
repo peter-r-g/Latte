@@ -1,36 +1,49 @@
-﻿using Latte.Windowing.Assets;
-using Silk.NET.Assimp;
+﻿using Silk.NET.Assimp;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Numerics;
-using EngineMesh = Latte.Windowing.Assets.Mesh;
+using EngineMesh = Latte.Assets.Mesh;
 using AssimpMesh = Silk.NET.Assimp.Mesh;
+using Zio;
 
-namespace Latte.Windowing.Backend;
+namespace Latte.Assets;
 
 internal sealed unsafe class ModelParser
 {
+	private static Assimp Assimp { get; } = Assimp.GetApi();
+
 	private Dictionary<Vertex, uint> VertexMap { get; } = new();
 	private ImmutableArray<EngineMesh>.Builder Meshes { get; } = ImmutableArray.CreateBuilder<EngineMesh>();
 	private ImmutableArray<Vertex>.Builder Vertices { get; } = ImmutableArray.CreateBuilder<Vertex>();
 	private ImmutableArray<uint>.Builder Indices { get; } = ImmutableArray.CreateBuilder<uint>();
 
-	public static Model FromPath( string path )
+	internal static Model FromPath( in UPath path )
 	{
-		var scene = Apis.Assimp.ImportFile( path, (uint)PostProcessPreset.TargetRealTimeMaximumQuality );
-		if ( scene is null || scene->MFlags == Assimp.SceneFlagsIncomplete || scene->MRootNode is null )
+		var sceneBytes = FileSystems.Assets.ReadAllBytes( path.ToAbsolute() );
+		var extension = path.GetExtensionWithDot();
+		if ( extension is null )
+			extension = string.Empty;
+		else
+			extension = extension[1..];
+
+		fixed ( byte* sceneBytesPtr = sceneBytes )
 		{
-			Apis.Assimp.ReleaseImport( scene );
-			throw new ArgumentException( Apis.Assimp.GetErrorStringS(), nameof( path ) );
+			var scene = Assimp.ImportFileFromMemory( sceneBytesPtr, (uint)sceneBytes.Length,
+				(uint)PostProcessPreset.TargetRealTimeMaximumQuality, extension );
+			if ( scene is null || scene->MFlags == Assimp.SceneFlagsIncomplete || scene->MRootNode is null )
+			{
+				Assimp.ReleaseImport( scene );
+				throw new ArgumentException( Assimp.GetErrorStringS(), nameof( path ) );
+			}
+
+			var builder = new ModelParser();
+			builder.ProcessNode( scene->MRootNode, scene );
+			Assimp.ReleaseImport( scene );
+
+			builder.Meshes.Capacity = builder.Meshes.Count;
+			return new Model( builder.Meshes.MoveToImmutable() );
 		}
-
-		var builder = new ModelParser();
-		builder.ProcessNode( scene->MRootNode, scene );
-		Apis.Assimp.ReleaseImport( scene );
-
-		builder.Meshes.Capacity = builder.Meshes.Count;
-		return new Model( builder.Meshes.MoveToImmutable() );
 	}
 
 	private void ProcessNode( Node* node, Scene* scene )
@@ -49,19 +62,18 @@ internal sealed unsafe class ModelParser
 	{
 		for ( uint i = 0; i < mesh->MNumVertices; i++ )
 		{
-			var vertex = new Vertex
-			{
-				Position = mesh->MVertices[i]
-			};
+			var position = mesh->MVertices[i];
+			var color = default( Vector3 );
+			var textureCoordinates = default( Vector2 );
 
 			if ( mesh->MTextureCoords[0] is not null )
 			{
 				var textureCoordinates3d = mesh->MTextureCoords[0][i];
 				// Y needs to be flipped for Vulkan.
-				vertex.TextureCoordinates = new Vector2( textureCoordinates3d.X, 1 - textureCoordinates3d.Y );
+				textureCoordinates = new Vector2( textureCoordinates3d.X, 1 - textureCoordinates3d.Y );
 			}
 
-			Vertices.Add( vertex );
+			Vertices.Add( new Vertex( position, color, textureCoordinates ) );
 		}
 
 		for ( uint i = 0; i < mesh->MNumFaces; i++ )
