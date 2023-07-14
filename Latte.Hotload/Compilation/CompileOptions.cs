@@ -30,5 +30,11 @@ internal sealed class CompileOptions
 	/// <summary>
 	/// The pre-processor symbols to apply to the compilation.
 	/// </summary>
-	internal ImmutableArray<string> PreProcessorSymbols { get; init; } = ImmutableArray<string>.Empty;
+	internal ImmutableArray<string> PreProcessorSymbols { get; init; } =
+#if DEBUG
+		ImmutableArray.Create( "DEBUG" );
+#endif
+#if RELEASE
+		ImmutableArray.Create( "RELEASE" );
+#endif
 }
