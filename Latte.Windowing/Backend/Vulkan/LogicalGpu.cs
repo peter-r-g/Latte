@@ -464,6 +464,26 @@ internal sealed class LogicalGpu : IDisposable
 		return commandPool;
 	}
 
+	internal unsafe DescriptorPool CreateDescriptorPool( in ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes, uint maxDescriptorSets )
+	{
+		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
+		{
+			var poolInfo = new DescriptorPoolCreateInfo
+			{
+				SType = StructureType.DescriptorPoolCreateInfo,
+				PoolSizeCount = 2,
+				PPoolSizes = descriptorPoolSizesPtr,
+				MaxSets = maxDescriptorSets
+			};
+
+			Apis.Vk.CreateDescriptorPool( LogicalDevice, poolInfo, null, out var descriptorPool ).Verify();
+
+			DisposeQueue.Enqueue( () => Apis.Vk.DestroyDescriptorPool( LogicalDevice, descriptorPool, null ) );
+			return descriptorPool;
+		}
+		
+	}
+
 	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
 		SharingMode sharingMode = SharingMode.Exclusive )
 	{
@@ -519,6 +539,39 @@ internal sealed class LogicalGpu : IDisposable
 
 		DisposeQueue.Enqueue( () => Apis.Vk.DestroySampler( LogicalDevice, textureSampler, null ) );
 		return textureSampler;
+	}
+
+	internal unsafe Semaphore CreateSemaphore()
+	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
+		var semaphoreCreateInfo = new SemaphoreCreateInfo
+		{
+			SType = StructureType.SemaphoreCreateInfo
+		};
+
+		Apis.Vk.CreateSemaphore( LogicalDevice, semaphoreCreateInfo, null, out var semaphore ).Verify();
+
+		DisposeQueue.Enqueue( () => Apis.Vk.DestroySemaphore( LogicalDevice, semaphore, null ) );
+		return semaphore;
+	}
+
+	internal unsafe Fence CreateFence( bool signaled = false )
+	{
+		if ( disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
+		var fenceInfo = new FenceCreateInfo
+		{
+			SType = StructureType.FenceCreateInfo,
+			Flags = signaled ? FenceCreateFlags.SignaledBit : 0
+		};
+
+		Apis.Vk.CreateFence( LogicalDevice, fenceInfo, null, out var fence ).Verify();
+
+		DisposeQueue.Enqueue( () => Apis.Vk.DestroyFence( LogicalDevice, fence, null ) );
+		return fence;
 	}
 
 	internal unsafe void GetMeshGpuBuffers( VulkanBackend vulkanBackend, Mesh mesh, out GpuBuffer<Vertex> gpuVertexBuffer, out GpuBuffer<uint>? gpuIndexBuffer )

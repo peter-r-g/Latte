@@ -725,7 +725,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private void CreateDescriptorPool()
 	{
-		var pools = stackalloc DescriptorPoolSize[]
+		ReadOnlySpan<DescriptorPoolSize> pools = stackalloc DescriptorPoolSize[]
 		{
 			new DescriptorPoolSize
 			{
@@ -739,16 +739,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			}
 		};
 
-		var poolInfo = new DescriptorPoolCreateInfo
-		{
-			SType = StructureType.DescriptorPoolCreateInfo,
-			PoolSizeCount = 2,
-			PPoolSizes = pools,
-			MaxSets = MaxFramesInFlight
-		};
-
-		Apis.Vk.CreateDescriptorPool( LogicalGpu, poolInfo, null, out var descriptorPool ).Verify();
-		DescriptorPool = descriptorPool;
+		DescriptorPool = LogicalGpu.CreateDescriptorPool( pools, MaxFramesInFlight );
 	}
 
 	private void CreateCommandBuffer()
@@ -776,26 +767,11 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		RenderFinishedSemaphores = new Semaphore[MaxFramesInFlight];
 		InFlightFences = new Fence[MaxFramesInFlight];
 
-		var semaphoreCreateInfo = new SemaphoreCreateInfo
-		{
-			SType = StructureType.SemaphoreCreateInfo
-		};
-
-		var fenceInfo = new FenceCreateInfo
-		{
-			SType = StructureType.FenceCreateInfo,
-			Flags = FenceCreateFlags.SignaledBit
-		};
-
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			Apis.Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var imageAvailableSemaphore ).Verify();
-			Apis.Vk.CreateSemaphore( LogicalGpu, semaphoreCreateInfo, null, out var renderFinishedSemaphore ).Verify();
-			Apis.Vk.CreateFence( LogicalGpu, fenceInfo, null, out var inFlightFence ).Verify();
-
-			ImageAvailableSemaphores[i] = imageAvailableSemaphore;
-			RenderFinishedSemaphores[i] = renderFinishedSemaphore;
-			InFlightFences[i] = inFlightFence;
+			ImageAvailableSemaphores[i] = LogicalGpu.CreateSemaphore();
+			RenderFinishedSemaphores[i] = LogicalGpu.CreateSemaphore();
+			InFlightFences[i] = LogicalGpu.CreateFence( true );
 		}
 	}
 	#endregion
