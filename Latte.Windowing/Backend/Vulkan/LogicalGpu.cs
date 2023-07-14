@@ -50,13 +50,13 @@ internal sealed class LogicalGpu : IDisposable
 		if ( disposed )
 			return;
 
-		disposed = true;
 		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
 			disposeCb();
 
 		Apis.Vk.DestroyDevice( LogicalDevice, null );
 
 		GC.SuppressFinalize( this );
+		disposed = true;
 	}
 
 	internal unsafe VulkanSwapchain CreateSwapchain()

@@ -28,6 +28,18 @@ internal sealed class VulkanBuffer : IDisposable
 		Dispose();
 	}
 
+	public unsafe void Dispose()
+	{
+		if ( disposed )
+			return;
+
+		Apis.Vk.DestroyBuffer( Owner, Buffer, null );
+		Apis.Vk.FreeMemory( Owner, Memory, null );
+
+		GC.SuppressFinalize( this );
+		disposed = true;
+	}
+
 	internal unsafe void SetMemory<T>( ReadOnlySpan<T> data, ulong offset = 0 ) where T : unmanaged
 	{
 		if ( disposed )
@@ -37,18 +49,6 @@ internal sealed class VulkanBuffer : IDisposable
 		Apis.Vk.MapMemory( Owner, Memory, offset, Size, 0, &dataPtr ).Verify();
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
 		Apis.Vk.UnmapMemory( Owner, Memory );
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
-			return;
-
-		disposed = true;
-		Apis.Vk.DestroyBuffer( Owner, Buffer, null );
-		Apis.Vk.FreeMemory( Owner, Memory, null );
-
-		GC.SuppressFinalize( this );
 	}
 
 	public static implicit operator Buffer( VulkanBuffer vulkanBuffer )

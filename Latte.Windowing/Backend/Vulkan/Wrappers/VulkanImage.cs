@@ -31,12 +31,12 @@ internal sealed class VulkanImage : IDisposable
 		if ( disposed )
 			return;
 
-		disposed = true;
 		Apis.Vk.DestroyImageView( Owner, View, null );
 		Apis.Vk.DestroyImage( Owner, Image, null );
 		Apis.Vk.FreeMemory( Owner, Memory, null );
 
 		GC.SuppressFinalize( this );
+		disposed = true;
 	}
 
 	internal void CopyBufferToImage( in CommandBuffer commandBuffer, VulkanBuffer buffer, uint width, uint height )

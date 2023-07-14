@@ -29,11 +29,11 @@ internal sealed class VulkanGraphicsPipeline : IDisposable
 		if ( disposed )
 			return;
 
-		disposed = true;
 		Apis.Vk.DestroyPipeline( Owner, Pipeline, null );
 		Apis.Vk.DestroyPipelineLayout( Owner, Layout, null );
 
 		GC.SuppressFinalize( this );
+		disposed = true;
 	}
 
 	public static implicit operator Pipeline( VulkanGraphicsPipeline graphicsPipeline )

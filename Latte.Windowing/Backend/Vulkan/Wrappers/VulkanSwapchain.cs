@@ -42,7 +42,6 @@ internal sealed class VulkanSwapchain : IDisposable
 		if ( disposed )
 			return;
 
-		disposed = true;
 		foreach ( var frameBuffer in FrameBuffers )
 			Apis.Vk.DestroyFramebuffer( Owner, frameBuffer, null );
 
@@ -52,6 +51,7 @@ internal sealed class VulkanSwapchain : IDisposable
 		Extension.DestroySwapchain( Owner, Swapchain, null );
 
 		GC.SuppressFinalize( this );
+		disposed = true;
 	}
 
 	internal unsafe void CreateFrameBuffers( in RenderPass renderPass, in ReadOnlySpan<ImageView> attachments,

@@ -44,11 +44,11 @@ internal sealed class Gpu : IDisposable
 		if ( disposed )
 			return;
 
-		disposed = true;
 		foreach ( var logicalGpu in LogicalGpus )
 			logicalGpu.Dispose();
 
 		GC.SuppressFinalize( this );
+		disposed = true;
 	}
 
 	internal unsafe LogicalGpu CreateLogicalGpu( in QueueFamilyIndices familyIndices, in PhysicalDeviceFeatures features,
