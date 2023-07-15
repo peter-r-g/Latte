@@ -1,12 +1,15 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanDescriptorSetLayout : VulkanWrapper
 {
-	internal DescriptorSetLayout DescriptorSetLayout { get; }
+	internal required DescriptorSetLayout DescriptorSetLayout { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanDescriptorSetLayout( in DescriptorSetLayout descriptorSetLayout, LogicalGpu owner ) : base( owner )
 	{
 		DescriptorSetLayout = descriptorSetLayout;
@@ -29,5 +32,22 @@ internal sealed class VulkanDescriptorSetLayout : VulkanWrapper
 			throw new ObjectDisposedException( nameof( VulkanDescriptorSetLayout ) );
 
 		return vulkanDescriptorSetLayout.DescriptorSetLayout;
+	}
+
+	internal static unsafe VulkanDescriptorSetLayout New( LogicalGpu logicalGpu, in ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
+	{
+		fixed ( DescriptorSetLayoutBinding* bindingsPtr = bindings )
+		{
+			var layoutInfo = new DescriptorSetLayoutCreateInfo()
+			{
+				SType = StructureType.DescriptorSetLayoutCreateInfo,
+				BindingCount = (uint)bindings.Length,
+				PBindings = bindingsPtr
+			};
+
+			Apis.Vk.CreateDescriptorSetLayout( logicalGpu, layoutInfo, null, out var descriptorSetLayout ).Verify();
+
+			return new VulkanDescriptorSetLayout( descriptorSetLayout, logicalGpu );
+		}
 	}
 }

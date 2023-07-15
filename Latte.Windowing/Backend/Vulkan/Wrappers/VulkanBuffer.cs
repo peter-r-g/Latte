@@ -1,16 +1,18 @@
 ﻿using Latte.Windowing.Extensions;
 using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanBuffer : VulkanWrapper
 {
-	internal Buffer Buffer { get; }
-	internal DeviceMemory Memory { get; }
-	internal ulong Size { get; }
+	internal required Buffer Buffer { get; init; }
+	internal required DeviceMemory Memory { get; init; }
+	internal required ulong Size { get; init; }
 
+	[SetsRequiredMembers]
 	private VulkanBuffer( in Buffer buffer, in DeviceMemory memory, ulong size, LogicalGpu owner ) : base( owner )
 	{
 		Buffer = buffer;
@@ -73,8 +75,6 @@ internal sealed class VulkanBuffer : VulkanWrapper
 		Apis.Vk.AllocateMemory( logicalGpu, allocateInfo, null, out var bufferMemory ).Verify();
 		Apis.Vk.BindBufferMemory( logicalGpu, buffer, bufferMemory, 0 ).Verify();
 
-		var vulkanBuffer = new VulkanBuffer( buffer, bufferMemory, size, logicalGpu );
-		logicalGpu.DisposeQueue.Enqueue( vulkanBuffer.Dispose );
-		return vulkanBuffer;
+		return new VulkanBuffer( buffer, bufferMemory, size, logicalGpu ); ;
 	}
 }
