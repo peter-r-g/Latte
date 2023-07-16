@@ -1,13 +1,15 @@
 ﻿using Latte.Windowing.Extensions;
 using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanSampler : VulkanWrapper
 {
-	internal Sampler Sampler { get; }
+	internal required Sampler Sampler { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanSampler( in Sampler sampler, LogicalGpu owner ) : base( owner )
 	{
 		Sampler = sampler;

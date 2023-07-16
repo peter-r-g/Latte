@@ -1,16 +1,17 @@
 ﻿using Latte.Windowing.Extensions;
-using Silk.NET.Assimp;
 using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanImage : VulkanWrapper
 {
-	internal Image Image { get; set; }
-	internal DeviceMemory Memory { get; set; }
-	internal ImageView View { get; set; }
+	internal required Image Image { get; init; }
+	internal required DeviceMemory Memory { get; init; }
+	internal required ImageView View { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanImage( in Image image, in DeviceMemory memory, in ImageView view, LogicalGpu owner ) : base( owner )
 	{
 		Image = image;

@@ -1,12 +1,15 @@
 ﻿using Latte.Windowing.Extensions;
 using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
+
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanShaderModule : VulkanWrapper
 {
-	internal ShaderModule ShaderModule { get; }
+	internal required ShaderModule ShaderModule { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanShaderModule( in ShaderModule shaderModule, LogicalGpu owner ) : base( owner )
 	{
 		ShaderModule = shaderModule;

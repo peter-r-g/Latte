@@ -1,13 +1,15 @@
 ﻿using Latte.Windowing.Extensions;
 using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanFence : VulkanWrapper
 {
-	internal Fence Fence { get; }
+	internal required Fence Fence { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanFence( in Fence fence, LogicalGpu owner ) : base( owner )
 	{
 		Fence = fence;

@@ -1,13 +1,15 @@
 ﻿using Latte.Windowing.Extensions;
 using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanSemaphore : VulkanWrapper
 {
-	internal Semaphore Semaphore { get; }
+	internal required Semaphore Semaphore { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanSemaphore( in Semaphore semaphore, LogicalGpu owner ) : base( owner )
 	{
 		Semaphore = semaphore;

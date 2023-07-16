@@ -8,21 +8,23 @@ using System;
 using Silk.NET.Windowing;
 using System.Collections.Generic;
 using Latte.Windowing.Extensions;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal unsafe sealed class VulkanInstance : VulkanWrapper
 {
-	internal IWindow Window { get; }
-	internal new Instance Instance { get; }
-	internal bool ValidationLayersEnabled { get; }
+	internal required IWindow Window { get; init; }
+	internal required new Instance Instance { get; init; }
+	internal required bool ValidationLayersEnabled { get; init; }
 
-	internal ExtDebugUtils? DebugUtilsExtension { get; } = null!;
-	internal DebugUtilsMessengerEXT DebugMessenger { get; }
+	internal required ExtDebugUtils? DebugUtilsExtension { get; init; } = null!;
+	internal required DebugUtilsMessengerEXT DebugMessenger { get; init; }
 
-	internal KhrSurface SurfaceExtension { get; } = null!;
-	internal SurfaceKHR Surface { get; }
+	internal required KhrSurface SurfaceExtension { get; init; } = null!;
+	internal required SurfaceKHR Surface { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanInstance( IWindow window, bool enableValidationLayers, string[]? validationLayers = null )
 	{
 		ValidationLayersEnabled = enableValidationLayers;
