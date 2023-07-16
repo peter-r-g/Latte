@@ -5,7 +5,7 @@
 
 struct FSOutput
 {
-    float4 Color : SV_Target0;
+    float4 Color : SV_TARGET0;
 };
 
 Texture2D texture2d : register( t1 );
