@@ -6,22 +6,23 @@ using Silk.NET.Windowing;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Immutable;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
 internal sealed class VulkanSwapchain : VulkanWrapper
 {
 	internal required SwapchainKHR Swapchain { get; init; }
-	internal required Image[] Images { get; init; }
-	internal required ImageView[] ImageViews { get; init; }
+	internal required ImmutableArray<Image> Images { get; init; }
+	internal required ImmutableArray<ImageView> ImageViews { get; init; }
 	internal required Format ImageFormat { get; init; }
 	internal required Extent2D Extent { get; init; }
 	internal required KhrSwapchain Extension { get; init; }
 
-	internal Framebuffer[] FrameBuffers { get; private set; } = Array.Empty<Framebuffer>();
+	internal ImmutableArray<Framebuffer> FrameBuffers { get; private set; }
 
 	[SetsRequiredMembers]
-	internal VulkanSwapchain( in SwapchainKHR swapchain, Image[] images, ImageView[] imageViews,
+	internal VulkanSwapchain( in SwapchainKHR swapchain, in ImmutableArray<Image> images, in ImmutableArray<ImageView> imageViews,
 		Format imageFormat, in Extent2D extent, KhrSwapchain extension, LogicalGpu owner ) : base( owner )
 	{
 		Swapchain = swapchain;
@@ -55,7 +56,7 @@ internal sealed class VulkanSwapchain : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( VulkanSwapchain ) );
 
-		FrameBuffers = new Framebuffer[ImageViews.Length];
+		var frameBuffers = ImmutableArray.CreateBuilder<Framebuffer>( ImageViews.Length );
 
 		fixed( ImageView* attachmentsPtr = attachments )
 		{
@@ -76,9 +77,11 @@ internal sealed class VulkanSwapchain : VulkanWrapper
 				};
 
 				Apis.Vk.CreateFramebuffer( LogicalGpu!, frameBufferInfo, null, out var frameBuffer ).Verify();
-				FrameBuffers[i] = frameBuffer;
+				frameBuffers.Add( frameBuffer );
 			}
 		}
+
+		FrameBuffers = frameBuffers.MoveToImmutable();
 	}
 
 	private static SurfaceFormatKHR ChooseSwapSurfaceFormat( IEnumerable<SurfaceFormatKHR> formats )
@@ -198,7 +201,7 @@ internal sealed class VulkanSwapchain : VulkanWrapper
 		for ( var i = 0; i < swapchainImages.Length; i++ )
 			swapchainImageViews[i] = logicalGpu.CreateImageView( swapchainImages[i], swapchainImageFormat, ImageAspectFlags.ColorBit, 1 );
 
-		return new VulkanSwapchain( swapchain, swapchainImages, swapchainImageViews,
+		return new VulkanSwapchain( swapchain, swapchainImages.ToImmutableArray(), swapchainImageViews.ToImmutableArray(),
 			swapchainImageFormat, swapchainExtent, swapchainExtension, logicalGpu );
 	}
 }

@@ -178,7 +178,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			SType = StructureType.RenderPassBeginInfo,
 			RenderPass = RenderPass,
-			Framebuffer = Swapchain.FrameBuffers[imageIndex],
+			Framebuffer = Swapchain.FrameBuffers[(int)imageIndex],
 			ClearValueCount = 1,
 			RenderArea =
 			{
