@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Vulkan;
 using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
@@ -29,5 +30,18 @@ internal sealed class VulkanFence : VulkanWrapper
 			throw new ObjectDisposedException( nameof( VulkanFence ) );
 
 		return vulkanFence.Fence;
+	}
+
+	internal static unsafe VulkanFence New( LogicalGpu logicalGpu, bool signaled )
+	{
+		var fenceInfo = new FenceCreateInfo
+		{
+			SType = StructureType.FenceCreateInfo,
+			Flags = signaled ? FenceCreateFlags.SignaledBit : 0
+		};
+
+		Apis.Vk.CreateFence( logicalGpu, fenceInfo, null, out var fence ).Verify();
+
+		return new VulkanFence( fence, logicalGpu );
 	}
 }

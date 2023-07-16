@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Vulkan;
 using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
@@ -29,5 +30,17 @@ internal sealed class VulkanSemaphore : VulkanWrapper
 			throw new ObjectDisposedException( nameof( VulkanSemaphore ) );
 
 		return vulkanSemaphore.Semaphore;
+	}
+
+	internal static unsafe VulkanSemaphore New( LogicalGpu logicalGpu )
+	{
+		var semaphoreCreateInfo = new SemaphoreCreateInfo
+		{
+			SType = StructureType.SemaphoreCreateInfo
+		};
+
+		Apis.Vk.CreateSemaphore( logicalGpu, semaphoreCreateInfo, null, out var semaphore ).Verify();
+
+		return new VulkanSemaphore( semaphore, logicalGpu );
 	}
 }

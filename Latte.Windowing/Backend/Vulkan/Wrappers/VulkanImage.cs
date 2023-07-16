@@ -1,4 +1,6 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Assimp;
+using Silk.NET.Vulkan;
 using System;
 
 namespace Latte.Windowing.Backend.Vulkan;
@@ -238,5 +240,46 @@ internal sealed class VulkanImage : VulkanWrapper
 			throw new ObjectDisposedException( nameof( VulkanImage ) );
 
 		return vulkanImage.Image;
+	}
+
+	internal static unsafe VulkanImage New( LogicalGpu logicalGpu, uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
+		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags, ImageAspectFlags aspectFlags )
+	{
+		var imageInfo = new ImageCreateInfo()
+		{
+			SType = StructureType.ImageCreateInfo,
+			ImageType = ImageType.Type2D,
+			Extent =
+			{
+				Width = width,
+				Height = height,
+				Depth = 1
+			},
+			MipLevels = mipLevels,
+			ArrayLayers = 1,
+			Format = format,
+			Tiling = tiling,
+			InitialLayout = ImageLayout.Undefined,
+			Usage = usageFlags,
+			SharingMode = SharingMode.Exclusive,
+			Samples = numSamples
+		};
+
+		Apis.Vk.CreateImage( logicalGpu, imageInfo, null, out var image ).Verify();
+
+		var requirements = Apis.Vk.GetImageMemoryRequirements( logicalGpu, image );
+		var allocateInfo = new MemoryAllocateInfo()
+		{
+			SType = StructureType.MemoryAllocateInfo,
+			AllocationSize = requirements.Size,
+			MemoryTypeIndex = logicalGpu.FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
+		};
+
+		Apis.Vk.AllocateMemory( logicalGpu, allocateInfo, null, out var imageMemory ).Verify();
+		Apis.Vk.BindImageMemory( logicalGpu, image, imageMemory, 0 ).Verify();
+
+		var imageView = logicalGpu.CreateImageView( image, format, aspectFlags, 1 );
+
+		return new VulkanImage( image, imageMemory, imageView, logicalGpu );
 	}
 }

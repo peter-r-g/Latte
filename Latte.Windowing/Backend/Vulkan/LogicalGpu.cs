@@ -157,18 +157,9 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var poolInfo = new CommandPoolCreateInfo
-		{
-			SType = StructureType.CommandPoolCreateInfo,
-			Flags = CommandPoolCreateFlags.ResetCommandBufferBit,
-			QueueFamilyIndex = queueFamilyIndex
-		};
-
-		Apis.Vk.CreateCommandPool( LogicalDevice, poolInfo, null, out var commandPool ).Verify();
-
-		var vulkanCommandPool = new VulkanCommandPool( commandPool, this );
-		DisposeQueue.Enqueue( vulkanCommandPool.Dispose );
-		return vulkanCommandPool;
+		var commandPool = VulkanCommandPool.New( this, queueFamilyIndex );
+		DisposeQueue.Enqueue( commandPool.Dispose );
+		return commandPool;
 	}
 
 	internal unsafe VulkanDescriptorPool CreateDescriptorPool( in ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes, uint maxDescriptorSets )
@@ -176,22 +167,9 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
-		{
-			var poolInfo = new DescriptorPoolCreateInfo
-			{
-				SType = StructureType.DescriptorPoolCreateInfo,
-				PoolSizeCount = 2,
-				PPoolSizes = descriptorPoolSizesPtr,
-				MaxSets = maxDescriptorSets
-			};
-
-			Apis.Vk.CreateDescriptorPool( LogicalDevice, poolInfo, null, out var descriptorPool ).Verify();
-
-			var vulkanDescriptorPool = new VulkanDescriptorPool( descriptorPool, this );
-			DisposeQueue.Enqueue( vulkanDescriptorPool.Dispose );
-			return vulkanDescriptorPool;
-		}
+		var descriptorPool = VulkanDescriptorPool.New( this, descriptorPoolSizes, maxDescriptorSets );
+		DisposeQueue.Enqueue( descriptorPool.Dispose );
+		return descriptorPool;
 	}
 
 	internal unsafe VulkanBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
@@ -211,15 +189,10 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		CreateImage( width, height, mipLevels, numSamples,
-			format, tiling, usageFlags, memoryPropertyFlags,
-			out var image, out var imageMemory );
-
-		var imageView = CreateImageView( image, format, aspectFlags, 1 );
-		var vulkanImage = new VulkanImage( image, imageMemory, imageView, this );
-
-		DisposeQueue.Enqueue( vulkanImage.Dispose );
-		return vulkanImage;
+		var image = VulkanImage.New( this, width, height, mipLevels, numSamples, format,
+			tiling, usageFlags, memoryPropertyFlags, aspectFlags );
+		DisposeQueue.Enqueue( image.Dispose );
+		return image;
 	}
 
 	internal unsafe VulkanSampler CreateTextureSampler( bool enableMsaa, uint mipLevels )
@@ -227,31 +200,9 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var samplerInfo = new SamplerCreateInfo()
-		{
-			SType = StructureType.SamplerCreateInfo,
-			MagFilter = Filter.Linear,
-			MinFilter = Filter.Linear,
-			AddressModeU = SamplerAddressMode.Repeat,
-			AddressModeV = SamplerAddressMode.Repeat,
-			AddressModeW = SamplerAddressMode.Repeat,
-			AnisotropyEnable = enableMsaa ? Vk.True : Vk.False,
-			MaxAnisotropy = Gpu!.Properties.Limits.MaxSamplerAnisotropy,
-			BorderColor = BorderColor.IntOpaqueBlack,
-			UnnormalizedCoordinates = Vk.False,
-			CompareEnable = Vk.False,
-			CompareOp = CompareOp.Always,
-			MipmapMode = SamplerMipmapMode.Linear,
-			MipLodBias = 0,
-			MinLod = 0,
-			MaxLod = mipLevels
-		};
-
-		Apis.Vk.CreateSampler( LogicalDevice, samplerInfo, null, out var sampler ).Verify();
-
-		var vulkanSampler = new VulkanSampler( sampler, this );
-		DisposeQueue.Enqueue( vulkanSampler.Dispose );
-		return vulkanSampler;
+		var sampler = VulkanSampler.New( this, enableMsaa, mipLevels );
+		DisposeQueue.Enqueue( sampler.Dispose );
+		return sampler;
 	}
 
 	internal unsafe VulkanSemaphore CreateSemaphore()
@@ -259,16 +210,9 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var semaphoreCreateInfo = new SemaphoreCreateInfo
-		{
-			SType = StructureType.SemaphoreCreateInfo
-		};
-
-		Apis.Vk.CreateSemaphore( LogicalDevice, semaphoreCreateInfo, null, out var semaphore ).Verify();
-
-		var vulkanSemaphore = new VulkanSemaphore( semaphore, this );
-		DisposeQueue.Enqueue( vulkanSemaphore.Dispose );
-		return vulkanSemaphore;
+		var semaphore = VulkanSemaphore.New( this );
+		DisposeQueue.Enqueue( semaphore.Dispose );
+		return semaphore;
 	}
 
 	internal unsafe VulkanFence CreateFence( bool signaled = false )
@@ -276,17 +220,9 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var fenceInfo = new FenceCreateInfo
-		{
-			SType = StructureType.FenceCreateInfo,
-			Flags = signaled ? FenceCreateFlags.SignaledBit : 0
-		};
-
-		Apis.Vk.CreateFence( LogicalDevice, fenceInfo, null, out var fence ).Verify();
-
-		var vulkanFence = new VulkanFence( fence, this );
-		DisposeQueue.Enqueue( vulkanFence.Dispose );
-		return vulkanFence;
+		var fence = VulkanFence.New( this, signaled );
+		DisposeQueue.Enqueue( fence.Dispose );
+		return fence;
 	}
 
 	internal unsafe void GetMeshGpuBuffers( VulkanBackend vulkanBackend, Mesh mesh, out GpuBuffer<Vertex> gpuVertexBuffer, out GpuBuffer<uint>? gpuIndexBuffer )
@@ -414,22 +350,10 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 	internal unsafe VulkanShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
 	{
-		var createInfo = new ShaderModuleCreateInfo
-		{
-			SType = StructureType.ShaderModuleCreateInfo,
-			CodeSize = (nuint)shaderCode.Length
-		};
 
-		fixed ( byte* shaderCodePtr = shaderCode )
-		{
-			createInfo.PCode = (uint*)shaderCodePtr;
-
-			Apis.Vk.CreateShaderModule( LogicalDevice, createInfo, null, out var shaderModule ).Verify();
-
-			var vulkanShaderModule = new VulkanShaderModule( shaderModule, this );
-			DisposeQueue.Enqueue( vulkanShaderModule.Dispose );
-			return vulkanShaderModule;
-		}
+		var shaderModule = VulkanShaderModule.New( this, shaderCode );
+		DisposeQueue.Enqueue( shaderModule.Dispose );
+		return shaderModule;
 	}
 
 	internal unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
@@ -452,44 +376,6 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 		Apis.Vk.CreateImageView( LogicalDevice, viewInfo, null, out var imageView ).Verify();
 		return imageView;
-	}
-
-	private unsafe void CreateImage( uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
-		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags,
-		out Image image, out DeviceMemory imageMemory )
-	{
-		var imageInfo = new ImageCreateInfo()
-		{
-			SType = StructureType.ImageCreateInfo,
-			ImageType = ImageType.Type2D,
-			Extent =
-			{
-				Width = width,
-				Height = height,
-				Depth = 1
-			},
-			MipLevels = mipLevels,
-			ArrayLayers = 1,
-			Format = format,
-			Tiling = tiling,
-			InitialLayout = ImageLayout.Undefined,
-			Usage = usageFlags,
-			SharingMode = SharingMode.Exclusive,
-			Samples = numSamples
-		};
-
-		Apis.Vk.CreateImage( LogicalDevice, imageInfo, null, out image ).Verify();
-
-		var requirements = Apis.Vk.GetImageMemoryRequirements( LogicalDevice, image );
-		var allocateInfo = new MemoryAllocateInfo()
-		{
-			SType = StructureType.MemoryAllocateInfo,
-			AllocationSize = requirements.Size,
-			MemoryTypeIndex = FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
-		};
-
-		Apis.Vk.AllocateMemory( LogicalDevice, allocateInfo, null, out imageMemory ).Verify();
-		Apis.Vk.BindImageMemory( LogicalDevice, image, imageMemory, 0 ).Verify();
 	}
 
 	public static implicit operator Device( LogicalGpu logicalGpu )
