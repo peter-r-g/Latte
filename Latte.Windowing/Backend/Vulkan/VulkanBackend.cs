@@ -449,7 +449,14 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		stagingBuffer.SetMemory( data );
 
-		CopyBuffer( stagingBuffer, buffer, bufferSize );
+		using var commandBuffer = LogicalGpu.BeginOneTimeCommands();
+
+		var copyRegion = new BufferCopy
+		{
+			Size = bufferSize
+		};
+
+		Apis.Vk.CmdCopyBuffer( commandBuffer, stagingBuffer, buffer, 1, copyRegion );
 	}
 
 	internal VulkanImage CreateImage( uint width, uint height, uint mipLevels ) => LogicalGpu.CreateImage(
@@ -722,18 +729,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		return indices.IsComplete() && extensionsSupported && swapChainAdequate && gpu.Features.SamplerAnisotropy;
 	}
 
-	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
-	{
-		var memoryProperties = Gpu.MemoryProperties;
-		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
-		{
-			if ( (typeFilter & (1 << i)) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
-				return (uint)i;
-		}
-
-		throw new ApplicationException( "Failed to find suitable memory type" );
-	}
-
 	private Format FindSupportedFormat( IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features )
 	{
 		foreach ( var format in candidates )
@@ -759,18 +754,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		};
 
 		return FindSupportedFormat( formats, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit );
-	}
-
-	private void CopyBuffer( in Buffer srcBuffer, in Buffer dstBuffer, ulong size )
-	{
-		using var commandBuffer = LogicalGpu.BeginOneTimeCommands();
-
-		var copyRegion = new BufferCopy
-		{
-			Size = size
-		};
-
-		Apis.Vk.CmdCopyBuffer( commandBuffer, srcBuffer, dstBuffer, 1, copyRegion );
 	}
 
 	private unsafe void GetMeshGpuBuffers( Mesh mesh, out GpuBuffer<Vertex> gpuVertexBuffer, out GpuBuffer<uint>? gpuIndexBuffer )
