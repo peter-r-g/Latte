@@ -350,6 +350,8 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 	internal unsafe VulkanShaderModule CreateShaderModule( in ReadOnlySpan<byte> shaderCode )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var shaderModule = VulkanShaderModule.New( this, shaderCode );
 		DisposeQueue.Enqueue( shaderModule.Dispose );
@@ -358,6 +360,9 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 	internal unsafe ImageView CreateImageView( in Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( LogicalGpu ) );
+
 		var viewInfo = new ImageViewCreateInfo()
 		{
 			SType = StructureType.ImageViewCreateInfo,
