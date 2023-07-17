@@ -30,6 +30,7 @@ public static class Compiler
 		switch ( extension )
 		{
 			case ".glsl":
+			case ".hlsl":
 				await ShaderCompiler.CompileAsync( filePath );
 				break;
 		}

@@ -7,22 +7,27 @@ using System.Runtime.InteropServices;
 using System;
 using Silk.NET.Windowing;
 using System.Collections.Generic;
+using Latte.Windowing.Extensions;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal unsafe sealed class VulkanInstance
+internal unsafe sealed class VulkanInstance : VulkanWrapper
 {
-	internal IWindow Window { get; }
-	internal Instance Instance { get; }
+	internal required IWindow Window { get; init; }
+	internal required new Instance Instance { get; init; }
+	internal required bool ValidationLayersEnabled { get; init; }
 
-	internal ExtDebugUtils? DebugUtilsExtension { get; } = null!;
-	internal DebugUtilsMessengerEXT DebugMessenger { get; }
+	internal required ExtDebugUtils? DebugUtilsExtension { get; init; } = null!;
+	internal required DebugUtilsMessengerEXT DebugMessenger { get; init; }
 
-	internal KhrSurface SurfaceExtension { get; } = null!;
-	internal SurfaceKHR Surface { get; }
+	internal required KhrSurface SurfaceExtension { get; init; } = null!;
+	internal required SurfaceKHR Surface { get; init; }
 
+	[SetsRequiredMembers]
 	internal VulkanInstance( IWindow window, bool enableValidationLayers, string[]? validationLayers = null )
 	{
+		ValidationLayersEnabled = enableValidationLayers;
 		if ( enableValidationLayers && (validationLayers is null || validationLayers.Length == 0) )
 			throw new ArgumentException( "No validation layers were passed", nameof(validationLayers) );
 
@@ -63,21 +68,17 @@ internal unsafe sealed class VulkanInstance
 		else
 			createInfo.EnabledLayerCount = 0;
 
-		if ( Apis.Vk.CreateInstance( createInfo, null, out var instance ) != Result.Success )
-			throw new ApplicationException( "Failed to create Vulkan instance" );
-
+		Apis.Vk.CreateInstance( createInfo, null, out var instance ).Verify();
 		Instance = instance;
 
-		if ( enableValidationLayers &&
-			!Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtilsExtension ) )
+		if ( enableValidationLayers && Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( Instance, out var debugUtilsExtension ) )
 		{
 			DebugUtilsExtension = debugUtilsExtension;
 
 			var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
 			PopulateDebugMessengerCreateInfo( ref debugCreateInfo );
-			if ( debugUtilsExtension.CreateDebugUtilsMessenger( instance, &debugCreateInfo, null, out var debugMessenger ) != Result.Success )
-				throw new ApplicationException( "Failed to setup Vulkan debug messenger" );
 
+			debugUtilsExtension.CreateDebugUtilsMessenger( instance, &debugCreateInfo, null, out var debugMessenger ).Verify();
 			DebugMessenger = debugMessenger;
 		}
 
@@ -94,18 +95,29 @@ internal unsafe sealed class VulkanInstance
 			SilkMarshal.Free( (nint)createInfo.PpEnabledLayerNames );
 	}
 
+	public override void Dispose()
+	{
+		if ( Disposed )
+			return;
+
+		if ( ValidationLayersEnabled && DebugUtilsExtension is not null )
+			DebugUtilsExtension.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null );
+
+		SurfaceExtension.DestroySurface( Instance, Surface, null );
+		Apis.Vk.DestroyInstance( Instance, null );
+
+		GC.SuppressFinalize( this );
+		Disposed = true;
+	}
+
 	private bool CheckValidationLayerSupport( IEnumerable<string> validationLayers )
 	{
 		uint layerCount = 0;
-		if ( Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan layer properties (1)" );
+		Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, null ).Verify();
 
 		var availableLayers = new LayerProperties[layerCount];
 		fixed ( LayerProperties* availableLayersPtr = availableLayers )
-		{
-			if ( Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, availableLayersPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to enumerate Vulkan layer properties (2)" );
-		}
+			Apis.Vk.EnumerateInstanceLayerProperties( &layerCount, availableLayersPtr ).Verify();
 
 		foreach ( var layerName in validationLayers )
 		{
@@ -124,7 +136,8 @@ internal unsafe sealed class VulkanInstance
 			if ( layerFound )
 				continue;
 
-			Console.WriteLine( $"ERROR: Failed to find Vulkan validation layer \"{layerName}\"" );
+			if ( Loggers.Vulkan.IsEnabled( Logging.LogLevel.Error ) )
+				Loggers.Vulkan.Error( $"Failed to find Vulkan validation layer \"{layerName}\"" );
 			return false;
 		}
 
@@ -168,10 +181,35 @@ internal unsafe sealed class VulkanInstance
 		DebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData )
 	{
-		Console.WriteLine( $"VULKAN: {Marshal.PtrToStringAnsi( (nint)pCallbackData->PMessage )}" );
+		var message = Marshal.PtrToStringAnsi( (nint)pCallbackData->PMessage );
+		if ( message is null )
+			return Vk.False;
+
+		switch ( messageSeverity )
+		{
+			case DebugUtilsMessageSeverityFlagsEXT.None:
+			case DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt:
+				Loggers.Vulkan.Verbose( message );
+				break;
+			case DebugUtilsMessageSeverityFlagsEXT.InfoBitExt:
+				Loggers.Vulkan.Information( message );
+				break;
+			case DebugUtilsMessageSeverityFlagsEXT.WarningBitExt:
+				Loggers.Vulkan.Warning( message );
+				break;
+			case DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt:
+				Loggers.Vulkan.Error( message );
+				break;
+		}
 
 		return Vk.False;
 	}
 
-	public static implicit operator Instance( VulkanInstance vulkanInstance ) => vulkanInstance.Instance;
+	public static implicit operator Instance( VulkanInstance vulkanInstance )
+	{
+		if ( vulkanInstance.Disposed )
+			throw new ObjectDisposedException( nameof( VulkanInstance ) );
+
+		return vulkanInstance.Instance;
+	}
 }

@@ -1,56 +1,58 @@
-﻿using Silk.NET.Core.Native;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class Gpu : IDisposable
+internal sealed class Gpu : VulkanWrapper
 {
-	internal VulkanInstance Instance { get; }
 	internal PhysicalDevice PhysicalDevice { get; }
 
-	internal IReadOnlyList<LogicalGpu> LogicalGpus => logicalGpus;
-	private readonly List<LogicalGpu> logicalGpus = new();
+	internal IReadOnlyCollection<LogicalGpu> LogicalGpus => logicalGpus;
+	private readonly ConcurrentBag<LogicalGpu> logicalGpus = new();
 
 	internal PhysicalDeviceFeatures Features { get; }
 	internal PhysicalDeviceProperties Properties { get; }
 	internal PhysicalDeviceMemoryProperties MemoryProperties { get; }
 	internal SwapchainSupportDetails SwapchainSupportDetails => GetSwapchainSupport();
 
-	internal Gpu( in PhysicalDevice physicalDevice, VulkanInstance instance )
+	internal Gpu( in PhysicalDevice physicalDevice, VulkanInstance instance ) : base( instance )
 	{
 		PhysicalDevice = physicalDevice;
-		Instance = instance;
 
 		Features = Apis.Vk.GetPhysicalDeviceFeatures( physicalDevice );
 		Properties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );
 		MemoryProperties = Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice );
 	}
 
-	~Gpu()
+	public override void Dispose()
 	{
-		Dispose();
-	}
+		if ( Disposed )
+			return;
 
-	public void Dispose()
-	{
 		foreach ( var logicalGpu in LogicalGpus )
 			logicalGpu.Dispose();
 
 		GC.SuppressFinalize( this );
+		Disposed = true;
 	}
 
 	internal unsafe LogicalGpu CreateLogicalGpu( in QueueFamilyIndices familyIndices, in PhysicalDeviceFeatures features,
 		string[] extensions, bool enableValidationLayers = false, string[]? validationLayers = null )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		if ( enableValidationLayers && (validationLayers is null || validationLayers.Length == 0) )
 			throw new ArgumentException( "No validation layers were passed", nameof( validationLayers ) );
 
 		if ( !familyIndices.IsComplete() )
-			throw new ApplicationException( "Attempted to create a logical device from indices that are not complete" );
+			throw new ArgumentException( "Attempted to create a logical device from indices that are not complete", nameof( familyIndices ) );
 
 		var queuePriority = 1f;
 		var uniqueIndices = familyIndices.GetUniqueFamilies();
@@ -87,8 +89,7 @@ internal sealed class Gpu : IDisposable
 			else
 				deviceCreateInfo.EnabledLayerCount = 0;
 
-			if ( Apis.Vk.CreateDevice( PhysicalDevice, deviceCreateInfo, null, out var logicalDevice ) != Result.Success )
-				throw new ApplicationException( "Failed to create logical Vulkan device" );
+			Apis.Vk.CreateDevice( PhysicalDevice, deviceCreateInfo, null, out var logicalDevice ).Verify();
 
 			var logicalGpu = new LogicalGpu( logicalDevice, this, familyIndices );
 			logicalGpus.Add( logicalGpu );
@@ -102,13 +103,14 @@ internal sealed class Gpu : IDisposable
 
 	internal unsafe bool SupportsExtensions( params string[] extensions )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		uint extensionCount;
-		if ( Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan device extensions (1)" );
+		Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, null ).Verify();
 
 		var availableExtensions = stackalloc ExtensionProperties[(int)extensionCount];
-		if ( Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, availableExtensions ) != Result.Success )
-			throw new ApplicationException( "Failed to enumerate Vulkan device extensions (2)" );
+		Apis.Vk.EnumerateDeviceExtensionProperties( PhysicalDevice, string.Empty, &extensionCount, availableExtensions ).Verify();
 
 		var matches = 0;
 		for ( var i = 0; i < extensionCount; i++ )
@@ -123,11 +125,17 @@ internal sealed class Gpu : IDisposable
 
 	internal FormatProperties GetFormatProperties( Format format )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		return Apis.Vk.GetPhysicalDeviceFormatProperties( PhysicalDevice, format );
 	}
 
 	internal unsafe QueueFamilyIndices GetQueueFamilyIndices( bool requireUnique = false )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
 		var indices = new QueueFamilyIndices();
 
 		uint queueFamilyCount;
@@ -141,11 +149,9 @@ internal sealed class Gpu : IDisposable
 			if ( queueFamilies[i].QueueFlags.HasFlag( QueueFlags.GraphicsBit ) )
 				indices.GraphicsFamily = i;
 
-			{
-				Instance.SurfaceExtension.GetPhysicalDeviceSurfaceSupport( PhysicalDevice, i, Instance.Surface, out var presentSupported );
-				if ( presentSupported && ((requireUnique && indices.GraphicsFamily != i) || !requireUnique) )
-					indices.PresentFamily = i;
-			}
+			Instance!.SurfaceExtension.GetPhysicalDeviceSurfaceSupport( PhysicalDevice, i, Instance.Surface, out var presentSupported );
+			if ( presentSupported && ((requireUnique && indices.GraphicsFamily != i) || !requireUnique) )
+				indices.PresentFamily = i;
 
 			if ( indices.IsComplete() )
 				break;
@@ -158,38 +164,35 @@ internal sealed class Gpu : IDisposable
 	{
 		var details = new SwapchainSupportDetails();
 
-		var surfaceExtension = Instance.SurfaceExtension;
+		var surfaceExtension = Instance!.SurfaceExtension;
 		var surface = Instance.Surface;
-		if ( surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( PhysicalDevice, surface, out var capabilities ) != Result.Success )
-			throw new ApplicationException( "Failed to query physical device surface capabilities" );
+		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( PhysicalDevice, surface, out var capabilities ).Verify();
 		details.Capabilities = capabilities;
 
 		uint formatCount;
-		if ( surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to query physical device surface formats (1)" );
+		surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, null ).Verify();
 
 		var formats = new SurfaceFormatKHR[formatCount];
 		fixed ( SurfaceFormatKHR* formatsPtr = formats )
-		{
-			if ( surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, formatsPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to query physical device surface formats (2)" );
-		}
+			surfaceExtension.GetPhysicalDeviceSurfaceFormats( PhysicalDevice, surface, &formatCount, formatsPtr ).Verify();
 		details.Formats = formats;
 
 		uint presentModeCount;
-		if ( surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, null ) != Result.Success )
-			throw new ApplicationException( "Failed to query physical device present modes (1)" );
+		surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, null ).Verify();
 
 		var presentModes = new PresentModeKHR[presentModeCount];
 		fixed ( PresentModeKHR* presentModesPtr = presentModes )
-		{
-			if ( surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, presentModesPtr ) != Result.Success )
-				throw new ApplicationException( "Failed to query physical device present modes (2)" );
-		}
+			surfaceExtension.GetPhysicalDeviceSurfacePresentModes( PhysicalDevice, surface, &presentModeCount, presentModesPtr ).Verify();
 		details.PresentModes = presentModes;
 
 		return details;
 	}
 
-	public static implicit operator PhysicalDevice( Gpu gpu ) => gpu.PhysicalDevice;
+	public static implicit operator PhysicalDevice( Gpu gpu )
+	{
+		if ( gpu.Disposed )
+			throw new ObjectDisposedException( nameof( Gpu ) );
+
+		return gpu.PhysicalDevice;
+	}
 }

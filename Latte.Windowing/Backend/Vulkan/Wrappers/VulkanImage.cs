@@ -1,46 +1,42 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.Windowing.Extensions;
+using Silk.NET.Vulkan;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
-internal sealed class VulkanImage : IDisposable
+internal sealed class VulkanImage : VulkanWrapper
 {
-	internal LogicalGpu Owner { get; }
+	internal required Image Image { get; init; }
+	internal required DeviceMemory Memory { get; init; }
+	internal required ImageView View { get; init; }
 
-	internal Image Image { get; set; }
-	internal DeviceMemory Memory { get; set; }
-	internal ImageView View { get; set; }
-
-	private bool disposed;
-
-	internal VulkanImage( in Image image, in DeviceMemory memory, in ImageView view, LogicalGpu owner )
+	[SetsRequiredMembers]
+	internal VulkanImage( in Image image, in DeviceMemory memory, in ImageView view, LogicalGpu owner ) : base( owner )
 	{
 		Image = image;
 		Memory = memory;
 		View = view;
-		Owner = owner;
 	}
 
-	~VulkanImage()
+	public unsafe override void Dispose()
 	{
-		Dispose();
-	}
-
-	public unsafe void Dispose()
-	{
-		if ( disposed )
+		if ( Disposed )
 			return;
 
-		disposed = true;
-		Apis.Vk.DestroyImageView( Owner, View, null );
-		Apis.Vk.DestroyImage( Owner, Image, null );
-		Apis.Vk.FreeMemory( Owner, Memory, null );
+		Apis.Vk.DestroyImageView( LogicalGpu!, View, null );
+		Apis.Vk.DestroyImage( LogicalGpu!, Image, null );
+		Apis.Vk.FreeMemory( LogicalGpu!, Memory, null );
 
 		GC.SuppressFinalize( this );
+		Disposed = true;
 	}
 
 	internal void CopyBufferToImage( in CommandBuffer commandBuffer, VulkanBuffer buffer, uint width, uint height )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
 		var region = new BufferImageCopy
 		{
 			BufferOffset = 0,
@@ -68,6 +64,9 @@ internal sealed class VulkanImage : IDisposable
 	internal unsafe void TransitionImageLayout( in CommandBuffer commandBuffer, Format format,
 		ImageLayout oldLayout, ImageLayout newLayout, uint mipLevels )
 	{
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
 		var barrier = new ImageMemoryBarrier()
 		{
 			SType = StructureType.ImageMemoryBarrier,
@@ -135,7 +134,10 @@ internal sealed class VulkanImage : IDisposable
 
 	internal unsafe void GenerateMipMaps( in CommandBuffer commandBuffer, Format format, uint width, uint height, uint mipLevels )
 	{
-		var formatProperties = Owner.Gpu.GetFormatProperties( format );
+		if ( Disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
+		var formatProperties = Gpu!.GetFormatProperties( format );
 		if ( !formatProperties.OptimalTilingFeatures.HasFlag( FormatFeatureFlags.SampledImageFilterLinearBit ) )
 			throw new ApplicationException( "Texture image format does not support linear blitting" );
 
@@ -233,5 +235,52 @@ internal sealed class VulkanImage : IDisposable
 		return format == Format.D32Sfloat || format == Format.D24UnormS8Uint;
 	}
 
-	public static implicit operator Image( VulkanImage vulkanImage ) => vulkanImage.Image;
+	public static implicit operator Image( VulkanImage vulkanImage )
+	{
+		if ( vulkanImage.Disposed )
+			throw new ObjectDisposedException( nameof( VulkanImage ) );
+
+		return vulkanImage.Image;
+	}
+
+	internal static unsafe VulkanImage New( LogicalGpu logicalGpu, uint width, uint height, uint mipLevels, SampleCountFlags numSamples,
+		Format format, ImageTiling tiling, ImageUsageFlags usageFlags, MemoryPropertyFlags memoryPropertyFlags, ImageAspectFlags aspectFlags )
+	{
+		var imageInfo = new ImageCreateInfo()
+		{
+			SType = StructureType.ImageCreateInfo,
+			ImageType = ImageType.Type2D,
+			Extent =
+			{
+				Width = width,
+				Height = height,
+				Depth = 1
+			},
+			MipLevels = mipLevels,
+			ArrayLayers = 1,
+			Format = format,
+			Tiling = tiling,
+			InitialLayout = ImageLayout.Undefined,
+			Usage = usageFlags,
+			SharingMode = SharingMode.Exclusive,
+			Samples = numSamples
+		};
+
+		Apis.Vk.CreateImage( logicalGpu, imageInfo, null, out var image ).Verify();
+
+		var requirements = Apis.Vk.GetImageMemoryRequirements( logicalGpu, image );
+		var allocateInfo = new MemoryAllocateInfo()
+		{
+			SType = StructureType.MemoryAllocateInfo,
+			AllocationSize = requirements.Size,
+			MemoryTypeIndex = logicalGpu.FindMemoryType( requirements.MemoryTypeBits, memoryPropertyFlags )
+		};
+
+		Apis.Vk.AllocateMemory( logicalGpu, allocateInfo, null, out var imageMemory ).Verify();
+		Apis.Vk.BindImageMemory( logicalGpu, image, imageMemory, 0 ).Verify();
+
+		var imageView = logicalGpu.CreateImageView( image, format, aspectFlags, 1 );
+
+		return new VulkanImage( image, imageMemory, imageView, logicalGpu );
+	}
 }
