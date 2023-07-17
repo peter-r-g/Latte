@@ -18,6 +18,13 @@ internal static class VertexDescriptions
 				Binding = 0,
 				Stride = (uint)sizeof( Vertex ),
 				InputRate = VertexInputRate.Vertex
+			},
+
+			new VertexInputBindingDescription
+			{
+				Binding = 1,
+				Stride = (uint)sizeof( InstanceData ),
+				InputRate = VertexInputRate.Instance
 			}
 		};
 	}
@@ -30,26 +37,48 @@ internal static class VertexDescriptions
 	{
 		return new VertexInputAttributeDescription[]
 		{
-			new VertexInputAttributeDescription()
+			new VertexInputAttributeDescription
 			{
 				Binding = 0,
 				Location = 0,
 				Format = Format.R32G32B32Sfloat,
 				Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.Position ) )
 			},
-			new VertexInputAttributeDescription()
+			new VertexInputAttributeDescription
 			{
 				Binding = 0,
 				Location = 1,
 				Format = Format.R32G32B32Sfloat,
 				Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.Color ) )
 			},
-			new VertexInputAttributeDescription()
+			new VertexInputAttributeDescription
 			{
 				Binding = 0,
 				Location = 2,
 				Format = Format.R32G32Sfloat,
 				Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.TextureCoordinates ) )
+			},
+
+			new VertexInputAttributeDescription
+			{
+				Binding = 1,
+				Location = 3,
+				Format = Format.R32G32B32Sfloat,
+				Offset = (uint)Marshal.OffsetOf<InstanceData>( nameof( InstanceData.Position ) )
+			},
+			new VertexInputAttributeDescription
+			{
+				Binding = 1,
+				Location = 4,
+				Format = Format.R32G32B32Sfloat,
+				Offset = (uint)Marshal.OffsetOf<InstanceData>( nameof( InstanceData.Rotation ) )
+			},
+			new VertexInputAttributeDescription
+			{
+				Binding = 1,
+				Location = 5,
+				Format = Format.R32Sfloat,
+				Offset = (uint)Marshal.OffsetOf<InstanceData>( nameof( InstanceData.Scale ) )
 			}
 		};
 	}

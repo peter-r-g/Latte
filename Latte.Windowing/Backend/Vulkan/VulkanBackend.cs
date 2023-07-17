@@ -19,6 +19,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 {
 	internal const uint MaxFramesInFlight = 2;
 	internal const int ExtraSwapImages = 1;
+	internal const int MaxInstances = 1000;
 
 	public IRenderingOptions Options { get; }
 	public event IRenderingBackend.OptionsAppliedHandler? OptionsApplied;
@@ -51,6 +52,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 	private Dictionary<BufferUsageFlags, List<VulkanBuffer>> GpuBuffers { get; } = new();
 	private Dictionary<BufferUsageFlags, List<ulong>> GpuBuffersOffsets { get; } = new();
 	private VulkanDescriptorPool DescriptorPool { get; set; } = null!;
+	private DescriptorSet[] DescriptorSets { get; set; } = Array.Empty<DescriptorSet>();
 	private CommandBuffer[] CommandBuffers { get; set; } = Array.Empty<CommandBuffer>();
 
 	private VulkanImage DepthImage { get; set; } = null!;
@@ -64,13 +66,18 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 	private ConcurrentDictionary<Mesh, GpuBuffer<Vertex>> MeshVertexBuffers { get; } = new();
 	private ConcurrentDictionary<Mesh, GpuBuffer<uint>> MeshIndexBuffers { get; } = new();
-	private ConcurrentDictionary<Texture, DescriptorSet[]> TextureDescriptorSets { get; } = new();
 
 	private uint CurrentImageIndex { get; set; }
 	private CommandBuffer CurrentCommandBuffer { get; set; }
+	private DescriptorSet CurrentDescriptorSet { get; set; }
 	private uint CurrentFrame { get; set; }
+	private (VulkanBuffer Buffer, ulong Offset)[] GpuInstanceBuffers { get; set; } = Array.Empty<(VulkanBuffer, ulong)>();
+	private (VulkanBuffer Buffer, ulong Offset) CurrentInstanceBuffer { get; set; }
+	private Dictionary<Mesh, InstanceData[]> CurrentInstanceData { get; set; } = new();
+	private Dictionary<Mesh, uint> InstanceCounts { get; set; } = new();
+	private Dictionary<Texture, VulkanImage> TextureImages { get; set; } = new();
+	private Dictionary<Texture, int> TextureIndices { get; set; } = new();
 	private Texture? CurrentTexture { get; set; }
-	private Vector3 CurrentModelPosition { get; set; }
 	private Buffer CurrentVertexBuffer { get; set; }
 	private Buffer CurrentIndexBuffer { get; set; }
 
@@ -128,7 +135,9 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		CreateDepthResources();
 		CreateFrameBuffers();
 		CreateUniformBuffers();
+		CreateInstanceBuffers();
 		CreateDescriptorPool();
+		CreateDescriptorSets();
 		CreateCommandBuffer();
 		CreateSyncObjects();
 
@@ -151,7 +160,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		uint imageIndex;
 		var result = Swapchain.Extension.AcquireNextImage( LogicalGpu, Swapchain, ulong.MaxValue,
 			ImageAvailableSemaphores[CurrentFrame], default, &imageIndex );
-		CurrentImageIndex = imageIndex;
 		switch ( result )
 		{
 			case Result.ErrorOutOfDateKhr:
@@ -168,9 +176,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		Apis.Vk.ResetFences( LogicalGpu, 1, InFlightFences[CurrentFrame] ).Verify();
 		Apis.Vk.ResetCommandBuffer( CommandBuffers[CurrentFrame], 0 ).Verify();
 
-		UpdateUniformBuffer( CurrentFrame );
+		UpdateUniformBuffer();
 
+		CurrentImageIndex = imageIndex;
 		CurrentCommandBuffer = CommandBuffers[CurrentFrame];
+		CurrentDescriptorSet = DescriptorSets[CurrentFrame];
+		CurrentInstanceBuffer = GpuInstanceBuffers[CurrentFrame];
 
 		var beginInfo = new CommandBufferBeginInfo
 		{
@@ -221,20 +232,31 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		};
 		Apis.Vk.CmdSetScissor( CurrentCommandBuffer, 0, 1, scissor );
 
-		CurrentModelPosition = Vector3.Zero;
-		var defaultConstants = new PushConstants( Matrix4x4.CreateTranslation( CurrentModelPosition ) );
-		Apis.Vk.CmdPushConstants( CurrentCommandBuffer, GraphicsPipeline.Layout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &defaultConstants );
+		Apis.Vk.CmdBindDescriptorSets( CurrentCommandBuffer, PipelineBindPoint.Graphics, GraphicsPipeline.Layout,
+			0, 1, DescriptorSets[CurrentFrame], 0, null );
 
-		// TODO: Multiple textures crash Vulkan due to lack of descriptor set space.
-		//SetTexture( Texture.Missing );
+		Apis.Vk.CmdBindVertexBuffers( CurrentCommandBuffer, 1, 1, CurrentInstanceBuffer.Buffer, CurrentInstanceBuffer.Offset );
+
+		SetTexture( Texture.Missing );
 	}
 
 	public void EndFrame()
 	{
-		CurrentTexture = null;
-		CurrentIndexBuffer = default;
-		CurrentVertexBuffer = default;
-		CurrentModelPosition = default;
+		foreach ( var (mesh, instanceData) in CurrentInstanceData )
+		{
+			UploadToBuffer<InstanceData>( CurrentInstanceBuffer.Buffer, instanceData );
+
+			GetMeshGpuBuffers( mesh, out var vertexBuffer, out var indexBuffer );
+			Apis.Vk.CmdBindVertexBuffers( CurrentCommandBuffer, 0, 1, vertexBuffer.Buffer, vertexBuffer.Offset );
+
+			if ( indexBuffer is not null )
+			{
+				Apis.Vk.CmdBindIndexBuffer( CurrentCommandBuffer, indexBuffer.Buffer, indexBuffer.Offset, IndexType.Uint32 );
+				Apis.Vk.CmdDrawIndexed( CurrentCommandBuffer, (uint)mesh.Indices.Length, InstanceCounts[mesh], 0, 0, 0 );
+			}
+			else
+				Apis.Vk.CmdDraw( CurrentCommandBuffer, 0, InstanceCounts[mesh], 0, 0 );
+		}
 
 		Apis.Vk.CmdEndRenderPass( CurrentCommandBuffer );
 		Apis.Vk.EndCommandBuffer( CurrentCommandBuffer ).Verify();
@@ -301,7 +323,12 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 				throw new ApplicationException( "Failed to present queue" );
 		}
 
+		InstanceCounts.Clear();
+		CurrentTexture = null;
+		CurrentIndexBuffer = default;
+		CurrentVertexBuffer = default;
 		CurrentCommandBuffer = default;
+		CurrentImageIndex = default;
 		CurrentFrame = (CurrentFrame + 1) % MaxFramesInFlight;
 	}
 
@@ -315,12 +342,59 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( CurrentCommandBuffer.Handle == nint.Zero )
 			throw new InvalidOperationException( "You cannot set textures outside of a rendering block" );
 
-		if ( texture == CurrentTexture )
+		if ( CurrentTexture == texture )
 			return;
 
 		CurrentTexture = texture;
-		var descriptorSets = GetTextureDescriptorSets( texture, DescriptorSetLayout, DescriptorPool, UniformBuffers, Options.Msaa.ToVulkan() );
-		Apis.Vk.CmdBindDescriptorSets( CurrentCommandBuffer, PipelineBindPoint.Graphics, GraphicsPipeline.Layout, 0, 1, descriptorSets[CurrentFrame], 0, null );
+
+		if ( !TextureIndices.ContainsKey( texture ) )
+		{
+			var textureImage = LogicalGpu.CreateImage( (uint)texture.Width, (uint)texture.Height, texture.MipLevels, SampleCountFlags.Count1Bit,
+			Format.R8G8B8A8Srgb, ImageTiling.Optimal,
+			ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
+
+			var textureSize = (ulong)texture.Width * (ulong)texture.Height * (ulong)texture.BytesPerPixel;
+			var stagingBuffer = LogicalGpu.CreateBuffer( textureSize, BufferUsageFlags.TransferSrcBit,
+				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
+			stagingBuffer.SetMemory( texture.PixelData.Span );
+
+			using ( var commandBuffer = LogicalGpu.BeginOneTimeCommands() )
+			{
+				textureImage.TransitionImageLayout( commandBuffer, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, texture.MipLevels );
+				textureImage.CopyBufferToImage( commandBuffer, stagingBuffer, (uint)texture.Width, (uint)texture.Height );
+				textureImage.GenerateMipMaps( commandBuffer, Format.R8G8B8A8Srgb, (uint)texture.Width, (uint)texture.Height, texture.MipLevels );
+			}
+
+			TextureIndices.Add( texture, TextureImages.Count );
+			TextureImages.Add( texture, textureImage );
+		}
+
+		var imageInfo = stackalloc DescriptorImageInfo[]
+		{
+			new DescriptorImageInfo()
+			{
+				ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
+				ImageView = TextureImages[texture].View,
+				Sampler = LogicalGpu.CreateSampler( Options.Msaa != MsaaOption.One, texture.MipLevels )
+			}
+		};
+
+		var descriptorWrites = stackalloc WriteDescriptorSet[1]
+		{
+			new WriteDescriptorSet
+			{
+				SType = StructureType.WriteDescriptorSet,
+				DstSet = CurrentDescriptorSet,
+				DstBinding = 1,
+				DstArrayElement = 0,
+				DescriptorType = DescriptorType.CombinedImageSampler,
+				DescriptorCount = 1,
+				PImageInfo = imageInfo
+			}
+		};
+
+		Apis.Vk.UpdateDescriptorSets( LogicalGpu, 1, descriptorWrites, 0, null );
 	}
 
 	public void DrawModel( Model model ) => DrawModel( model, Vector3.Zero );
@@ -329,32 +403,17 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		if ( CurrentCommandBuffer.Handle == nint.Zero )
 			throw new InvalidOperationException( "You cannot draw models outside of a rendering block" );
 
-		if ( position != CurrentModelPosition )
-		{
-			var pushConstants = new PushConstants( Matrix4x4.CreateTranslation( position ) );
-			Apis.Vk.CmdPushConstants( CurrentCommandBuffer, GraphicsPipeline.Layout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( PushConstants ), &pushConstants );
-		}
-
 		var vertexBuffers = stackalloc Buffer[1];
 		foreach ( var mesh in model.Meshes )
 		{
-			GetMeshGpuBuffers( mesh, out var gpuVertexBuffer, out var gpuIndexBuffer );
+			if ( !CurrentInstanceData.ContainsKey( mesh ) )
+				CurrentInstanceData.Add( mesh, new InstanceData[MaxInstances] );
 
-			if ( gpuVertexBuffer.Buffer.Handle != CurrentVertexBuffer.Handle )
-			{
-				var newVertexBuffer = gpuVertexBuffer;
-				vertexBuffers[0] = newVertexBuffer.Buffer;
-				Apis.Vk.CmdBindVertexBuffers( CurrentCommandBuffer, 0, 1, vertexBuffers, newVertexBuffer.Offset );
-				CurrentVertexBuffer = newVertexBuffer.Buffer;
-			}
-			if ( gpuIndexBuffer is not null && gpuIndexBuffer.Buffer.Handle != CurrentIndexBuffer.Handle )
-			{
-				var newIndexBuffer = gpuIndexBuffer;
-				Apis.Vk.CmdBindIndexBuffer( CurrentCommandBuffer, newIndexBuffer.Buffer, newIndexBuffer.Offset, IndexType.Uint32 );
-				CurrentIndexBuffer = newIndexBuffer.Buffer;
-			}
+			if ( !InstanceCounts.ContainsKey( mesh ) )
+				InstanceCounts.Add( mesh, 0 );
 
-			Apis.Vk.CmdDrawIndexed( CurrentCommandBuffer, (uint)mesh.Indices.Length, 1, 0, 0, 0 );
+			var newInstanceCount = InstanceCounts[mesh]++;
+			CurrentInstanceData[mesh][(int)newInstanceCount] = new InstanceData( position, Vector3.Zero, 1 );
 		}
 	}
 
@@ -367,7 +426,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 
 		if ( Options.HasOptionsChanged( nameof( Options.Msaa ) ) )
 		{
-			TextureDescriptorSets.Clear();
 			DescriptorPool.Dispose();
 			GraphicsPipeline.Dispose();
 			RenderPass.Dispose();
@@ -496,7 +554,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		HasFrameBufferResized = true;
 	}
 
-	private void UpdateUniformBuffer( uint currentImage )
+	private void UpdateUniformBuffer()
 	{
 		var view = Matrix4x4.CreateLookAt( Camera.Position, Camera.Position + Camera.Front, Camera.Up );
 		//It's super important for the width / height calculation to regard each value as a float, otherwise
@@ -508,7 +566,7 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		{
 			ubo
 		};
-		UniformBuffers[currentImage].SetMemory<UniformBufferObject>( data );
+		UniformBuffers[CurrentFrame].SetMemory<UniformBufferObject>( data );
 	}
 
 	#region Initialization stages
@@ -660,6 +718,20 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		}
 	}
 
+	private void CreateInstanceBuffers()
+	{
+		var bufferSize = (ulong)sizeof( InstanceData );
+
+		GpuInstanceBuffers = new (VulkanBuffer, ulong)[MaxFramesInFlight];
+
+		for ( var i = 0; i < MaxFramesInFlight; i++ )
+		{
+			var buffer = GetGPUBuffer( bufferSize * MaxInstances, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
+				out var offset );
+			GpuInstanceBuffers[i] = (buffer, offset);
+		}
+	}
+
 	private void CreateDescriptorPool()
 	{
 		ReadOnlySpan<DescriptorPoolSize> pools = stackalloc DescriptorPoolSize[]
@@ -677,6 +749,55 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 		};
 
 		DescriptorPool = LogicalGpu.CreateDescriptorPool( pools, MaxFramesInFlight );
+	}
+
+	private void CreateDescriptorSets()
+	{
+		var descriptorSets = stackalloc DescriptorSet[(int)MaxFramesInFlight];
+
+		var layouts = stackalloc DescriptorSetLayout[(int)MaxFramesInFlight];
+		for ( var i = 0; i < MaxFramesInFlight; i++ )
+			layouts[i] = DescriptorSetLayout;
+
+		var allocateInfo = new DescriptorSetAllocateInfo
+		{
+			SType = StructureType.DescriptorSetAllocateInfo,
+			DescriptorPool = DescriptorPool,
+			DescriptorSetCount = MaxFramesInFlight,
+			PSetLayouts = layouts
+		};
+
+		if ( Apis.Vk.AllocateDescriptorSets( LogicalGpu, allocateInfo, descriptorSets ) != Result.Success )
+			throw new ApplicationException( "Failed to allocate Vulkan descriptor sets" );
+
+		DescriptorSets = new DescriptorSet[MaxFramesInFlight];
+		for ( var i = 0; i < MaxFramesInFlight; i++ )
+			DescriptorSets[i] = descriptorSets[i];
+
+		var descriptorWrites = stackalloc WriteDescriptorSet[2];
+		for ( var i = 0; i < MaxFramesInFlight; i++ )
+		{
+			var bufferInfo = new DescriptorBufferInfo
+			{
+				Buffer = UniformBuffers[i],
+				Offset = 0,
+				Range = (ulong)sizeof( UniformBufferObject )
+			};
+
+			var uboWrite = new WriteDescriptorSet
+			{
+				SType = StructureType.WriteDescriptorSet,
+				DstSet = DescriptorSets[i],
+				DstBinding = 0,
+				DstArrayElement = 0,
+				DescriptorType = DescriptorType.UniformBuffer,
+				DescriptorCount = 1,
+				PBufferInfo = &bufferInfo
+			};
+			descriptorWrites[0] = uboWrite;
+
+			Apis.Vk.UpdateDescriptorSets( LogicalGpu, 1, descriptorWrites, 0, null );
+		}
 	}
 
 	private void CreateCommandBuffer()
@@ -769,93 +890,6 @@ internal unsafe class VulkanBackend : IInternalRenderingBackend
 			gpuIndexBuffer = new GpuBuffer<uint>( this, mesh.Indices.AsSpan(), BufferUsageFlags.IndexBufferBit );
 			MeshIndexBuffers.TryAdd( mesh, gpuIndexBuffer );
 		}
-	}
-
-	private unsafe DescriptorSet[] GetTextureDescriptorSets( Texture texture, in VulkanDescriptorSetLayout descriptorSetLayout,
-		in VulkanDescriptorPool descriptorPool, VulkanBuffer[] ubos, SampleCountFlags numSamples )
-	{
-		if ( TextureDescriptorSets.TryGetValue( texture, out var descriptorSets ) )
-			return descriptorSets;
-
-		descriptorSets = new DescriptorSet[(int)MaxFramesInFlight];
-
-		var layouts = stackalloc DescriptorSetLayout[(int)MaxFramesInFlight];
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-			layouts[i] = descriptorSetLayout;
-
-		var allocateInfo = new DescriptorSetAllocateInfo
-		{
-			SType = StructureType.DescriptorSetAllocateInfo,
-			DescriptorPool = descriptorPool,
-			DescriptorSetCount = MaxFramesInFlight,
-			PSetLayouts = layouts
-		};
-
-		Apis.Vk.AllocateDescriptorSets( LogicalGpu, &allocateInfo, descriptorSets ).Verify();
-
-		var textureImage = LogicalGpu.CreateImage( (uint)texture.Width, (uint)texture.Height, texture.MipLevels, SampleCountFlags.Count1Bit,
-			Format.R8G8B8A8Srgb, ImageTiling.Optimal,
-			ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit );
-
-		var textureSize = (ulong)texture.Width * (ulong)texture.Height * (ulong)texture.BytesPerPixel;
-		var stagingBuffer = LogicalGpu.CreateBuffer( textureSize, BufferUsageFlags.TransferSrcBit,
-			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit );
-		stagingBuffer.SetMemory( texture.PixelData.Span );
-
-		using ( var commandBuffer = LogicalGpu.BeginOneTimeCommands() )
-		{
-			textureImage.TransitionImageLayout( commandBuffer, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, texture.MipLevels );
-			textureImage.CopyBufferToImage( commandBuffer, stagingBuffer, (uint)texture.Width, (uint)texture.Height );
-			textureImage.GenerateMipMaps( commandBuffer, Format.R8G8B8A8Srgb, (uint)texture.Width, (uint)texture.Height, texture.MipLevels );
-		}
-
-		var descriptorWrites = stackalloc WriteDescriptorSet[2];
-		for ( var i = 0; i < MaxFramesInFlight; i++ )
-		{
-			var bufferInfo = new DescriptorBufferInfo
-			{
-				Buffer = ubos[i],
-				Offset = 0,
-				Range = (ulong)sizeof( UniformBufferObject )
-			};
-
-			var imageInfo = new DescriptorImageInfo
-			{
-				ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
-				ImageView = textureImage.View,
-				Sampler = LogicalGpu.CreateSampler( numSamples != SampleCountFlags.Count1Bit, texture.MipLevels )
-			};
-
-			var uboWrite = new WriteDescriptorSet
-			{
-				SType = StructureType.WriteDescriptorSet,
-				DstSet = descriptorSets[i],
-				DstBinding = 0,
-				DstArrayElement = 0,
-				DescriptorType = DescriptorType.UniformBuffer,
-				DescriptorCount = 1,
-				PBufferInfo = &bufferInfo
-			};
-			descriptorWrites[0] = uboWrite;
-
-			var imageWrite = new WriteDescriptorSet
-			{
-				SType = StructureType.WriteDescriptorSet,
-				DstSet = descriptorSets[i],
-				DstBinding = 1,
-				DstArrayElement = 0,
-				DescriptorType = DescriptorType.CombinedImageSampler,
-				DescriptorCount = 1,
-				PImageInfo = &imageInfo
-			};
-			descriptorWrites[1] = imageWrite;
-
-			Apis.Vk.UpdateDescriptorSets( LogicalGpu, 2, descriptorWrites, 0, null );
-		}
-
-		TextureDescriptorSets.TryAdd( texture, descriptorSets );
-		return descriptorSets;
 	}
 	#endregion
 	#endregion

@@ -2,6 +2,8 @@
 {
 	[[vk::location(0)]] float3 Position : POSITION0;
 	[[vk::location(2)]] float2 TextureCoordinates : TEXCOORD0;
+	
+	[[vk::location(3)]] float3 InstancePosition : POSITION1;
 };
 
 struct VSOutput
@@ -21,17 +23,15 @@ cbuffer ubo : register( b0, space0 )
 	UniformBufferObject ubo;
 };
 
-struct PushConstants
-{
-	float4x4 Model;
-};
-[[vk::push_constant]] PushConstants pushConstants;
-
 VSOutput main( VSInput input )
 {
 	VSOutput output = (VSOutput) 0;
-	output.Position = mul( ubo.Projection, mul( ubo.View, mul( pushConstants.Model, float4( input.Position, 1.0f ) ) ) );
-	output.FragmentTextureCoordinates = input.TextureCoordinates;
+    output.FragmentTextureCoordinates = input.TextureCoordinates;
+	
+	float4 locPos = float4( input.Position.xyz, 1.0f );
+	float4 pos = float4( locPos.xyz + input.InstancePosition, 1.0f );
+
+	output.Position = mul( ubo.Projection, mul( ubo.View, pos ) );
 	
 	return output;
 }

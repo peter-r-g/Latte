@@ -126,7 +126,14 @@ public sealed class SandboxGame : IGame
 	public void Draw( double dt )
 	{
 		Renderer.SetTexture( VikingRoomTexture );
-		Renderer.DrawModel( VikingRoomModel );
+		
+		for ( var x = 0; x < 30; x++ )
+		{
+			for ( var y = 0; y < 30; y++ )
+			{
+				Renderer.DrawModel( VikingRoomModel, new Vector3( x * 2, 0, y * 2 ) );
+			}
+		}
 	}
 
 	private static float DegreesToRadians( float degrees )
