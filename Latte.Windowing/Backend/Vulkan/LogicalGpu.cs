@@ -18,6 +18,8 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 	private VulkanCommandPool OneTimeCommandPool { get; }
 
+	private ConcurrentDictionary<int, VulkanSampler> Samplers { get; } = new();
+
 	public LogicalGpu( in Device logicalDevice, Gpu gpu, in QueueFamilyIndices familyIndices ) : base( gpu )
 	{
 		if ( !familyIndices.IsComplete() )
@@ -185,8 +187,13 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
-		var sampler = VulkanSampler.New( this, enableMsaa, mipLevels );
+		var creationHashCode = HashCode.Combine( enableMsaa, mipLevels );
+		if ( Samplers.TryGetValue( creationHashCode, out var sampler ) )
+			return sampler;
+
+		sampler = VulkanSampler.New( this, enableMsaa, mipLevels );
 		DisposeQueue.Enqueue( new WeakReference<Action>( sampler.Dispose ) );
+		Samplers.TryAdd( creationHashCode, sampler );
 		return sampler;
 	}
 
