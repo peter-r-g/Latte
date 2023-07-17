@@ -2,13 +2,8 @@
 using Latte.Windowing.Extensions;
 using Latte.Windowing.Options;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
 
 namespace Latte.Windowing.Backend.Vulkan;
 
@@ -19,7 +14,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 	internal Queue GraphicsQueue { get; }
 	internal Queue PresentQueue { get; }
 
-	private ConcurrentQueue<Action> DisposeQueue { get; } = new();
+	private ConcurrentQueue<WeakReference<Action>> DisposeQueue { get; } = new();
 
 	private VulkanCommandPool OneTimeCommandPool { get; }
 
@@ -40,8 +35,11 @@ internal sealed class LogicalGpu : VulkanWrapper
 		if ( Disposed )
 			return;
 
-		while ( DisposeQueue.TryDequeue( out var disposeCb ) )
-			disposeCb();
+		while ( DisposeQueue.TryDequeue( out var disposeCbRef ) )
+		{
+			if ( disposeCbRef.TryGetTarget( out var disposeCb ) )
+				disposeCb();
+		}
 
 		Apis.Vk.DestroyDevice( LogicalDevice, null );
 
@@ -102,7 +100,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var buffer = VulkanBuffer.New( this, size, usageFlags, memoryFlags, sharingMode );
-		DisposeQueue.Enqueue( buffer.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( buffer.Dispose ) );
 		return buffer;
 	}
 
@@ -112,7 +110,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var commandPool = VulkanCommandPool.New( this, queueFamilyIndex );
-		DisposeQueue.Enqueue( commandPool.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( commandPool.Dispose ) );
 		return commandPool;
 	}
 
@@ -122,7 +120,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var descriptorPool = VulkanDescriptorPool.New( this, descriptorPoolSizes, maxDescriptorSets );
-		DisposeQueue.Enqueue( descriptorPool.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( descriptorPool.Dispose ) );
 		return descriptorPool;
 	}
 
@@ -132,7 +130,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var descriptorSetLayout = VulkanDescriptorSetLayout.New( this, bindings );
-		DisposeQueue.Enqueue( descriptorSetLayout.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( descriptorSetLayout.Dispose ) );
 		return descriptorSetLayout;
 	}
 
@@ -142,7 +140,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var fence = VulkanFence.New( this, signaled );
-		DisposeQueue.Enqueue( fence.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( fence.Dispose ) );
 		return fence;
 	}
 
@@ -156,7 +154,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 		var graphicsPipeline = VulkanGraphicsPipeline.New( this, options, shader, swapchainExtent, renderPass, bindingDescriptions,
 			attributeDescriptions, dynamicStates, descriptorSetLayouts, pushConstantRanges );
-		DisposeQueue.Enqueue( graphicsPipeline.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( graphicsPipeline.Dispose ) );
 		return graphicsPipeline;
 	}
 
@@ -168,7 +166,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 
 		var image = VulkanImage.New( this, width, height, mipLevels, numSamples, format,
 			tiling, usageFlags, memoryPropertyFlags, aspectFlags );
-		DisposeQueue.Enqueue( image.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( image.Dispose ) );
 		return image;
 	}
 
@@ -178,7 +176,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var renderPass = VulkanRenderPass.New( this, swapchainImageFormat, msaaSamples );
-		DisposeQueue.Enqueue( renderPass.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( renderPass.Dispose ) );
 		return renderPass;
 	}
 
@@ -188,7 +186,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var sampler = VulkanSampler.New( this, enableMsaa, mipLevels );
-		DisposeQueue.Enqueue( sampler.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( sampler.Dispose ) );
 		return sampler;
 	}
 
@@ -198,7 +196,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var semaphore = VulkanSemaphore.New( this );
-		DisposeQueue.Enqueue( semaphore.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( semaphore.Dispose ) );
 		return semaphore;
 	}
 
@@ -208,7 +206,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var shaderModule = VulkanShaderModule.New( this, shaderCode );
-		DisposeQueue.Enqueue( shaderModule.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( shaderModule.Dispose ) );
 		return shaderModule;
 	}
 
@@ -218,7 +216,7 @@ internal sealed class LogicalGpu : VulkanWrapper
 			throw new ObjectDisposedException( nameof( LogicalGpu ) );
 
 		var swapchain = VulkanSwapchain.New( this );
-		DisposeQueue.Enqueue( swapchain.Dispose );
+		DisposeQueue.Enqueue( new WeakReference<Action>( swapchain.Dispose ) );
 		return swapchain;
 	}
 
