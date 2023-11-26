@@ -36,7 +36,7 @@ internal static class ShaderCompiler
 	internal static async Task CompileAsync( string filePath )
 	{
 		if ( VulkanSdkPath is null )
-			throw new NotSupportedException( "The Vulkan SDK is not installed" );
+			throw new NotSupportedException( "The Vulkan SDK is not installed or the OS is missing the VULKAN_SDK environment variable" );
 
 		var isGlsl = filePath.EndsWith( ".glsl" );
 		var compilerPath = isGlsl
