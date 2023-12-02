@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.Engine", "Latte.Engin
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sandbox", "Sandbox\Sandbox.csproj", "{17A12D09-3254-4A15-ADEE-974291A9CF93}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Latte.Assets", "Latte.Assets\Latte.Assets.csproj", "{33C484F7-6D25-44BE-B16A-1CF34EDCC108}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.Assets", "Latte.Assets\Latte.Assets.csproj", "{33C484F7-6D25-44BE-B16A-1CF34EDCC108}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Engine", "Engine", "{164A4679-8FF4-4E25-9245-2C85E15E890D}"
 EndProject
@@ -19,7 +19,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Test", "Test", "{566D9AA7-0
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{75ED2632-C5A5-47BC-AA40-F77552108782}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Latte.AssetCompiler", "Latte.AssetCompiler\Latte.AssetCompiler.csproj", "{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.AssetCompiler", "Latte.AssetCompiler\Latte.AssetCompiler.csproj", "{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Latte.NewRenderer", "Latte.NewRenderer\Latte.NewRenderer.csproj", "{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,6 +53,10 @@ Global
 		{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -62,6 +68,7 @@ Global
 		{17A12D09-3254-4A15-ADEE-974291A9CF93} = {566D9AA7-055E-480E-A42B-F0BAD57F6364}
 		{33C484F7-6D25-44BE-B16A-1CF34EDCC108} = {164A4679-8FF4-4E25-9245-2C85E15E890D}
 		{4EE58561-EEE4-419D-A9ED-321D3E02A4C9} = {75ED2632-C5A5-47BC-AA40-F77552108782}
+		{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213} = {566D9AA7-055E-480E-A42B-F0BAD57F6364}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {45C5CD34-4BD5-434B-9205-A05AFBF64BC2}
