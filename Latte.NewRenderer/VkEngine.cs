@@ -434,7 +434,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var model = Model.FromPath( "/monkey_smooth.obj" );
 		var mesh = model.Meshes.First();
-		monkeyMesh = new Mesh( mesh.Vertices, mesh.Indices );
+		var tempVertices = mesh.Vertices
+			.Select( vertex => new Vertex( vertex.Position, vertex.Normal, vertex.Normal, vertex.TextureCoordinates ) )
+			.ToImmutableArray();
+		monkeyMesh = new Mesh( tempVertices, mesh.Indices );
 
 		UploadMesh( monkeyMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 	}
