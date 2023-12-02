@@ -130,4 +130,40 @@ internal static class VkTypeExtensions
 
 		return pipeline;
 	}
+
+	internal static bool IsValid( this Buffer buffer ) => buffer.Handle != 0;
+	internal static Buffer Validate( this Buffer buffer )
+	{
+		if ( !IsValid( buffer ) )
+			throw new VkInvalidInstanceException( typeof( Buffer ) );
+
+		return buffer;
+	}
+
+	internal static bool IsValid( this DeviceMemory deviceMemory ) => deviceMemory.Handle != 0;
+	internal static DeviceMemory Validate( this DeviceMemory deviceMemory )
+	{
+		if ( !IsValid( deviceMemory ) )
+			throw new VkInvalidInstanceException( typeof( DeviceMemory ) );
+
+		return deviceMemory;
+	}
+
+	internal static bool IsValid( this Image image ) => image.Handle != 0;
+	internal static Image Validate( this Image image )
+	{
+		if ( !IsValid( image ) )
+			throw new VkInvalidInstanceException( typeof( Image ) );
+
+		return image;
+	}
+
+	internal static bool IsValid( this ImageView imageView ) => imageView.Handle != 0;
+	internal static ImageView Validate( this ImageView imageView )
+	{
+		if ( !IsValid( imageView ) )
+			throw new VkInvalidInstanceException( typeof( ImageView ) );
+
+		return imageView;
+	}
 }
