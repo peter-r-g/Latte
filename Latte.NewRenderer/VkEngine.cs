@@ -446,11 +446,11 @@ internal unsafe sealed class VkEngine : IDisposable
 			var createInfo = VkInfo.Buffer( (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>()), BufferUsageFlags.VertexBufferBit, sharingMode );
 			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
 
-			var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer );
+			var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer.Validate() );
 			var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 			Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
 
-			Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory, 0 ).Verify();
+			Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory.Validate(), 0 ).Verify();
 
 			void* dataPtr;
 			Apis.Vk.MapMemory( logicalDevice, memory, 0, requirements.Size, 0, &dataPtr ).Verify();
@@ -468,11 +468,11 @@ internal unsafe sealed class VkEngine : IDisposable
 			var createInfo = VkInfo.Buffer( (ulong)(mesh.Indices.Length * sizeof( uint )), BufferUsageFlags.IndexBufferBit, sharingMode );
 			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
 
-			var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer );
+			var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer.Validate() );
 			var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 			Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
 
-			Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory, 0 ).Verify();
+			Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory.Validate(), 0 ).Verify();
 
 			void* dataPtr;
 			Apis.Vk.MapMemory( logicalDevice, memory, 0, requirements.Size, 0, &dataPtr ).Verify();
