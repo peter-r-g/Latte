@@ -346,10 +346,10 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.vert.spv", out var coloredTriangleVert ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.vert.spv", out var coloredTriangleVert ) )
 			throw new ApplicationException( "Failed to build colored triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var coloredTriangleFrag ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var coloredTriangleFrag ) )
 			throw new ApplicationException( "Failed to build colored triangle fragment shader" );
 
 		var pipelineLayoutCreateInfo = VkInfo.PipelineLayout();
@@ -372,10 +372,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.DestroyShaderModule( logicalDevice, coloredTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, coloredTriangleFrag, null );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\triangle.vert.spv", out var redTriangleVert ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\triangle.vert.spv", out var redTriangleVert ) )
 			throw new ApplicationException( "Failed to build red triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\triangle.frag.spv", out var redTriangleFrag ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\triangle.frag.spv", out var redTriangleFrag ) )
 			throw new ApplicationException( "Failed to build red triangle fragment shader" );
 
 		redTrianglePipeline = pipelineBuilder.ClearShaderStages()
@@ -387,10 +387,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.DestroyShaderModule( logicalDevice, redTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, redTriangleFrag, null );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new ApplicationException( "Failed to build mesh triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var meshTriangleFrag ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var meshTriangleFrag ) )
 			throw new ApplicationException( "Failed to build mesh triangle fragment shader" );
 
 		var meshPipelineCreateInfo = VkInfo.PipelineLayout();
