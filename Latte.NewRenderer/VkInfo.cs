@@ -270,4 +270,20 @@ internal unsafe static class VkInfo
 			}
 		};
 	}
+
+	internal static PipelineDepthStencilStateCreateInfo DepthStencilState( bool depthTest, bool depthWrite, CompareOp compareOp )
+	{
+		return new PipelineDepthStencilStateCreateInfo
+		{
+			SType = StructureType.PipelineDepthStencilStateCreateInfo,
+			PNext = null,
+			DepthTestEnable = depthTest ? Vk.True : Vk.False,
+			DepthWriteEnable = depthWrite ? Vk.True : Vk.False,
+			DepthCompareOp = depthTest ? compareOp : CompareOp.Always,
+			DepthBoundsTestEnable = Vk.False,
+			MinDepthBounds = 0,
+			MaxDepthBounds = 1,
+			StencilTestEnable = Vk.False
+		};
+	}
 }
