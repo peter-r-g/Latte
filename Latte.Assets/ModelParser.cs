@@ -63,6 +63,7 @@ internal sealed unsafe class ModelParser
 		for ( uint i = 0; i < mesh->MNumVertices; i++ )
 		{
 			var position = mesh->MVertices[i];
+			var normal = mesh->MNormals[i];
 			var color = default( Vector3 );
 			var textureCoordinates = default( Vector2 );
 
@@ -73,7 +74,7 @@ internal sealed unsafe class ModelParser
 				textureCoordinates = new Vector2( textureCoordinates3d.X, 1 - textureCoordinates3d.Y );
 			}
 
-			Vertices.Add( new Vertex( position, color, textureCoordinates ) );
+			Vertices.Add( new Vertex( position, normal, color, textureCoordinates ) );
 		}
 
 		for ( uint i = 0; i < mesh->MNumFaces; i++ )
