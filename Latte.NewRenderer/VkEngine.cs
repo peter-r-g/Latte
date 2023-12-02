@@ -14,7 +14,6 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Mesh = Latte.NewRenderer.Temp.Mesh;
 
 namespace Latte.NewRenderer;
@@ -119,19 +118,31 @@ internal unsafe sealed class VkEngine : IDisposable
 		var flash = MathF.Abs( MathF.Sin( frameNumber / 120f ) );
 		clearValue.Color = new ClearColorValue( 0, 0, flash, 1 );
 
-		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)this.view.Size.X, (uint)this.view.Size.Y ) );
-		var rpBeginInfo = new RenderPassBeginInfo
+		ClearValue depthClearValue = default;
+		depthClearValue.DepthStencil.Depth = 1;
+
+		ReadOnlySpan<ClearValue> clearValues = stackalloc ClearValue[]
 		{
-			SType = StructureType.RenderPassBeginInfo,
-			PNext = null,
-			RenderPass = renderPass,
-			RenderArea = renderArea,
-			Framebuffer = framebuffers[(int)swapchainImageIndex],
-			ClearValueCount = 1,
-			PClearValues = &clearValue
+			clearValue,
+			depthClearValue
 		};
 
-		Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
+		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)this.view.Size.X, (uint)this.view.Size.Y ) );
+		fixed( ClearValue* clearValuesPtr = clearValues )
+		{
+			var rpBeginInfo = new RenderPassBeginInfo
+			{
+				SType = StructureType.RenderPassBeginInfo,
+				PNext = null,
+				RenderPass = renderPass,
+				RenderArea = renderArea,
+				Framebuffer = framebuffers[(int)swapchainImageIndex],
+				ClearValueCount = (uint)clearValues.Length,
+				PClearValues = clearValuesPtr
+			};
+
+			Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
+		}
 
 		var model = Matrix4x4.Identity * Matrix4x4.CreateRotationY( frameNumber * 0.1f, Vector3.UnitY );
 		var view = Matrix4x4.CreateLookAt( new Vector3( 0, 0, -2 ), Vector3.Zero, Vector3.UnitY );
@@ -247,12 +258,40 @@ internal unsafe sealed class VkEngine : IDisposable
 		swapchainImageViews = result.SwapchainImageViews;
 		swapchainImageFormat = result.SwapchainImageFormat;
 
+		var depthExtent = new Extent3D
+		{
+			Width = (uint)view.Size.X,
+			Height = (uint)view.Size.Y,
+			Depth = 1
+		};
+
+		depthFormat = Format.D32Sfloat;
+
+		var depthImageInfo = VkInfo.Image( depthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
+		Apis.Vk.CreateImage( logicalDevice, depthImageInfo, null, out var depthImage ).Verify();
+
+		var depthImageRequirements = Apis.Vk.GetImageMemoryRequirements( logicalDevice, depthImage.Validate() );
+		var depthImageAllocateInfo = VkInfo.AllocateMemory( depthImageRequirements.Size, FindMemoryType( depthImageRequirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit ) );
+		Apis.Vk.AllocateMemory( logicalDevice, depthImageAllocateInfo, null, out var depthImageMemory ).Verify();
+
+		Apis.Vk.BindImageMemory( logicalDevice, depthImage, depthImageMemory, 0 );
+		this.depthImage = new AllocatedImage( depthImage, new Allocation( depthImageMemory.Validate(), 0 ) );
+
+		var depthImageViewInfo = VkInfo.ImageView( depthFormat, depthImage, ImageAspectFlags.DepthBit );
+		Apis.Vk.CreateImageView( logicalDevice, depthImageViewInfo, null, out var depthImageView ).Verify();
+
+		this.depthImageView = depthImageView.Validate();
+
 		deletionQueue.Push( () => swapchainExtension.DestroySwapchain( logicalDevice, swapchain, null ) );
 		for ( var i = 0; i < swapchainImageViews.Length; i++ )
 		{
 			var index = i;
 			deletionQueue.Push( () => Apis.Vk.DestroyImageView( logicalDevice, swapchainImageViews[index], null ) );
 		}
+
+		deletionQueue.Push( () => Apis.Vk.DestroyImage( logicalDevice, depthImage, null ) );
+		deletionQueue.Push( () => Apis.Vk.FreeMemory( logicalDevice, depthImageMemory, null ) );
+		deletionQueue.Push( () => Apis.Vk.DestroyImageView( logicalDevice, depthImageView, null ) );
 	}
 
 	private void InitializeCommands()
@@ -279,7 +318,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			StencilLoadOp = AttachmentLoadOp.DontCare,
 			StencilStoreOp = AttachmentStoreOp.DontCare,
 			InitialLayout = ImageLayout.Undefined,
-			FinalLayout = ImageLayout.PresentSrcKhr
+			FinalLayout = ImageLayout.PresentSrcKhr,
+			Flags = AttachmentDescriptionFlags.None
 		};
 
 		var colorAttachmentReference = new AttachmentReference
@@ -288,15 +328,65 @@ internal unsafe sealed class VkEngine : IDisposable
 			Layout = ImageLayout.ColorAttachmentOptimal
 		};
 
+		var depthAttachment = new AttachmentDescription
+		{
+			Format = depthFormat,
+			Samples = SampleCountFlags.Count1Bit,
+			LoadOp = AttachmentLoadOp.Clear,
+			StoreOp = AttachmentStoreOp.Store,
+			StencilLoadOp = AttachmentLoadOp.Clear,
+			StencilStoreOp = AttachmentStoreOp.DontCare,
+			InitialLayout = ImageLayout.Undefined,
+			FinalLayout = ImageLayout.DepthStencilAttachmentOptimal,
+			Flags = AttachmentDescriptionFlags.None
+		};
+
+		var depthAttachmentReference = new AttachmentReference
+		{
+			Attachment = 1,
+			Layout = ImageLayout.DepthStencilAttachmentOptimal
+		};
+
 		var subpassDescription = new SubpassDescription
 		{
 			PipelineBindPoint = PipelineBindPoint.Graphics,
 			ColorAttachmentCount = 1,
-			PColorAttachments = &colorAttachmentReference
+			PColorAttachments = &colorAttachmentReference,
+			PDepthStencilAttachment = &depthAttachmentReference
 		};
 
-		var createInfo = VkInfo.RenderPass( new ReadOnlySpan<AttachmentDescription>( ref colorAttachment ),
-			new ReadOnlySpan<SubpassDescription>( ref subpassDescription ) );
+		var colorDependency = new SubpassDependency
+		{
+			SrcSubpass = Vk.SubpassExternal,
+			DstSubpass = 0,
+			SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit,
+			SrcAccessMask = 0,
+			DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit,
+			DstAccessMask = AccessFlags.ColorAttachmentWriteBit
+		};
+
+		var depthDependency = new SubpassDependency
+		{
+			SrcSubpass = Vk.SubpassExternal,
+			DstSubpass = 0,
+			SrcStageMask = PipelineStageFlags.EarlyFragmentTestsBit | PipelineStageFlags.LateFragmentTestsBit,
+			SrcAccessMask = 0,
+			DstStageMask = PipelineStageFlags.EarlyFragmentTestsBit | PipelineStageFlags.LateFragmentTestsBit,
+			DstAccessMask = AccessFlags.DepthStencilAttachmentWriteBit
+		};
+
+		var createInfo = VkInfo.RenderPass(
+			stackalloc AttachmentDescription[]
+			{
+				colorAttachment,
+				depthAttachment
+			},
+			stackalloc SubpassDescription[] { subpassDescription },
+			stackalloc SubpassDependency[]
+			{
+				colorDependency,
+				depthDependency
+			} );
 
 		Apis.Vk.CreateRenderPass( logicalDevice, createInfo, null, out var renderPass ).Verify();
 		this.renderPass = renderPass.Validate();
@@ -308,20 +398,21 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 
 		var framebufferBuilder = ImmutableArray.CreateBuilder<Framebuffer>( swapchainImages.Length );
-		var ptr = Marshal.AllocHGlobal( sizeof( ImageView ) );
+		var imageViews = stackalloc ImageView[2];
+		imageViews[1] = depthImageView;
 
 		var createInfo = VkInfo.Framebuffer( renderPass, (uint)view.Size.X, (uint)view.Size.Y );
+		createInfo.AttachmentCount = 2;
+		createInfo.PAttachments = imageViews;
 		for ( var i = 0; i < swapchainImages.Length; i++ )
 		{
-			Marshal.StructureToPtr( swapchainImageViews[i], ptr, false );
-			createInfo.PAttachments = (ImageView*)ptr;
+			imageViews[0] = swapchainImageViews[i];
 			Apis.Vk.CreateFramebuffer( logicalDevice, createInfo, null, out var framebuffer ).Verify();
 
 			framebufferBuilder.Add( framebuffer.Validate() );
 			deletionQueue.Push( () => Apis.Vk.DestroyFramebuffer( logicalDevice, framebuffer, null ) );
 		}
 
-		Marshal.FreeHGlobal( ptr );
 		framebuffers = framebufferBuilder.MoveToImmutable();
 	}
 
@@ -366,7 +457,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithInputAssemblyState( VkInfo.InputAssemblyState( PrimitiveTopology.TriangleList ) )
 			.WithRasterizerState( VkInfo.RasterizationState( PolygonMode.Fill ) )
 			.WithMultisamplingState( VkInfo.MultisamplingState() )
-			.WithColorBlendAttachmentState( VkInfo.ColorBlendAttachmentState() );
+			.WithColorBlendAttachmentState( VkInfo.ColorBlendAttachmentState() )
+			.WithDepthStencilState( VkInfo.DepthStencilState( true, true, CompareOp.LessOrEqual ) );
 		coloredTrianglePipeline = pipelineBuilder.Build().Validate();
 
 		Apis.Vk.DestroyShaderModule( logicalDevice, coloredTriangleVert, null );
