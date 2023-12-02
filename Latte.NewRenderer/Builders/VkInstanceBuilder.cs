@@ -7,6 +7,10 @@ using Silk.NET.Windowing;
 using System;
 using System.Runtime.InteropServices;
 
+#if DEBUG
+using System.Diagnostics;
+#endif
+
 namespace Latte.NewRenderer.Builders;
 
 internal sealed class VkInstanceBuilder
@@ -158,6 +162,9 @@ internal sealed class VkInstanceBuilder
 			case DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt:
 				Console.ForegroundColor = ConsoleColor.DarkRed;
 				Console.WriteLine( message );
+#if DEBUG
+				Debugger.Break();
+#endif
 				break;
 		}
 
