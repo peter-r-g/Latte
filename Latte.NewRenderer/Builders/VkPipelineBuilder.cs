@@ -15,6 +15,7 @@ internal sealed class VkPipelineBuilder
 	private PipelineShaderStageCreateInfo[] shaderStages = [];
 	private PipelineVertexInputStateCreateInfo vertexInputInfo;
 	private PipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
+	private PipelineDepthStencilStateCreateInfo depthStencilInfo;
 	private PipelineRasterizationStateCreateInfo rasterizerInfo;
 	private PipelineColorBlendAttachmentState colorBlendAttachment;
 	private PipelineMultisampleStateCreateInfo multisamplingInfo;
@@ -71,6 +72,12 @@ internal sealed class VkPipelineBuilder
 		return this;
 	}
 
+	internal VkPipelineBuilder WithDepthStencilState( PipelineDepthStencilStateCreateInfo depthStencilInfo )
+	{
+		this.depthStencilInfo = depthStencilInfo;
+		return this;
+	}
+
 	internal VkPipelineBuilder WithRasterizerState( PipelineRasterizationStateCreateInfo rasterizerInfo )
 	{
 		this.rasterizerInfo = rasterizerInfo;
@@ -94,6 +101,7 @@ internal sealed class VkPipelineBuilder
 		var viewport = this.viewport;
 		var scissor = this.scissor;
 		var colorBlendAttachment = this.colorBlendAttachment;
+		var depthStencilInfo = this.depthStencilInfo;
 		var vertexInputInfo = this.vertexInputInfo;
 		var inputAssemblyInfo = this.inputAssemblyInfo;
 		var rasterizerInfo = this.rasterizerInfo;
@@ -130,6 +138,7 @@ internal sealed class VkPipelineBuilder
 				PVertexInputState = &vertexInputInfo,
 				PInputAssemblyState = &inputAssemblyInfo,
 				PViewportState = &viewportState,
+				PDepthStencilState = &depthStencilInfo,
 				PRasterizationState = &rasterizerInfo,
 				PMultisampleState = &multisamplingInfo,
 				PColorBlendState = &colorBlendingCreateInfo,
