@@ -140,10 +140,12 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static RenderPassCreateInfo RenderPass( ReadOnlySpan<AttachmentDescription> attachments, ReadOnlySpan<SubpassDescription> subpassDescriptions )
+	internal static RenderPassCreateInfo RenderPass( ReadOnlySpan<AttachmentDescription> attachments, ReadOnlySpan<SubpassDescription> subpassDescriptions,
+		ReadOnlySpan<SubpassDependency> subpassDependencies )
 	{
 		fixed ( AttachmentDescription* attachmentsPtr = attachments )
 		fixed ( SubpassDescription* subpassDescriptionsPtr = subpassDescriptions )
+		fixed ( SubpassDependency* subpassDependenciesPtr = subpassDependencies )
 		{
 			return new RenderPassCreateInfo
 			{
@@ -152,7 +154,10 @@ internal unsafe static class VkInfo
 				AttachmentCount = (uint)attachments.Length,
 				PAttachments = attachmentsPtr,
 				SubpassCount = (uint)subpassDescriptions.Length,
-				PSubpasses = subpassDescriptionsPtr
+				PSubpasses = subpassDescriptionsPtr,
+				DependencyCount = (uint)subpassDependencies.Length,
+				PDependencies = subpassDependenciesPtr,
+				Flags = RenderPassCreateFlags.None
 			};
 		}
 	}
