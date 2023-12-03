@@ -1,8 +1,8 @@
 ﻿using Latte.Assets;
+using Latte.NewRenderer.Allocations;
 using Latte.NewRenderer.Builders;
 using Latte.NewRenderer.Extensions;
 using Latte.NewRenderer.Temp;
-using Latte.NewRenderer.Wrappers;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
@@ -30,6 +30,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private VkPhysicalDeviceSelector? physicalDeviceSelector;
 	private Device logicalDevice;
 	private SurfaceKHR surface;
+	private AllocationManager? allocationManager;
 
 	private SwapchainKHR swapchain;
 	private Format swapchainImageFormat;
@@ -266,6 +267,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		presentQueue = logicalDeviceBuilderResult.PresentQueue.Validate();
 		presentQueueFamily = logicalDeviceBuilderResult.PresentQueueFamily;
 
+		allocationManager = new AllocationManager( physicalDevice, logicalDevice );
+
 		deletionQueue.Push( () => Apis.Vk.DestroyInstance( instance, null ) );
 		deletionQueue.Push( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( instance, debugMessenger, null ) );
 		deletionQueue.Push( () => surfaceExtension.DestroySurface( instance, surface, null ) );
@@ -276,6 +279,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( physicalDeviceSelector, nameof( physicalDeviceSelector ) );
+		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
 
 		var result = VkSwapchainBuilder.FromPhysicalSelector( physicalDevice, logicalDevice, physicalDeviceSelector )
 			.UseDefaultFormat()
@@ -300,17 +304,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var depthImageInfo = VkInfo.Image( depthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
 		Apis.Vk.CreateImage( logicalDevice, depthImageInfo, null, out var depthImage ).Verify();
-
-		var depthImageRequirements = Apis.Vk.GetImageMemoryRequirements( logicalDevice, depthImage.Validate() );
-		var depthImageAllocateInfo = VkInfo.AllocateMemory( depthImageRequirements.Size, FindMemoryType( depthImageRequirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit ) );
-		Apis.Vk.AllocateMemory( logicalDevice, depthImageAllocateInfo, null, out var depthImageMemory ).Verify();
-
-		Apis.Vk.BindImageMemory( logicalDevice, depthImage, depthImageMemory, 0 );
-		this.depthImage = new AllocatedImage( depthImage, new Allocation( depthImageMemory.Validate(), 0 ) );
+		this.depthImage = allocationManager.AllocateImage( depthImage, MemoryPropertyFlags.DeviceLocalBit );
 
 		var depthImageViewInfo = VkInfo.ImageView( depthFormat, depthImage, ImageAspectFlags.DepthBit );
 		Apis.Vk.CreateImageView( logicalDevice, depthImageViewInfo, null, out var depthImageView ).Verify();
-
 		this.depthImageView = depthImageView.Validate();
 
 		deletionQueue.Push( () => swapchainExtension.DestroySwapchain( logicalDevice, swapchain, null ) );
@@ -321,7 +318,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		deletionQueue.Push( () => Apis.Vk.DestroyImage( logicalDevice, depthImage, null ) );
-		deletionQueue.Push( () => Apis.Vk.FreeMemory( logicalDevice, depthImageMemory, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyImageView( logicalDevice, depthImageView, null ) );
 	}
 
@@ -579,26 +575,17 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void UploadMesh( Mesh mesh, MemoryPropertyFlags memoryFlags, SharingMode sharingMode = SharingMode.Exclusive )
 	{
+		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
+
 		// Vertex buffer
 		{
 			var createInfo = VkInfo.Buffer( (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>()), BufferUsageFlags.VertexBufferBit, sharingMode );
 			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
 
-			var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer.Validate() );
-			var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
-			Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
-
-			Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory.Validate(), 0 ).Verify();
-
-			void* dataPtr;
-			Apis.Vk.MapMemory( logicalDevice, memory, 0, requirements.Size, 0, &dataPtr ).Verify();
-			mesh.Vertices.CopyTo( new Span<Vertex>( dataPtr, mesh.Vertices.Length ) ); ;
-			Apis.Vk.UnmapMemory( logicalDevice, memory );
+			mesh.VertexBuffer = allocationManager.AllocateBuffer( buffer, memoryFlags );
+			allocationManager.SetMemory( mesh.VertexBuffer.Allocation, mesh.Vertices.AsSpan() );
 
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, buffer, null ) );
-			deletionQueue.Push( () => Apis.Vk.FreeMemory( logicalDevice, memory, null ) );
-
-			mesh.VertexBuffer = new AllocatedBuffer( buffer, new Allocation( memory, 0 ) );
 		}
 
 		// Index buffer
@@ -606,24 +593,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			return;
 
 		{
-			var createInfo = VkInfo.Buffer( (ulong)(mesh.Indices.Length * sizeof( uint )), BufferUsageFlags.IndexBufferBit, sharingMode );
+			var createInfo = VkInfo.Buffer( (ulong)(sizeof( uint ) * mesh.Indices.Length), BufferUsageFlags.IndexBufferBit, sharingMode );
 			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
 
-			var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer.Validate() );
-			var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
-			Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
-
-			Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory.Validate(), 0 ).Verify();
-
-			void* dataPtr;
-			Apis.Vk.MapMemory( logicalDevice, memory, 0, requirements.Size, 0, &dataPtr ).Verify();
-			mesh.Indices.CopyTo( new Span<uint>( dataPtr, mesh.Indices.Length ) );
-			Apis.Vk.UnmapMemory( logicalDevice, memory );
+			mesh.IndexBuffer = allocationManager.AllocateBuffer( buffer, memoryFlags );
+			allocationManager.SetMemory( mesh.IndexBuffer.Allocation, mesh.Indices.AsSpan() );
 
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, buffer, null ) );
-			deletionQueue.Push( () => Apis.Vk.FreeMemory( logicalDevice, memory, null ) );
-
-			mesh.IndexBuffer = new AllocatedBuffer( buffer, new Allocation( memory, 0 ) );
 		}
 	}
 		
