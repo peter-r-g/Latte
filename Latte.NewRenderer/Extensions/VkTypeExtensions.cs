@@ -9,7 +9,7 @@ internal static class VkTypeExtensions
 	internal static Instance Validate( this Instance instance )
 	{
 		if ( !IsValid( instance ) )
-			throw new VkInvalidInstanceException( typeof( Instance ) );
+			throw new VkInvalidHandleException( typeof( Instance ) );
 
 		return instance;
 	}
@@ -18,7 +18,7 @@ internal static class VkTypeExtensions
 	internal static DebugUtilsMessengerEXT Validate( this DebugUtilsMessengerEXT debugMessenger )
 	{
 		if ( !IsValid( debugMessenger ) )
-			throw new VkInvalidInstanceException( typeof( DebugUtilsMessengerEXT ) );
+			throw new VkInvalidHandleException( typeof( DebugUtilsMessengerEXT ) );
 
 		return debugMessenger;
 	}
@@ -27,7 +27,7 @@ internal static class VkTypeExtensions
 	internal static PhysicalDevice Validate( this PhysicalDevice physicalDevice )
 	{
 		if ( !IsValid( physicalDevice ) )
-			throw new VkInvalidInstanceException( typeof( PhysicalDevice ) );
+			throw new VkInvalidHandleException( typeof( PhysicalDevice ) );
 
 		return physicalDevice;
 	}
@@ -36,7 +36,7 @@ internal static class VkTypeExtensions
 	internal static Device Validate( this Device logicalDevice )
 	{
 		if ( !IsValid( logicalDevice ) )
-			throw new VkInvalidInstanceException( typeof( Device ) );
+			throw new VkInvalidHandleException( typeof( Device ) );
 
 		return logicalDevice;
 	}
@@ -45,7 +45,7 @@ internal static class VkTypeExtensions
 	internal static SurfaceKHR Validate( this SurfaceKHR surface )
 	{
 		if ( !IsValid( surface ) )
-			throw new VkInvalidInstanceException( typeof( SurfaceKHR ) );
+			throw new VkInvalidHandleException( typeof( SurfaceKHR ) );
 
 		return surface;
 	}
@@ -54,7 +54,7 @@ internal static class VkTypeExtensions
 	internal static Queue Validate( this Queue queue )
 	{
 		if ( !IsValid( queue ) )
-			throw new VkInvalidInstanceException( typeof( Queue ) );
+			throw new VkInvalidHandleException( typeof( Queue ) );
 
 		return queue;
 	}
@@ -63,7 +63,7 @@ internal static class VkTypeExtensions
 	internal static CommandPool Validate( this CommandPool commandPool )
 	{
 		if ( !IsValid( commandPool ) )
-			throw new VkInvalidInstanceException( typeof( CommandPool ) );
+			throw new VkInvalidHandleException( typeof( CommandPool ) );
 
 		return commandPool;
 	}
@@ -72,7 +72,7 @@ internal static class VkTypeExtensions
 	internal static CommandBuffer Validate( this CommandBuffer commandBuffer )
 	{
 		if ( !IsValid( commandBuffer ) )
-			throw new VkInvalidInstanceException( typeof( CommandBuffer ) );
+			throw new VkInvalidHandleException( typeof( CommandBuffer ) );
 
 		return commandBuffer;
 	}
@@ -81,7 +81,7 @@ internal static class VkTypeExtensions
 	internal static RenderPass Validate( this RenderPass renderPass )
 	{
 		if ( !IsValid( renderPass ) )
-			throw new VkInvalidInstanceException( typeof( RenderPass ) );
+			throw new VkInvalidHandleException( typeof( RenderPass ) );
 
 		return renderPass;
 	}
@@ -90,7 +90,7 @@ internal static class VkTypeExtensions
 	internal static Framebuffer Validate( this Framebuffer framebuffer )
 	{
 		if ( !IsValid( framebuffer ) )
-			throw new VkInvalidInstanceException( typeof( Framebuffer ) );
+			throw new VkInvalidHandleException( typeof( Framebuffer ) );
 
 		return framebuffer;
 	}
@@ -99,7 +99,7 @@ internal static class VkTypeExtensions
 	internal static Fence Validate( this Fence fence )
 	{
 		if ( !IsValid( fence ) )
-			throw new VkInvalidInstanceException( typeof( Fence ) );
+			throw new VkInvalidHandleException( typeof( Fence ) );
 
 		return fence;
 	}
@@ -108,7 +108,7 @@ internal static class VkTypeExtensions
 	internal static Semaphore Validate( this Semaphore semaphore )
 	{
 		if ( !IsValid( semaphore ) )
-			throw new VkInvalidInstanceException( typeof( Semaphore ) );
+			throw new VkInvalidHandleException( typeof( Semaphore ) );
 
 		return semaphore;
 	}
@@ -117,7 +117,7 @@ internal static class VkTypeExtensions
 	internal static PipelineLayout Validate( this PipelineLayout pipelineLayout )
 	{
 		if ( !IsValid( pipelineLayout ) )
-			throw new VkInvalidInstanceException( typeof( PipelineLayout ) );
+			throw new VkInvalidHandleException( typeof( PipelineLayout ) );
 
 		return pipelineLayout;
 	}
@@ -126,7 +126,7 @@ internal static class VkTypeExtensions
 	internal static Pipeline Validate( this Pipeline pipeline )
 	{
 		if ( !IsValid( pipeline ) )
-			throw new VkInvalidInstanceException( typeof( Pipeline ) );
+			throw new VkInvalidHandleException( typeof( Pipeline ) );
 
 		return pipeline;
 	}
@@ -135,7 +135,7 @@ internal static class VkTypeExtensions
 	internal static Buffer Validate( this Buffer buffer )
 	{
 		if ( !IsValid( buffer ) )
-			throw new VkInvalidInstanceException( typeof( Buffer ) );
+			throw new VkInvalidHandleException( typeof( Buffer ) );
 
 		return buffer;
 	}
@@ -144,7 +144,7 @@ internal static class VkTypeExtensions
 	internal static DeviceMemory Validate( this DeviceMemory deviceMemory )
 	{
 		if ( !IsValid( deviceMemory ) )
-			throw new VkInvalidInstanceException( typeof( DeviceMemory ) );
+			throw new VkInvalidHandleException( typeof( DeviceMemory ) );
 
 		return deviceMemory;
 	}
@@ -153,7 +153,7 @@ internal static class VkTypeExtensions
 	internal static Image Validate( this Image image )
 	{
 		if ( !IsValid( image ) )
-			throw new VkInvalidInstanceException( typeof( Image ) );
+			throw new VkInvalidHandleException( typeof( Image ) );
 
 		return image;
 	}
@@ -162,7 +162,7 @@ internal static class VkTypeExtensions
 	internal static ImageView Validate( this ImageView imageView )
 	{
 		if ( !IsValid( imageView ) )
-			throw new VkInvalidInstanceException( typeof( ImageView ) );
+			throw new VkInvalidHandleException( typeof( ImageView ) );
 
 		return imageView;
 	}
