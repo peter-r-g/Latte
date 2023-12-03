@@ -3,6 +3,7 @@ using Latte.NewRenderer.Builders;
 using Latte.NewRenderer.Extensions;
 using Latte.NewRenderer.Temp;
 using Latte.NewRenderer.Wrappers;
+using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
@@ -53,10 +54,10 @@ internal unsafe sealed class VkEngine : IDisposable
 	private Semaphore renderSemaphore;
 	private Fence renderFence;
 
-	private PipelineLayout meshPipelineLayout;
-	private Pipeline meshPipeline;
+	private readonly List<Renderable> Renderables = [];
+	private readonly Dictionary<string, Material> Materials = [];
+	private readonly Dictionary<string, Mesh> Meshes = [];
 
-	private Mesh? monkeyMesh;
 	private int frameNumber;
 
 	private readonly Stack<Action> deletionQueue = [];
@@ -82,6 +83,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeSynchronizationStructures();
 		InitializePipelines();
 		LoadMeshes();
+		InitializeScene();
 
 		IsInitialized = true;
 	}
@@ -90,8 +92,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( this.view, nameof( VkEngine.view ) );
 		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
-		//ArgumentNullException.ThrowIfNull( triangleMesh, nameof( triangleMesh ) );
-		ArgumentNullException.ThrowIfNull( monkeyMesh, nameof( monkeyMesh ) );
 
 		Apis.Vk.WaitForFences( logicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
 		Apis.Vk.ResetFences( logicalDevice, 1, renderFence );
@@ -139,17 +139,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
 		}
 
-		var model = Matrix4x4.Identity * Matrix4x4.CreateRotationY( frameNumber * 0.1f, Vector3.UnitY );
-		var view = Matrix4x4.CreateLookAt( new Vector3( 0, 0, -2 ), Vector3.Zero, Vector3.UnitY );
-		var projection = Matrix4x4.CreatePerspectiveFieldOfView( 70 * (float)Math.PI / 180, (float)this.view.Size.X / this.view.Size.Y, 0.1f, 200.0f );
-		projection.M22 *= -1;
-		var pushConstants = new MeshPushConstants( Vector4.Zero, model * view * projection );
-		Apis.Vk.CmdPushConstants( cmd, meshPipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)Unsafe.SizeOf<MeshPushConstants>(), &pushConstants );
-
-		Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, meshPipeline );
-		Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, monkeyMesh.VertexBuffer.Buffer, 0 );
-		Apis.Vk.CmdBindIndexBuffer( cmd, monkeyMesh.IndexBuffer.Buffer, 0, IndexType.Uint32 );
-		Apis.Vk.CmdDrawIndexed( cmd, (uint)monkeyMesh.Indices.Length, 1, 0, 0, 0 );
+		DrawObjects( cmd, 0, Renderables.Count );
 
 		Apis.Vk.CmdEndRenderPass( cmd );
 
@@ -185,6 +175,50 @@ internal unsafe sealed class VkEngine : IDisposable
 		swapchainExtension.QueuePresent( presentQueue, presentInfo ).Verify();
 
 		frameNumber++;
+	}
+
+	private void DrawObjects( CommandBuffer cmd, int first, int count )
+	{
+		ArgumentNullException.ThrowIfNull( this.view, nameof( this.view ) );
+
+		var cameraPosition = new Vector3( 0, -6, -10 );
+		var view = Matrix4x4.Identity * Matrix4x4.CreateTranslation( cameraPosition );
+		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( 70f ), this.view.Size.X / this.view.Size.Y, 0.1f, 200 );
+		projection.M22 *= -1;
+
+		Mesh? lastMesh = null;
+		Material? lastMaterial = null;
+
+		for ( var i = 0; i < count; i++ )
+		{
+			var obj = Renderables[first + i];
+
+			if ( !ReferenceEquals( lastMaterial, obj.Material ) )
+			{
+				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, obj.Material.Pipeline );
+				lastMaterial = obj.Material;
+			}
+
+			var model = obj.Transform;
+			var matrix = model * view * projection;
+
+			var constants = new MeshPushConstants( Vector4.Zero, matrix );
+			Apis.Vk.CmdPushConstants( cmd, obj.Material.PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( MeshPushConstants ), &constants );
+
+			if ( !ReferenceEquals( lastMesh, obj.Mesh ) )
+			{
+				Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, obj.Mesh.VertexBuffer.Buffer, 0 );
+				if ( obj.Mesh.Indices.Length > 0 )
+					Apis.Vk.CmdBindIndexBuffer( cmd, obj.Mesh.IndexBuffer.Buffer, 0, IndexType.Uint32 );
+
+				lastMesh = obj.Mesh;
+			}
+
+			if ( lastMesh.Indices.Length > 0 )
+				Apis.Vk.CmdDrawIndexed( cmd, (uint)obj.Mesh.Indices.Length, 1, 0, 0, 0 );
+			else
+				Apis.Vk.CmdDraw( cmd, (uint)obj.Mesh.Vertices.Length, 1, 0, 0 );
+		}
 	}
 
 	internal void WaitForIdle()
@@ -224,6 +258,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		var logicalDeviceBuilderResult = VkLogicalDeviceBuilder.FromPhysicalSelector( physicalDevice, physicalDeviceSelector )
 			.WithExtensions( KhrSwapchain.ExtensionName )
 			.Build();
+
 		logicalDevice = logicalDeviceBuilderResult.LogicalDevice.Validate();
 		graphicsQueue = logicalDeviceBuilderResult.GraphicsQueue.Validate();
 		graphicsQueueFamily = logicalDeviceBuilderResult.GraphicsQueueFamily;
@@ -438,7 +473,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var meshTriangleFrag ) )
 			throw new ApplicationException( "Failed to build mesh triangle fragment shader" );
 
-		var meshPipelineCreateInfo = VkInfo.PipelineLayout();
 		var pushConstant = new PushConstantRange
 		{
 			Offset = 0,
@@ -447,9 +481,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		};
 		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ) );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
-		this.meshPipelineLayout = meshPipelineLayout.Validate();
 
-		meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )
+		var meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
 			.WithViewport( new Viewport( 0, 0, view.Size.X, view.Size.Y, 0, 1 ) )
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) ) )
@@ -463,6 +496,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithDepthStencilState( VkInfo.DepthStencilState( true, true, CompareOp.LessOrEqual ) )
 			.Build().Validate();
 
+		CreateMaterial( "defaultmesh", meshPipeline, meshPipelineLayout );
+
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleFrag, null );
 
@@ -472,22 +507,73 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void LoadMeshes()
 	{
-		/*triangleMesh = new Mesh( [
-			new Temp.Vertex( new Vector3D<float>( 1, 1, 0 ), Vector3D<float>.Zero, new Vector3D<float>( 0, 1, 0 ) ), 
-			new Temp.Vertex( new Vector3D<float>( -1, 1, 0 ), Vector3D<float>.Zero, new Vector3D<float>( 0, 1, 0 ) ), 
-			new Temp.Vertex( new Vector3D<float>( 0, -1, 0 ), Vector3D<float>.Zero, new Vector3D<float>( 0, 1, 0 ) ),
-		], [] );*/
+		var triangleMesh = new Mesh( [
+			new Vertex( new Vector3( 1, 1, 0.5f ), Vector3.Zero, new Vector3( 0, 1, 0 ), Vector2.Zero ), 
+			new Vertex( new Vector3( -1, 1, 0.5f ), Vector3.Zero, new Vector3( 0, 1, 0 ), Vector2.Zero ), 
+			new Vertex( new Vector3( 0, -1, 0.5f ), Vector3.Zero, new Vector3( 0, 1, 0 ), Vector2.Zero ),
+		], [] );
 
-		//UploadMesh( triangleMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+		Meshes.Add( "triangle", triangleMesh );
+		UploadMesh( triangleMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
 		var model = Model.FromPath( "/monkey_smooth.obj" );
 		var mesh = model.Meshes.First();
 		var tempVertices = mesh.Vertices
 			.Select( vertex => new Vertex( vertex.Position, vertex.Normal, vertex.Normal, vertex.TextureCoordinates ) )
 			.ToImmutableArray();
-		monkeyMesh = new Mesh( tempVertices, mesh.Indices );
+		var monkeyMesh = new Mesh( tempVertices, mesh.Indices );
 
+		Meshes.Add( "monkey", monkeyMesh );
 		UploadMesh( monkeyMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+	}
+
+	private void InitializeScene()
+	{
+		var monkeyMesh = GetMesh( "monkey" );
+		var triangleMesh = GetMesh( "triangle" );
+		var defaultMeshMaterial = GetMaterial( "defaultmesh" );
+
+		var monkey = new Renderable( monkeyMesh, defaultMeshMaterial );
+		Renderables.Add( monkey );
+
+		for ( var x = -20; x <= 20; x++ )
+		{
+			for ( var y = -20; y <= 20; y++ )
+			{
+				var triangle = new Renderable( triangleMesh, defaultMeshMaterial );
+				var translation = Matrix4x4.Identity * Matrix4x4.CreateTranslation( x * 5, 0, y * 5 );
+				var scale = Matrix4x4.Identity * Matrix4x4.CreateScale( 0.2f, 0.2f, 0.2f );
+				triangle.Transform = translation * scale;
+
+				Renderables.Add( triangle );
+			}
+		}
+	}
+
+	private Material CreateMaterial( string name, Pipeline pipeline, PipelineLayout pipelineLayout )
+	{
+		if ( Materials.ContainsKey( name ) )
+			throw new ArgumentException( $"A material with the name \"{name}\" already exists", nameof( name ) );
+
+		var material = new Material( pipeline, pipelineLayout );
+		Materials.Add( name, material );
+		return material;
+	}
+
+	private Material GetMaterial( string name )
+	{
+		if ( Materials.TryGetValue( name, out var material ) )
+			return material;
+
+		throw new ArgumentException( $"A material with the name \"{name}\" does not exist", nameof( name ) );
+	}
+
+	private Mesh GetMesh( string name )
+	{
+		if ( Meshes.TryGetValue( name, out var material ) )
+			return material;
+
+		throw new ArgumentException( $"A mesh with the name \"{name}\" does not exist", nameof( name ) );
 	}
 
 	private void UploadMesh( Mesh mesh, MemoryPropertyFlags memoryFlags, SharingMode sharingMode = SharingMode.Exclusive )
@@ -515,6 +601,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		// Index buffer
+		if ( mesh.Indices.Length == 0 )
+			return;
+
 		{
 			var createInfo = VkInfo.Buffer( (ulong)(mesh.Indices.Length * sizeof( uint )), BufferUsageFlags.IndexBufferBit, sharingMode );
 			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
