@@ -1,6 +1,7 @@
 ﻿using Latte.Assets;
 using Latte.NewRenderer.Allocations;
 using Latte.NewRenderer.Builders;
+using Latte.NewRenderer.Exceptions;
 using Latte.NewRenderer.Extensions;
 using Latte.NewRenderer.Temp;
 using Silk.NET.Maths;
@@ -239,9 +240,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			.UseDefaultDebugMessenger()
 			.Build();
 
-		instance = instanceBuilderResult.Instance.Validate();
-		debugMessenger = instanceBuilderResult.DebugMessenger.Validate();
+		instance = instanceBuilderResult.Instance;
+		debugMessenger = instanceBuilderResult.DebugMessenger;
 		debugUtilsExtension = instanceBuilderResult.DebugUtilsExtension;
+
+		VkInvalidHandleException.ThrowIfInvalid( instance );
+		VkInvalidHandleException.ThrowIfInvalid( debugMessenger );
 
 		if ( !Apis.Vk.TryGetInstanceExtension<KhrSurface>( instance, out var surfaceExtension ) )
 			throw new ApplicationException( "Failed to get KHR_surface extension" );
@@ -255,17 +259,22 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithSurface( surface, surfaceExtension )
 			.RequireUniqueGraphicsQueue( true )
 			.RequireUniquePresentQueue( true );
-		physicalDevice = physicalDeviceSelector.Select().Validate();
+		physicalDevice = physicalDeviceSelector.Select();
+		VkInvalidHandleException.ThrowIfInvalid( physicalDevice );
 
 		var logicalDeviceBuilderResult = VkLogicalDeviceBuilder.FromPhysicalSelector( physicalDevice, physicalDeviceSelector )
 			.WithExtensions( KhrSwapchain.ExtensionName )
 			.Build();
 
-		logicalDevice = logicalDeviceBuilderResult.LogicalDevice.Validate();
-		graphicsQueue = logicalDeviceBuilderResult.GraphicsQueue.Validate();
+		logicalDevice = logicalDeviceBuilderResult.LogicalDevice;
+		graphicsQueue = logicalDeviceBuilderResult.GraphicsQueue;
 		graphicsQueueFamily = logicalDeviceBuilderResult.GraphicsQueueFamily;
-		presentQueue = logicalDeviceBuilderResult.PresentQueue.Validate();
+		presentQueue = logicalDeviceBuilderResult.PresentQueue;
 		presentQueueFamily = logicalDeviceBuilderResult.PresentQueueFamily;
+
+		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
+		VkInvalidHandleException.ThrowIfInvalid( graphicsQueue );
+		VkInvalidHandleException.ThrowIfInvalid( presentQueue );
 
 		allocationManager = new AllocationManager( physicalDevice, logicalDevice );
 
@@ -304,11 +313,13 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var depthImageInfo = VkInfo.Image( depthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
 		Apis.Vk.CreateImage( logicalDevice, depthImageInfo, null, out var depthImage ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( depthImage );
 		this.depthImage = allocationManager.AllocateImage( depthImage, MemoryPropertyFlags.DeviceLocalBit );
 
 		var depthImageViewInfo = VkInfo.ImageView( depthFormat, depthImage, ImageAspectFlags.DepthBit );
 		Apis.Vk.CreateImageView( logicalDevice, depthImageViewInfo, null, out var depthImageView ).Verify();
-		this.depthImageView = depthImageView.Validate();
+		VkInvalidHandleException.ThrowIfInvalid( depthImageView );
+		this.depthImageView = depthImageView;
 
 		deletionQueue.Push( () => swapchainExtension.DestroySwapchain( logicalDevice, swapchain, null ) );
 		for ( var i = 0; i < swapchainImageViews.Length; i++ )
@@ -325,11 +336,13 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		var poolCreateInfo = VkInfo.CommandPool( graphicsQueueFamily, CommandPoolCreateFlags.ResetCommandBufferBit );
 		Apis.Vk.CreateCommandPool( logicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
-		graphicsCommandPool = commandPool.Validate();
+		VkInvalidHandleException.ThrowIfInvalid( commandPool );
+		graphicsCommandPool = commandPool;
 
 		var bufferAllocateInfo = VkInfo.AllocateCommandBuffer( commandPool, 1, CommandBufferLevel.Primary );
 		Apis.Vk.AllocateCommandBuffers( logicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
-		graphicsCommandBuffer = commandBuffer.Validate();
+		VkInvalidHandleException.ThrowIfInvalid( commandBuffer ); 
+		graphicsCommandBuffer = commandBuffer;
 
 		deletionQueue.Push( () => Apis.Vk.DestroyCommandPool( logicalDevice, graphicsCommandPool, null ) );
 	}
@@ -416,7 +429,9 @@ internal unsafe sealed class VkEngine : IDisposable
 			} );
 
 		Apis.Vk.CreateRenderPass( logicalDevice, createInfo, null, out var renderPass ).Verify();
-		this.renderPass = renderPass.Validate();
+
+		VkInvalidHandleException.ThrowIfInvalid( renderPass );
+		this.renderPass = renderPass;
 		deletionQueue.Push( () => Apis.Vk.DestroyRenderPass( logicalDevice, renderPass, null ) );
 	}
 
@@ -436,7 +451,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			imageViews[0] = swapchainImageViews[i];
 			Apis.Vk.CreateFramebuffer( logicalDevice, createInfo, null, out var framebuffer ).Verify();
 
-			framebufferBuilder.Add( framebuffer.Validate() );
+			VkInvalidHandleException.ThrowIfInvalid( framebuffer );
+			framebufferBuilder.Add( framebuffer );
 			deletionQueue.Push( () => Apis.Vk.DestroyFramebuffer( logicalDevice, framebuffer, null ) );
 		}
 
@@ -447,13 +463,17 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		var fenceCreateInfo = VkInfo.Fence( FenceCreateFlags.SignaledBit );
 		Apis.Vk.CreateFence( logicalDevice, fenceCreateInfo, null, out var renderFence ).Verify();
-		this.renderFence = renderFence.Validate();
+		this.renderFence = renderFence;
 
 		var semaphoreCreateInfo = VkInfo.Semaphore();
 		Apis.Vk.CreateSemaphore( logicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).Verify();
-		this.presentSemaphore = presentSemaphore.Validate();
+		this.presentSemaphore = presentSemaphore;
 		Apis.Vk.CreateSemaphore( logicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).Verify();
-		this.renderSemaphore = renderSemaphore.Validate();
+		this.renderSemaphore = renderSemaphore;
+
+		VkInvalidHandleException.ThrowIfInvalid( renderFence );
+		VkInvalidHandleException.ThrowIfInvalid( presentSemaphore );
+		VkInvalidHandleException.ThrowIfInvalid( renderSemaphore );
 
 		deletionQueue.Push( () => Apis.Vk.DestroySemaphore( logicalDevice, renderSemaphore, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroySemaphore( logicalDevice, presentSemaphore, null ) );
@@ -491,7 +511,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithMultisamplingState( VkInfo.MultisamplingState() )
 			.WithColorBlendAttachmentState( VkInfo.ColorBlendAttachmentState() )
 			.WithDepthStencilState( VkInfo.DepthStencilState( true, true, CompareOp.LessOrEqual ) )
-			.Build().Validate();
+			.Build();
+		VkInvalidHandleException.ThrowIfInvalid( meshPipeline );
 
 		CreateMaterial( "defaultmesh", meshPipeline, meshPipelineLayout );
 

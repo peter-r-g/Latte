@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
@@ -30,14 +31,17 @@ internal sealed class AllocationManager : IDisposable
 
 	internal unsafe AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( buffer );
+
 		if ( memoryAllocations.Count >= memoryAllocations.Capacity )
 			throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
 
-		var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer.Validate() );
+		var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer );
 		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 
 		Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
-		Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory.Validate(), 0 ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( memory );
+		Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory, 0 ).Verify();
 
 		memoryAllocations.Add( memory );
 		return new AllocatedBuffer( buffer, new Allocation( memory, 0 ) );
@@ -45,10 +49,12 @@ internal sealed class AllocationManager : IDisposable
 
 	internal unsafe AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( image );
+
 		if ( memoryAllocations.Count >= memoryAllocations.Capacity )
 			throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
 
-		var requirements = Apis.Vk.GetImageMemoryRequirements( logicalDevice, image.Validate() );
+		var requirements = Apis.Vk.GetImageMemoryRequirements( logicalDevice, image );
 		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 
 		Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
