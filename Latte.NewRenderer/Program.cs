@@ -31,13 +31,6 @@ internal static class Program
 			window.DoEvents();
 			engine.Draw();
 
-			if ( keyboard.IsKeyPressed( Key.Number1 ) )
-				engine.currentPipeline = engine.redTrianglePipeline;
-			else if ( keyboard.IsKeyPressed( Key.Number2 ) )
-				engine.currentPipeline = engine.coloredTrianglePipeline;
-			else if ( keyboard.IsKeyPressed( Key.Number3 ) )
-				engine.currentPipeline = engine.meshPipeline;
-
 			if ( keyboard.IsKeyPressed( Key.Escape ) )
 				window.Close();
 		}

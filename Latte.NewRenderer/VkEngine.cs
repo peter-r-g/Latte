@@ -53,14 +53,9 @@ internal unsafe sealed class VkEngine : IDisposable
 	private Semaphore renderSemaphore;
 	private Fence renderFence;
 
-	private PipelineLayout trianglePipelineLayout;
 	private PipelineLayout meshPipelineLayout;
-	internal Pipeline coloredTrianglePipeline;
-	internal Pipeline redTrianglePipeline;
-	internal Pipeline meshPipeline;
-	internal Pipeline currentPipeline;
+	private Pipeline meshPipeline;
 
-	//private Mesh? triangleMesh;
 	private Mesh? monkeyMesh;
 	private int frameNumber;
 
@@ -437,48 +432,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.vert.spv", out var coloredTriangleVert ) )
-			throw new ApplicationException( "Failed to build colored triangle vertex shader" );
-
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var coloredTriangleFrag ) )
-			throw new ApplicationException( "Failed to build colored triangle fragment shader" );
-
-		var pipelineLayoutCreateInfo = VkInfo.PipelineLayout();
-		Apis.Vk.CreatePipelineLayout( logicalDevice, pipelineLayoutCreateInfo, null, out var pipelineLayout ).Verify();
-		trianglePipelineLayout = pipelineLayout.Validate();
-
-		var pipelineBuilder = new VkPipelineBuilder( logicalDevice, renderPass )
-			.WithPipelineLayout( trianglePipelineLayout )
-			.WithViewport( new Viewport( 0, 0, view.Size.X, view.Size.Y, 0, 1 ) )
-			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) ) )
-			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.VertexBit, coloredTriangleVert ) )
-			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.FragmentBit, coloredTriangleFrag ) )
-			.WithVertexInputState( VkInfo.VertexInputState( new VertexInputDescription() ) )
-			.WithInputAssemblyState( VkInfo.InputAssemblyState( PrimitiveTopology.TriangleList ) )
-			.WithRasterizerState( VkInfo.RasterizationState( PolygonMode.Fill ) )
-			.WithMultisamplingState( VkInfo.MultisamplingState() )
-			.WithColorBlendAttachmentState( VkInfo.ColorBlendAttachmentState() )
-			.WithDepthStencilState( VkInfo.DepthStencilState( true, true, CompareOp.LessOrEqual ) );
-		coloredTrianglePipeline = pipelineBuilder.Build().Validate();
-
-		Apis.Vk.DestroyShaderModule( logicalDevice, coloredTriangleVert, null );
-		Apis.Vk.DestroyShaderModule( logicalDevice, coloredTriangleFrag, null );
-
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\triangle.vert.spv", out var redTriangleVert ) )
-			throw new ApplicationException( "Failed to build red triangle vertex shader" );
-
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\triangle.frag.spv", out var redTriangleFrag ) )
-			throw new ApplicationException( "Failed to build red triangle fragment shader" );
-
-		redTrianglePipeline = pipelineBuilder.ClearShaderStages()
-			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.VertexBit, redTriangleVert ) )
-			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.FragmentBit, redTriangleFrag ) )
-			.WithVertexInputState( VkInfo.VertexInputState( VertexInputDescription.GetVertexDescription() ) )
-			.Build().Validate();
-
-		Apis.Vk.DestroyShaderModule( logicalDevice, redTriangleVert, null );
-		Apis.Vk.DestroyShaderModule( logicalDevice, redTriangleFrag, null );
-
 		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new ApplicationException( "Failed to build mesh triangle vertex shader" );
 
@@ -497,21 +450,25 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
 		this.meshPipelineLayout = meshPipelineLayout.Validate();
 
-		meshPipeline = pipelineBuilder.ClearShaderStages()
+		meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
+			.WithViewport( new Viewport( 0, 0, view.Size.X, view.Size.Y, 0, 1 ) )
+			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) ) )
 			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert ) )
 			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.FragmentBit, meshTriangleFrag ) )
+			.WithVertexInputState( VkInfo.VertexInputState( VertexInputDescription.GetVertexDescription() ) )
+			.WithInputAssemblyState( VkInfo.InputAssemblyState( PrimitiveTopology.TriangleList ) )
+			.WithRasterizerState( VkInfo.RasterizationState( PolygonMode.Fill ) )
+			.WithMultisamplingState( VkInfo.MultisamplingState() )
+			.WithColorBlendAttachmentState( VkInfo.ColorBlendAttachmentState() )
+			.WithDepthStencilState( VkInfo.DepthStencilState( true, true, CompareOp.LessOrEqual ) )
 			.Build().Validate();
 
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleFrag, null );
 
-		deletionQueue.Push( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, pipelineLayout, null ) );
-		deletionQueue.Push( () => Apis.Vk.DestroyPipeline( logicalDevice, coloredTrianglePipeline, null ) );
-		deletionQueue.Push( () => Apis.Vk.DestroyPipeline( logicalDevice, redTrianglePipeline, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ) );
-		currentPipeline = redTrianglePipeline;
 	}
 
 	private void LoadMeshes()
