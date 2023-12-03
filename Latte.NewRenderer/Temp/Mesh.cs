@@ -1,4 +1,4 @@
-﻿using Latte.NewRenderer.Wrappers;
+﻿using Latte.NewRenderer.Allocations;
 using System.Collections.Immutable;
 
 namespace Latte.NewRenderer.Temp;
