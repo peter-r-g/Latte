@@ -654,16 +654,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( disposed || !IsInitialized )
 			return;
 
+		if ( disposing )
+			allocationManager?.Dispose();
+
 		while ( deletionQueue.TryPop( out var deletionCb ) )
 			deletionCb();
 
-		if ( disposing )
-		{
-			swapchainExtension?.Dispose();
-			debugUtilsExtension?.Dispose();
-			surfaceExtension?.Dispose();
-			view?.Dispose();
-		}
+		swapchainExtension?.Dispose();
+		debugUtilsExtension?.Dispose();
+		surfaceExtension?.Dispose();
 
 		disposed = true;
 	}
