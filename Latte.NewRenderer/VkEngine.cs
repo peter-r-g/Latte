@@ -445,8 +445,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Size = (uint)Unsafe.SizeOf<MeshPushConstants>(),
 			StageFlags = ShaderStageFlags.VertexBit
 		};
-		meshPipelineCreateInfo.PushConstantRangeCount = 1;
-		meshPipelineCreateInfo.PPushConstantRanges = &pushConstant;
+		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ) );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
 		this.meshPipelineLayout = meshPipelineLayout.Validate();
 

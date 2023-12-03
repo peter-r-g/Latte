@@ -126,18 +126,21 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static PipelineLayoutCreateInfo PipelineLayout()
+	internal static PipelineLayoutCreateInfo PipelineLayout( ReadOnlySpan<PushConstantRange> pushConstantRanges )
 	{
-		return new PipelineLayoutCreateInfo
+		fixed ( PushConstantRange* pushConstantRangesPtr = pushConstantRanges )
 		{
-			SType = StructureType.PipelineLayoutCreateInfo,
-			PNext = null,
-			Flags = PipelineLayoutCreateFlags.None,
-			SetLayoutCount = 0,
-			PSetLayouts = null,
-			PushConstantRangeCount = 0,
-			PPushConstantRanges = null
-		};
+			return new PipelineLayoutCreateInfo
+			{
+				SType = StructureType.PipelineLayoutCreateInfo,
+				PNext = null,
+				Flags = PipelineLayoutCreateFlags.None,
+				SetLayoutCount = 0,
+				PSetLayouts = null,
+				PushConstantRangeCount = (uint)pushConstantRanges.Length,
+				PPushConstantRanges = pushConstantRangesPtr
+			};
+		}
 	}
 
 	internal static RenderPassCreateInfo RenderPass( ReadOnlySpan<AttachmentDescription> attachments, ReadOnlySpan<SubpassDescription> subpassDescriptions,
