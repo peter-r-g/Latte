@@ -1,6 +1,6 @@
 ﻿using Silk.NET.Vulkan;
 
-namespace Latte.NewRenderer.Wrappers;
+namespace Latte.NewRenderer.Allocations;
 
 internal readonly struct AllocatedBuffer
 {
