@@ -181,9 +181,10 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( this.view, nameof( this.view ) );
 
-		var cameraPosition = new Vector3( 0, -6, -10 );
-		var view = Matrix4x4.Identity * Matrix4x4.CreateTranslation( cameraPosition );
-		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( 70f ), this.view.Size.X / this.view.Size.Y, 0.1f, 200 );
+		var view = Matrix4x4.Identity * Matrix4x4.CreateLookAt( Camera.Main.Position, Camera.Main.Position + Camera.Main.Front, Camera.Main.Up );
+		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( Camera.Main.Zoom ),
+			(float)this.view.Size.X / this.view.Size.Y,
+			Camera.Main.ZNear, Camera.Main.ZFar );
 		projection.M22 *= -1;
 
 		Mesh? lastMesh = null;
