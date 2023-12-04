@@ -549,25 +549,54 @@ internal unsafe sealed class VkEngine : IDisposable
 		Meshes.Add( "triangle", triangleMesh );
 		UploadMesh( triangleMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
-		var model = Model.FromPath( "/monkey_smooth.obj" );
-		var mesh = model.Meshes.First();
-		var tempVertices = mesh.Vertices
-			.Select( vertex => new Vertex( vertex.Position, vertex.Normal, vertex.Normal, vertex.TextureCoordinates ) )
-			.ToImmutableArray();
-		var monkeyMesh = new Mesh( tempVertices, mesh.Indices );
+		var models = new string[]
+		{
+			"/Assets/monkey_smooth.obj",
+			"/Assets/Car.obj",
+			"/Assets/Car2.obj",
+			"/Assets/Car3.obj",
+			"/Assets/Car4.obj",
+			"/Assets/Car5.obj",
+			"/Assets/Car5_Police.obj",
+			"/Assets/Car5_Taxi.obj",
+			"/Assets/Car6.obj",
+			"/Assets/Car7.obj",
+		};
+		foreach ( var modelPath in models )
+		{
+			var model = Model.FromPath( modelPath );
+			var mesh = model.Meshes.First();
+			var tempVertices = mesh.Vertices
+				.Select( vertex => new Vertex( vertex.Position, vertex.Normal, vertex.Normal, vertex.TextureCoordinates ) )
+				.ToImmutableArray();
+			var monkeyMesh = new Mesh( tempVertices, mesh.Indices );
 
-		Meshes.Add( "monkey", monkeyMesh );
-		UploadMesh( monkeyMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+			Meshes.Add( Path.GetFileNameWithoutExtension( modelPath ), monkeyMesh );
+			UploadMesh( monkeyMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+		}
 	}
 
 	private void InitializeScene()
 	{
-		var monkeyMesh = GetMesh( "monkey" );
 		var triangleMesh = GetMesh( "triangle" );
 		var defaultMeshMaterial = GetMaterial( "defaultmesh" );
 
-		var monkey = new Renderable( monkeyMesh, defaultMeshMaterial );
-		Renderables.Add( monkey );
+		foreach ( var (meshName, mesh) in Meshes )
+		{
+			if ( meshName == "triangle" )
+				continue;
+
+			for ( var i = 0; i < 40; i++ )
+			{
+				var randomMesh = new Renderable( mesh, defaultMeshMaterial );
+				var x = Random.Shared.Next( -20, 21 );
+				var y = Random.Shared.Next( -20, 21 );
+				var translation = Matrix4x4.Identity * Matrix4x4.CreateTranslation( x * 5, 0, y * 5 );
+				var scale = Matrix4x4.Identity * Matrix4x4.CreateScale( 0.2f, 0.2f, 0.2f );
+				randomMesh.Transform = translation * scale;
+				Renderables.Add( randomMesh );
+			}
+		}
 
 		for ( var x = -20; x <= 20; x++ )
 		{
