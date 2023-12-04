@@ -91,7 +91,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void Draw()
 	{
-		ArgumentNullException.ThrowIfNull( this.view, nameof( VkEngine.view ) );
+		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
 
 		var swapchain = this.swapchain;
@@ -125,7 +125,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			depthClearValue
 		};
 
-		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)this.view.Size.X, (uint)this.view.Size.Y ) );
+		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) );
 		fixed( ClearValue* clearValuesPtr = clearValues )
 		{
 			var rpBeginInfo = new RenderPassBeginInfo
@@ -499,10 +499,10 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new ApplicationException( "Failed to build mesh triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var meshTriangleFrag ) )
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var meshTriangleFrag ) )
 			throw new ApplicationException( "Failed to build mesh triangle fragment shader" );
 
 		var pushConstant = new PushConstantRange
