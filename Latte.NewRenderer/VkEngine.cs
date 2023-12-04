@@ -22,6 +22,8 @@ namespace Latte.NewRenderer;
 
 internal unsafe sealed class VkEngine : IDisposable
 {
+	private const int MaxFramesInFlight = 2;
+
 	internal bool IsInitialized { get; private set; }
 
 	private IView? view;
@@ -44,17 +46,14 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private Queue graphicsQueue;
 	private uint graphicsQueueFamily;
-	private CommandPool graphicsCommandPool;
-	private CommandBuffer graphicsCommandBuffer;
 	private Queue presentQueue;
 	private uint presentQueueFamily;
 
+	private ImmutableArray<FrameData> frameData = [];
+	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
+
 	private RenderPass renderPass;
 	private ImmutableArray<Framebuffer> framebuffers;
-
-	private Semaphore presentSemaphore;
-	private Semaphore renderSemaphore;
-	private Fence renderFence;
 
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
@@ -95,13 +94,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( this.view, nameof( VkEngine.view ) );
 		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
 
+		var swapchain = this.swapchain;
+		var currentFrameData = CurrentFrameData;
+		var renderFence = currentFrameData.RenderFence;
+		var presentSemaphore = currentFrameData.PresentSemaphore;
+		var renderSemaphore = currentFrameData.RenderSemaphore;
+		var cmd = currentFrameData.CommandBuffer;
+
 		Apis.Vk.WaitForFences( logicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
 		Apis.Vk.ResetFences( logicalDevice, 1, renderFence );
-
-		var swapchain = this.swapchain;
-		var presentSemaphore = this.presentSemaphore;
-		var renderSemaphore = this.renderSemaphore;
-		var cmd = graphicsCommandBuffer;
 
 		uint swapchainImageIndex;
 		swapchainExtension.AcquireNextImage( logicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
@@ -278,6 +279,11 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		allocationManager = new AllocationManager( physicalDevice, logicalDevice );
 
+		var frameDataBuilder = ImmutableArray.CreateBuilder<FrameData>( MaxFramesInFlight );
+		for ( var i = 0; i < MaxFramesInFlight; i++ )
+			frameDataBuilder.Add( new FrameData() );
+		frameData = frameDataBuilder.MoveToImmutable();
+
 		deletionQueue.Push( () => Apis.Vk.DestroyInstance( instance, null ) );
 		deletionQueue.Push( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( instance, debugMessenger, null ) );
 		deletionQueue.Push( () => surfaceExtension.DestroySurface( instance, surface, null ) );
@@ -335,16 +341,21 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void InitializeCommands()
 	{
 		var poolCreateInfo = VkInfo.CommandPool( graphicsQueueFamily, CommandPoolCreateFlags.ResetCommandBufferBit );
-		Apis.Vk.CreateCommandPool( logicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( commandPool );
-		graphicsCommandPool = commandPool;
 
-		var bufferAllocateInfo = VkInfo.AllocateCommandBuffer( commandPool, 1, CommandBufferLevel.Primary );
-		Apis.Vk.AllocateCommandBuffers( logicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( commandBuffer ); 
-		graphicsCommandBuffer = commandBuffer;
+		for ( var i = 0; i < MaxFramesInFlight; i++ )
+		{			
+			Apis.Vk.CreateCommandPool( logicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
+			var bufferAllocateInfo = VkInfo.AllocateCommandBuffer( commandPool, 1, CommandBufferLevel.Primary );
+			Apis.Vk.AllocateCommandBuffers( logicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
 
-		deletionQueue.Push( () => Apis.Vk.DestroyCommandPool( logicalDevice, graphicsCommandPool, null ) );
+			VkInvalidHandleException.ThrowIfInvalid( commandPool );
+			VkInvalidHandleException.ThrowIfInvalid( commandBuffer );
+
+			frameData[i].CommandPool = commandPool;
+			frameData[i].CommandBuffer = commandBuffer;
+
+			deletionQueue.Push( () => Apis.Vk.DestroyCommandPool( logicalDevice, commandPool, null ) );
+		}
 	}
 
 	private void InitializeDefaultRenderPass()
@@ -462,22 +473,26 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void InitializeSynchronizationStructures()
 	{
 		var fenceCreateInfo = VkInfo.Fence( FenceCreateFlags.SignaledBit );
-		Apis.Vk.CreateFence( logicalDevice, fenceCreateInfo, null, out var renderFence ).Verify();
-		this.renderFence = renderFence;
-
 		var semaphoreCreateInfo = VkInfo.Semaphore();
-		Apis.Vk.CreateSemaphore( logicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).Verify();
-		this.presentSemaphore = presentSemaphore;
-		Apis.Vk.CreateSemaphore( logicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).Verify();
-		this.renderSemaphore = renderSemaphore;
 
-		VkInvalidHandleException.ThrowIfInvalid( renderFence );
-		VkInvalidHandleException.ThrowIfInvalid( presentSemaphore );
-		VkInvalidHandleException.ThrowIfInvalid( renderSemaphore );
+		for ( var i = 0; i < frameData.Length; i++ )
+		{
+			Apis.Vk.CreateFence( logicalDevice, fenceCreateInfo, null, out var renderFence ).Verify();
+			Apis.Vk.CreateSemaphore( logicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).Verify();
+			Apis.Vk.CreateSemaphore( logicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).Verify();
 
-		deletionQueue.Push( () => Apis.Vk.DestroySemaphore( logicalDevice, renderSemaphore, null ) );
-		deletionQueue.Push( () => Apis.Vk.DestroySemaphore( logicalDevice, presentSemaphore, null ) );
-		deletionQueue.Push( () => Apis.Vk.DestroyFence( logicalDevice, renderFence, null ) );
+			VkInvalidHandleException.ThrowIfInvalid( renderFence );
+			VkInvalidHandleException.ThrowIfInvalid( presentSemaphore );
+			VkInvalidHandleException.ThrowIfInvalid( renderSemaphore );
+
+			frameData[i].RenderFence = renderFence;
+			frameData[i].PresentSemaphore = presentSemaphore;
+			frameData[i].RenderSemaphore = renderSemaphore;
+
+			deletionQueue.Push( () => Apis.Vk.DestroySemaphore( logicalDevice, renderSemaphore, null ) );
+			deletionQueue.Push( () => Apis.Vk.DestroySemaphore( logicalDevice, presentSemaphore, null ) );
+			deletionQueue.Push( () => Apis.Vk.DestroyFence( logicalDevice, renderFence, null ) );
+		}
 	}
 
 	private void InitializePipelines()
