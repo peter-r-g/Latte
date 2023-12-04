@@ -44,7 +44,7 @@ internal static class Program
 			if ( !window.IsClosing )
 				window.DoUpdate();
 
-			if ( !window.IsClosing )
+			if ( !window.IsClosing && window.IsVisible )
 				window.DoRender();
 
 			input.Update();
