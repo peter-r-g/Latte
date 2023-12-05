@@ -23,6 +23,7 @@ namespace Latte.NewRenderer;
 internal unsafe sealed class VkEngine : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
+	private const int MaxObjects = 10_000;
 
 	internal bool IsInitialized { get; private set; }
 
@@ -54,6 +55,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
 
 	private DescriptorSetLayout globalSetLayout;
+	private DescriptorSetLayout objectSetLayout;
 	private DescriptorPool descriptorPool;
 
 	private RenderPass renderPass;
@@ -213,6 +215,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		var frameIndex = frameNumber % frameData.Length;
 		allocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
 
+		// TODO: Cache the array
+		var objectData = new GpuObjectData[count];
+		for ( var i = 0; i < count; i++ )
+			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
+
+		allocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData.AsSpan() );
+
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
 
@@ -223,8 +232,11 @@ internal unsafe sealed class VkEngine : IDisposable
 			if ( !ReferenceEquals( lastMaterial, obj.Material ) )
 			{
 				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, obj.Material.Pipeline );
+				
 				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
 				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 1, &uniformOffset );
+				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 1, 1, currentFrameData.ObjectDescriptor, 0, null );
+				
 				lastMaterial = obj.Material;
 			}
 
@@ -241,9 +253,9 @@ internal unsafe sealed class VkEngine : IDisposable
 			}
 
 			if ( lastMesh.Indices.Length > 0 )
-				Apis.Vk.CmdDrawIndexed( cmd, (uint)obj.Mesh.Indices.Length, 1, 0, 0, 0 );
+				Apis.Vk.CmdDrawIndexed( cmd, (uint)obj.Mesh.Indices.Length, 1, 0, 0, (uint)i );
 			else
-				Apis.Vk.CmdDraw( cmd, (uint)obj.Mesh.Vertices.Length, 1, 0, 0 );
+				Apis.Vk.CmdDraw( cmd, (uint)obj.Mesh.Vertices.Length, 1, 0, (uint)i );
 		}
 	}
 
@@ -287,6 +299,12 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var logicalDeviceBuilderResult = VkLogicalDeviceBuilder.FromPhysicalSelector( physicalDevice, physicalDeviceSelector )
 			.WithExtensions( KhrSwapchain.ExtensionName )
+			.WithPNext( new PhysicalDeviceShaderDrawParametersFeatures
+			{
+				SType = StructureType.PhysicalDeviceShaderDrawParametersFeatures,
+				PNext = null,
+				ShaderDrawParameters = Vk.True
+			} )
 			.Build();
 
 		logicalDevice = logicalDeviceBuilderResult.LogicalDevice;
@@ -523,7 +541,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes = stackalloc DescriptorPoolSize[]
 		{
 			new DescriptorPoolSize( DescriptorType.UniformBuffer, 10 ),
-			new DescriptorPoolSize( DescriptorType.UniformBufferDynamic, 10 )
+			new DescriptorPoolSize( DescriptorType.UniformBufferDynamic, 10 ),
+			new DescriptorPoolSize( DescriptorType.StorageBuffer, 10 )
 		};
 
 		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
@@ -543,37 +562,37 @@ internal unsafe sealed class VkEngine : IDisposable
 			this.descriptorPool = descriptorPool;
 		}
 
-		var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
-		var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
-
-		var bindings = stackalloc DescriptorSetLayoutBinding[]
 		{
-			cameraBinding,
-			sceneBinding
-		};
+			var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
+			var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
+			var objectBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit, 0 );
 
-		var setLayoutCreateInfo = new DescriptorSetLayoutCreateInfo
-		{
-			SType = StructureType.DescriptorSetLayoutCreateInfo,
-			PNext = null,
-			BindingCount = 2,
-			PBindings = bindings,
-			Flags = DescriptorSetLayoutCreateFlags.None
-		};
+			var bindings = stackalloc DescriptorSetLayoutBinding[]
+			{
+				cameraBinding,
+				sceneBinding
+			};
 
-		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out var globalSetLayout ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( globalSetLayout );
-		this.globalSetLayout = globalSetLayout;
+			var setLayoutCreateInfo = new DescriptorSetLayoutCreateInfo
+			{
+				SType = StructureType.DescriptorSetLayoutCreateInfo,
+				PNext = null,
+				BindingCount = 2,
+				PBindings = bindings,
+				Flags = DescriptorSetLayoutCreateFlags.None
+			};
 
-		var setLayout = globalSetLayout; // This is annoying
-		var descriptorSetAllocateInfo = new DescriptorSetAllocateInfo
-		{
-			SType = StructureType.DescriptorSetAllocateInfo,
-			PNext = null,
-			DescriptorPool = descriptorPool,
-			DescriptorSetCount = 1,
-			PSetLayouts = &setLayout
-		};
+			Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out var tempLayout ).Verify();
+			VkInvalidHandleException.ThrowIfInvalid( tempLayout );
+			globalSetLayout = tempLayout;
+
+			setLayoutCreateInfo.BindingCount = 1;
+			setLayoutCreateInfo.PBindings = &objectBinding;
+
+			Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out tempLayout ).Verify();
+			VkInvalidHandleException.ThrowIfInvalid( tempLayout );
+			objectSetLayout = tempLayout;
+		}
 
 		var sceneParameterBufferSize = (ulong)frameData.Length * PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) );
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
@@ -581,19 +600,41 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorPool( logicalDevice, descriptorPool, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, globalSetLayout, null ) );
+		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, objectSetLayout, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, sceneParameterBuffer.Buffer, null ) );
 
-		var descriptorWrites = stackalloc WriteDescriptorSet[2];
+		var descriptorSetAllocateInfo = new DescriptorSetAllocateInfo
+		{
+			SType = StructureType.DescriptorSetAllocateInfo,
+			PNext = null,
+			DescriptorPool = descriptorPool,
+			DescriptorSetCount = 1
+		};
+
+		var descriptorWrites = stackalloc WriteDescriptorSet[3];
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
+			var setLayout = globalSetLayout;
+			descriptorSetAllocateInfo.PSetLayouts = &setLayout;
 			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out var descriptorSet ).Verify();
 			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
 			frameData[i].GlobalDescriptor = descriptorSet;
 
+			setLayout = objectSetLayout;
+			descriptorSetAllocateInfo.PSetLayouts = &setLayout;
+			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out descriptorSet ).Verify();
+			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
+			frameData[i].ObjectDescriptor = descriptorSet;
+
+			var index = i;
 			frameData[i].CameraBuffer = CreateBuffer( (ulong)sizeof( GpuCameraData ), BufferUsageFlags.UniformBufferBit,
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
-			var index = i;
+
+			frameData[i].ObjectBuffer = CreateBuffer( (ulong)sizeof( GpuObjectData ) * MaxObjects, BufferUsageFlags.StorageBufferBit,
+				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
+			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
 
 			var cameraBufferInfo = new DescriptorBufferInfo
 			{
@@ -609,12 +650,21 @@ internal unsafe sealed class VkEngine : IDisposable
 				Range = (ulong)sizeof( GpuSceneData )
 			};
 
+			var objectBufferInfo = new DescriptorBufferInfo
+			{
+				Buffer = frameData[i].ObjectBuffer.Buffer,
+				Offset = 0,
+				Range = (ulong)sizeof( GpuObjectData ) * MaxObjects
+			};
+
 			var cameraWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.UniformBuffer, frameData[i].GlobalDescriptor, cameraBufferInfo, 0 );
 			var sceneWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.UniformBufferDynamic, frameData[i].GlobalDescriptor, sceneBufferInfo, 1 );
+			var objectWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.StorageBuffer, frameData[i].ObjectDescriptor, objectBufferInfo, 0 );
 
 			descriptorWrites[0] = cameraWrite;
 			descriptorWrites[1] = sceneWrite;
-			Apis.Vk.UpdateDescriptorSets( logicalDevice, 2, descriptorWrites, 0, null );
+			descriptorWrites[2] = objectWrite;
+			Apis.Vk.UpdateDescriptorSets( logicalDevice, 3, descriptorWrites, 0, null );
 		}
 	}
 
@@ -634,8 +684,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			Size = (uint)Unsafe.SizeOf<MeshPushConstants>(),
 			StageFlags = ShaderStageFlags.VertexBit
 		};
-		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ),
-			new ReadOnlySpan<DescriptorSetLayout>( ref globalSetLayout ) );
+
+		ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts = stackalloc DescriptorSetLayout[]
+		{
+			globalSetLayout,
+			objectSetLayout
+		};
+		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
 
 		var meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )
