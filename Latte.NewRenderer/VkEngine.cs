@@ -667,17 +667,16 @@ internal unsafe sealed class VkEngine : IDisposable
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, buffer, null ) );
 		}
 	}
-		
-	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
+	
+	private AllocatedBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
+		SharingMode sharingMode = SharingMode.Exclusive )
 	{
-		var memoryProperties = Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice );
-		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
-		{
-			if ( (typeFilter & (1 << i)) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
-				return (uint)i;
-		}
+		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
 
-		throw new ApplicationException( "Failed to find suitable memory type" );
+		var createInfo = VkInfo.Buffer( size, usageFlags, sharingMode );
+		Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer );
+
+		return allocationManager.AllocateBuffer( buffer, memoryFlags );
 	}
 
 	private bool TryLoadShaderModule( string filePath, out ShaderModule shaderModule )
