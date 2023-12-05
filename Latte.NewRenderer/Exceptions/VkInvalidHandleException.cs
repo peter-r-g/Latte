@@ -125,4 +125,22 @@ internal sealed class VkInvalidHandleException : VkException
 		if ( !imageView.IsValid() )
 			Throw( typeof( ImageView ) );
 	}
+
+	internal static void ThrowIfInvalid( DescriptorPool descriptorPool )
+	{
+		if ( !descriptorPool.IsValid() )
+			Throw( typeof( DescriptorPool ) );
+	}
+
+	internal static void ThrowIfInvalid( DescriptorSetLayout descriptorSetLayout )
+	{
+		if ( !descriptorSetLayout.IsValid() )
+			Throw( typeof( DescriptorSetLayout ) );
+	}
+
+	internal static void ThrowIfInvalid( DescriptorSet descriptorSet )
+	{
+		if ( !descriptorSet.IsValid() )
+			Throw( typeof( DescriptorSet ) );
+	}
 }
