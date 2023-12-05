@@ -82,6 +82,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void Initialize( IView view )
 	{
+		if ( IsInitialized )
+			throw new InvalidOperationException( "The VkEngine has already been initialized" );
+
 		this.view = view;
 
 		InitializeVulkan();
