@@ -103,7 +103,7 @@ internal sealed class AllocationManager : IDisposable
 				return (uint)i;
 		}
 
-		throw new ApplicationException( "Failed to find suitable memory type" );
+		throw new VkException( "Failed to find suitable memory type" );
 	}
 
 	private unsafe void Dispose( bool disposing )

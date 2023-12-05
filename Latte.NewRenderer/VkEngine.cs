@@ -286,7 +286,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( debugMessenger );
 
 		if ( !Apis.Vk.TryGetInstanceExtension<KhrSurface>( instance, out var surfaceExtension ) )
-			throw new ApplicationException( "Failed to get KHR_surface extension" );
+			throw new VkException( "Failed to get KHR_surface extension" );
 
 		this.surfaceExtension = surfaceExtension;
 		surface = view.VkSurface!.Create<AllocationCallbacks>( instance.ToHandle(), null ).ToSurface();
@@ -676,10 +676,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 
 		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
-			throw new ApplicationException( "Failed to build mesh triangle vertex shader" );
+			throw new VkException( "Failed to build mesh triangle vertex shader" );
 
 		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var meshTriangleFrag ) )
-			throw new ApplicationException( "Failed to build mesh triangle fragment shader" );
+			throw new VkException( "Failed to build mesh triangle fragment shader" );
 
 		var pushConstant = new PushConstantRange
 		{

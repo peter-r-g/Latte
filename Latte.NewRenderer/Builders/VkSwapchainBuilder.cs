@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using System;
@@ -154,7 +155,7 @@ internal sealed class VkSwapchainBuilder
 		createInfo.Clipped = Vk.True;
 
 		if ( !Apis.Vk.TryGetDeviceExtension<KhrSwapchain>( instance, logicalDevice, out var swapchainExtension ) )
-			throw new ApplicationException( "Failed to get KHR_swapchain extension" );
+			throw new VkException( "Failed to get KHR_swapchain extension" );
 
 		swapchainExtension.CreateSwapchain( logicalDevice, createInfo, null, out var swapchain ).Verify();
 		swapchainExtension.GetSwapchainImages( logicalDevice, swapchain, &imageCount, null ).Verify();

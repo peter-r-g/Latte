@@ -6,6 +6,8 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Windowing;
 using System;
 using System.Runtime.InteropServices;
+using Latte.NewRenderer.Exceptions;
+
 
 #if DEBUG
 using System.Diagnostics;
@@ -119,7 +121,7 @@ internal sealed class VkInstanceBuilder
 	private static unsafe string[] GetRequiredExtensions( IView view )
 	{
 		if ( view.VkSurface is null )
-			throw new ApplicationException( "Window platform does not support Vulkan" );
+			throw new VkException( "Window platform does not support Vulkan" );
 
 		var extensions = view.VkSurface.GetRequiredExtensions( out var requiredExtensionCount );
 		var extensionCount = requiredExtensionCount;
