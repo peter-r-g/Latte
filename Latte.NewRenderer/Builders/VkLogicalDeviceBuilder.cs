@@ -2,11 +2,13 @@
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
+using System;
+using System.Runtime.InteropServices;
 
 namespace Latte.NewRenderer.Builders;
 
 // TODO: Add builder methods.
-internal sealed class VkLogicalDeviceBuilder
+internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 {
 	private PhysicalDevice physicalDevice;
 	private SurfaceKHR surface;
@@ -15,6 +17,8 @@ internal sealed class VkLogicalDeviceBuilder
 	private string[] extensions = [];
 	private bool uniqueGraphicsQueueRequired;
 	private bool uniquePresentQueueRequired;
+	private nint pNextPtr;
+	private bool disposed;
 
 	private VkLogicalDeviceBuilder( PhysicalDevice physicalDevice, SurfaceKHR surface,
 		KhrSurface? surfaceExtension, PhysicalDeviceFeatures featuresRequired,
@@ -28,13 +32,25 @@ internal sealed class VkLogicalDeviceBuilder
 		this.uniquePresentQueueRequired = uniquePresentQueueRequired;
 	}
 
+	~VkLogicalDeviceBuilder()
+	{
+		Dispose( disposing: false );
+	}
+
 	internal VkLogicalDeviceBuilder WithExtensions( params string[] extensions )
 	{
 		this.extensions = extensions;
 		return this;
 	}
 
-	internal unsafe VkLogicalDeviceBuilderResult Build()
+	internal VkLogicalDeviceBuilder WithPNext<T>( T pNext ) where T : unmanaged
+	{
+		pNextPtr = Marshal.AllocHGlobal( sizeof( T ) );
+		Marshal.StructureToPtr( pNext, pNextPtr, false );
+		return this;
+	}
+
+	internal VkLogicalDeviceBuilderResult Build()
 	{
 		var queuePriority = 1f;
 		var indices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension, uniqueGraphicsQueueRequired, uniquePresentQueueRequired );
@@ -61,7 +77,8 @@ internal sealed class VkLogicalDeviceBuilder
 				PQueueCreateInfos = queueCreateInfos,
 				PEnabledFeatures = featuresRequiredPtr,
 				EnabledExtensionCount = (uint)extensions.Length,
-				PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions )
+				PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions ),
+				PNext = (void*)pNextPtr
 			};
 
 			Apis.Vk.CreateDevice( physicalDevice, createInfo, null, out var logicalDevice ).Verify();
@@ -79,5 +96,20 @@ internal sealed class VkLogicalDeviceBuilder
 		return new VkLogicalDeviceBuilder( physicalDevice, selector.Surface,
 			selector.SurfaceExtension, selector.FeaturesRequired,
 			selector.UniqueGraphicsQueueRequired, selector.UniquePresentQueueRequired );
+	}
+
+	private void Dispose( bool disposing )
+	{
+		if ( disposed )
+			return;
+
+		Marshal.FreeHGlobal( pNextPtr );
+		disposed = true;
+	}
+
+	public void Dispose()
+	{
+		Dispose( disposing: true );
+		GC.SuppressFinalize( this );
 	}
 }
