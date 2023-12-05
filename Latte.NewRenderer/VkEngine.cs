@@ -5,6 +5,7 @@ using Latte.NewRenderer.Exceptions;
 using Latte.NewRenderer.Extensions;
 using Latte.NewRenderer.Temp;
 using Silk.NET.Maths;
+using Silk.NET.SDL;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
@@ -31,7 +32,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private Instance instance;
 	private DebugUtilsMessengerEXT debugMessenger;
 	private PhysicalDevice physicalDevice;
-	private VkPhysicalDeviceSelector? physicalDeviceSelector;
+	private VkQueueFamilyIndices queueFamilyIndices;
 	private Device logicalDevice;
 	private SurfaceKHR surface;
 	private AllocationManager? allocationManager;
@@ -291,16 +292,20 @@ internal unsafe sealed class VkEngine : IDisposable
 		this.surfaceExtension = surfaceExtension;
 		surface = view.VkSurface!.Create<AllocationCallbacks>( instance.ToHandle(), null ).ToSurface();
 
-		physicalDeviceSelector = new VkPhysicalDeviceSelector( instance )
+		var physicalDeviceSelectorResult = new VkPhysicalDeviceSelector( instance )
 			.RequireDiscreteDevice( true )
 			.RequireVersion( 1, 1, 0 )
 			.WithSurface( surface, surfaceExtension )
 			.RequireUniqueGraphicsQueue( true )
-			.RequireUniquePresentQueue( true );
-		physicalDevice = physicalDeviceSelector.Select();
+			.RequireUniquePresentQueue( true )
+			.Select();
+		physicalDevice = physicalDeviceSelectorResult.PhysicalDevice;
+		queueFamilyIndices = physicalDeviceSelectorResult.QueueFamilyIndices;
 		VkInvalidHandleException.ThrowIfInvalid( physicalDevice );
 
-		var logicalDeviceBuilderResult = VkLogicalDeviceBuilder.FromPhysicalSelector( physicalDevice, physicalDeviceSelector )
+		var logicalDeviceBuilderResult = new VkLogicalDeviceBuilder( physicalDevice )
+			.WithSurface( surface, surfaceExtension )
+			.WithQueueFamilyIndices( queueFamilyIndices )
 			.WithExtensions( KhrSwapchain.ExtensionName )
 			.WithPNext( new PhysicalDeviceShaderDrawParametersFeatures
 			{
@@ -337,10 +342,11 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void InitializeSwapchain()
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
-		ArgumentNullException.ThrowIfNull( physicalDeviceSelector, nameof( physicalDeviceSelector ) );
 		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
 
-		var result = VkSwapchainBuilder.FromPhysicalSelector( physicalDevice, logicalDevice, physicalDeviceSelector )
+		var result = new VkSwapchainBuilder( instance, physicalDevice, logicalDevice )
+			.WithSurface( surface, surfaceExtension )
+			.WithQueueFamilyIndices( queueFamilyIndices )
 			.UseDefaultFormat()
 			.SetPresentMode( PresentModeKHR.FifoKhr )
 			.SetExtent( (uint)view.Size.X, (uint)view.Size.Y )

@@ -11,90 +11,96 @@ namespace Latte.NewRenderer.Builders;
 
 internal sealed class VkPhysicalDeviceSelector
 {
-	internal Instance Instance { get; }
-	internal Version32 VersionRequired { get; private set; } = new( 1, 0, 0 );
-	internal SurfaceKHR Surface { get; private set; }
-	internal KhrSurface? SurfaceExtension { get; private set; }
-	internal bool DiscreteDeviceRequired { get; private set; }
-	internal string DeviceNameRequired { get; private set; } = string.Empty;
-	internal PhysicalDeviceFeatures FeaturesRequired { get; private set; }
-	internal bool UniqueGraphicsQueueRequired { get; private set; }
-	internal bool UniquePresentQueueRequired { get; private set; }
-	internal bool SelectFirst { get; private set; } = false;
+	private readonly Instance instance;
+
+	private Version32 versionRequired = new( 1, 0, 0 );
+	private SurfaceKHR surface;
+	private KhrSurface? surfaceExtension;
+	private bool discreteDeviceRequired;
+	private string deviceNameRequired = string.Empty;
+	private PhysicalDeviceFeatures featuresRequired;
+	private bool requireUniqueGraphicsQueue;
+	private bool requireUniquePresentQueue;
+	private bool selectFirst;
 
 	internal VkPhysicalDeviceSelector( Instance instance )
 	{
-		Instance = instance;
+		this.instance = instance;
 	}
 
 	internal VkPhysicalDeviceSelector RequireDeviceName( string name )
 	{
-		DeviceNameRequired = name;
+		deviceNameRequired = name;
 		return this;
 	}
 
 	internal VkPhysicalDeviceSelector RequireVersion( uint major, uint minor, uint patch )
 	{
-		VersionRequired = new Version32( major, minor, patch );
+		versionRequired = new Version32( major, minor, patch );
 		return this;
 	}
 
 	internal VkPhysicalDeviceSelector WithSurface( SurfaceKHR surface, KhrSurface surfaceExtension )
 	{
-		Surface = surface;
-		SurfaceExtension = surfaceExtension;
+		this.surface = surface;
+		this.surfaceExtension = surfaceExtension;
 		return this;
 	}
 
 	internal VkPhysicalDeviceSelector RequireDiscreteDevice( bool requireDiscreteDevice )
 	{
-		DiscreteDeviceRequired = requireDiscreteDevice;
+		discreteDeviceRequired = requireDiscreteDevice;
 		return this;
 	}
 
-	internal VkPhysicalDeviceSelector RequireFeatures( PhysicalDeviceFeatures requiredFeatures )
+	internal VkPhysicalDeviceSelector WithFeatures( PhysicalDeviceFeatures requiredFeatures )
 	{
-		FeaturesRequired = requiredFeatures;
+		featuresRequired = requiredFeatures;
 		return this;
 	}
 
 	internal VkPhysicalDeviceSelector RequireUniqueGraphicsQueue( bool requireUniqueGraphicsQueue )
 	{
-		UniqueGraphicsQueueRequired = requireUniqueGraphicsQueue;
+		this.requireUniqueGraphicsQueue = requireUniqueGraphicsQueue;
 		return this;
 	}
 
 	internal VkPhysicalDeviceSelector RequireUniquePresentQueue( bool requireUniquePresentQueue )
 	{
-		UniquePresentQueueRequired = requireUniquePresentQueue;
+		this.requireUniquePresentQueue = requireUniquePresentQueue;
 		return this;
 	}
 
 	internal VkPhysicalDeviceSelector ShouldSelectFirst( bool selectFirst )
 	{
-		SelectFirst = selectFirst;
+		this.selectFirst = selectFirst;
 		return this;
 	}
 
-	internal unsafe PhysicalDevice Select() => SelectMany().FirstOrDefault();
+	internal unsafe VkPhysicalDeviceSelectorResult Select() => SelectMany().FirstOrDefault();
 
-	internal unsafe ImmutableArray<PhysicalDevice> SelectMany()
+	internal unsafe ImmutableArray<VkPhysicalDeviceSelectorResult> SelectMany()
 	{
 		var physicalDeviceCount = 0u;
-		Apis.Vk.EnumeratePhysicalDevices( Instance, ref physicalDeviceCount, null ).Verify();
+		Apis.Vk.EnumeratePhysicalDevices( instance, ref physicalDeviceCount, null ).Verify();
 
 		PhysicalDevice* physicalDevices = stackalloc PhysicalDevice[(int)physicalDeviceCount];
-		Apis.Vk.EnumeratePhysicalDevices( Instance, ref physicalDeviceCount, physicalDevices );
+		Apis.Vk.EnumeratePhysicalDevices( instance, ref physicalDeviceCount, physicalDevices );
 
-		if ( physicalDeviceCount > 0 && SelectFirst )
-			return [physicalDevices[0]];
+		if ( physicalDeviceCount > 0 && selectFirst )
+		{
+			var physicalDevice = physicalDevices[0];
+			var queueFamilyIndices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension, requireUniqueGraphicsQueue, requireUniquePresentQueue );
+			return [new VkPhysicalDeviceSelectorResult( physicalDevice, queueFamilyIndices )];
+		}
 
-		var suitableDevicesBuilder = ImmutableArray.CreateBuilder<PhysicalDevice>( (int)physicalDeviceCount );
+		var suitableDevicesBuilder = ImmutableArray.CreateBuilder<VkPhysicalDeviceSelectorResult>( (int)physicalDeviceCount );
 
 		for ( var i = 0; i < physicalDeviceCount; i++ )
 		{
-			if ( IsSuitable( physicalDevices[i] ) )
-				suitableDevicesBuilder.Add( physicalDevices[i] );
+			var physicalDevice = physicalDevices[i];
+			if ( IsSuitable( physicalDevice, out var queueFamilyIndices ) )
+				suitableDevicesBuilder.Add( new VkPhysicalDeviceSelectorResult( physicalDevice, queueFamilyIndices ) );
 		}
 
 		suitableDevicesBuilder.Capacity = suitableDevicesBuilder.Count;
@@ -108,7 +114,7 @@ internal sealed class VkPhysicalDeviceSelector
 		var namesBuilder = ImmutableArray.CreateBuilder<string>( suitableDevices.Length );
 		for ( var i = 0; i < suitableDevices.Length; i++ )
 		{
-			var properties = Apis.Vk.GetPhysicalDeviceProperties( suitableDevices[i] );
+			var properties = Apis.Vk.GetPhysicalDeviceProperties( suitableDevices[i].PhysicalDevice );
 			var name = SilkMarshal.PtrToString( (nint)properties.DeviceName );
 			if ( name is null )
 				continue;
@@ -120,35 +126,33 @@ internal sealed class VkPhysicalDeviceSelector
 		return namesBuilder.MoveToImmutable();
 	}
 
-	private unsafe bool IsSuitable( PhysicalDevice physicalDevice )
+	private unsafe bool IsSuitable( PhysicalDevice physicalDevice, out VkQueueFamilyIndices queueFamilyIndices )
 	{
-		if ( UniquePresentQueueRequired && SurfaceExtension is null )
-			throw new InvalidOperationException( "A unique present queue is required but no surface (extension) was provided to the selector" );
-
+		queueFamilyIndices = default;
 		var properties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );
 
-		if ( DiscreteDeviceRequired && properties.DeviceType != PhysicalDeviceType.DiscreteGpu )
+		if ( discreteDeviceRequired && properties.DeviceType != PhysicalDeviceType.DiscreteGpu )
 			return false;
 
-		if ( DeviceNameRequired != string.Empty )
+		if ( deviceNameRequired != string.Empty )
 		{
 			var deviceName = SilkMarshal.PtrToString( (nint)properties.DeviceName );
-			if ( DeviceNameRequired != deviceName )
+			if ( deviceNameRequired != deviceName )
 				return false;
 		}
 
 		var apiVersion = (Version32)properties.ApiVersion;
-		if ( VersionRequired.Major > apiVersion.Major ||
-			VersionRequired.Minor > apiVersion.Minor ||
-			VersionRequired.Patch > apiVersion.Patch )
+		if ( versionRequired.Major > apiVersion.Major ||
+			versionRequired.Minor > apiVersion.Minor ||
+			versionRequired.Patch > apiVersion.Patch )
 			return false;
 
 		var features = Apis.Vk.GetPhysicalDeviceFeatures( physicalDevice );
-		if ( !IsFeatureComplete( FeaturesRequired, features ) )
+		if ( !IsFeatureComplete( featuresRequired, features ) )
 			return false;
 
-		var indices = VkQueueFamilyIndices.Get( physicalDevice, Surface, SurfaceExtension, UniqueGraphicsQueueRequired, UniquePresentQueueRequired );
-		return indices.GraphicsQueue != uint.MaxValue && indices.PresentQueue != uint.MaxValue;
+		queueFamilyIndices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension, requireUniqueGraphicsQueue, requireUniquePresentQueue );
+		return queueFamilyIndices.GraphicsQueue != uint.MaxValue && queueFamilyIndices.PresentQueue != uint.MaxValue;
 	}
 
 	private static bool IsFeatureComplete( PhysicalDeviceFeatures requiredFeatures, PhysicalDeviceFeatures physicalDeviceFeatures )

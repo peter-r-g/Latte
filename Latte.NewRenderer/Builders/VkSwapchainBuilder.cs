@@ -7,32 +7,36 @@ using System.Collections.Immutable;
 
 namespace Latte.NewRenderer.Builders;
 
-// TODO: Add builder methods.
 internal sealed class VkSwapchainBuilder
 {
 	private readonly Instance instance;
 	private readonly PhysicalDevice physicalDevice;
 	private readonly Device logicalDevice;
-	private readonly SurfaceKHR surface;
-	private readonly KhrSurface? surfaceExtension;
-
+	private SurfaceKHR surface;
+	private KhrSurface? surfaceExtension;
+	private VkQueueFamilyIndices queueFamilyIndices;
 	private Format swapchainFormat;
 	private PresentModeKHR presentMode;
 	private Extent2D extent;
-	private bool uniqueGraphicsQueueRequired;
-	private bool uniquePresentQueueRequired;
 
-	private VkSwapchainBuilder( Instance instance, PhysicalDevice physicalDevice, Device logicalDevice,
-		SurfaceKHR surface, KhrSurface? surfaceExtension,
-		bool uniqueGraphicsQueueRequired, bool uniquePresentQueueRequired )
+	internal VkSwapchainBuilder( Instance instance, PhysicalDevice physicalDevice, Device logicalDevice )
 	{
 		this.instance = instance;
 		this.physicalDevice = physicalDevice;
 		this.logicalDevice = logicalDevice;
+	}
+
+	internal VkSwapchainBuilder WithSurface( SurfaceKHR surface, KhrSurface? surfaceExtension )
+	{
 		this.surface = surface;
 		this.surfaceExtension = surfaceExtension;
-		this.uniqueGraphicsQueueRequired = uniqueGraphicsQueueRequired;
-		this.uniquePresentQueueRequired = uniquePresentQueueRequired;
+		return this;
+	}
+
+	internal VkSwapchainBuilder WithQueueFamilyIndices( VkQueueFamilyIndices queueFamilyIndices )
+	{
+		this.queueFamilyIndices = queueFamilyIndices;
+		return this;
 	}
 
 	internal VkSwapchainBuilder UseDefaultFormat()
@@ -130,14 +134,13 @@ internal sealed class VkSwapchainBuilder
 			ImageUsage = ImageUsageFlags.ColorAttachmentBit
 		};
 
-		var indices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension, uniqueGraphicsQueueRequired, uniquePresentQueueRequired );
 		var indicesArray = stackalloc uint[]
 		{
-			indices.GraphicsQueue,
-			indices.PresentQueue
+			queueFamilyIndices.GraphicsQueue,
+			queueFamilyIndices.PresentQueue
 		};
 
-		if ( indices.GraphicsQueue != indices.PresentQueue )
+		if ( queueFamilyIndices.GraphicsQueue != queueFamilyIndices.PresentQueue )
 		{
 			createInfo.ImageSharingMode = SharingMode.Concurrent;
 			createInfo.QueueFamilyIndexCount = 2;
@@ -191,12 +194,5 @@ internal sealed class VkSwapchainBuilder
 
 		Apis.Vk.CreateImageView( logicalDevice, viewInfo, null, out var imageView ).Verify();
 		return imageView;
-	}
-
-	internal static VkSwapchainBuilder FromPhysicalSelector( PhysicalDevice physicalDevice, Device logicalDevice, VkPhysicalDeviceSelector selector )
-	{
-		return new VkSwapchainBuilder( selector.Instance, physicalDevice, logicalDevice,
-			selector.Surface, selector.SurfaceExtension,
-			selector.UniqueGraphicsQueueRequired, selector.UniquePresentQueueRequired );
 	}
 }
