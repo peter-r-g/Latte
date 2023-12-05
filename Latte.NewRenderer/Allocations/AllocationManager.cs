@@ -85,6 +85,15 @@ internal sealed class AllocationManager : IDisposable
 		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
 	}
 
+	internal unsafe void SetMemory<T>( Allocation allocation, T data, ulong dataSize, int index ) where T : unmanaged
+	{
+		void* dataPtr;
+
+		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).Verify();
+		Marshal.StructureToPtr( data, (nint)dataPtr + (nint)(dataSize * (ulong)index), false );
+		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+	}
+
 	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
 	{
 		var memoryProperties = Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice );

@@ -4,3 +4,4 @@
 %VULKAN_SDK%\Bin\glslc.exe triangle.vert -o triangle.vert.spv
 %VULKAN_SDK%\Bin\glslc.exe triangle.frag -o triangle.frag.spv
 %VULKAN_SDK%\Bin\glslc.exe mesh_triangle.vert -o mesh_triangle.vert.spv
+%VULKAN_SDK%\Bin\glslc.exe default_lit.frag -o default_lit.frag.spv

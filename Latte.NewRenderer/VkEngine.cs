@@ -63,6 +63,8 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
 
+	private GpuSceneData sceneParameters;
+	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
 
 	private readonly Stack<Action> deletionQueue = [];
@@ -206,6 +208,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		};
 		allocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData );
 
+		var framed = frameNumber / 120f;
+		sceneParameters.AmbientColor = new Vector4( MathF.Sin( framed ), 0, MathF.Cos( framed ), 1 );
+		var frameIndex = frameNumber % frameData.Length;
+		allocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
+
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
 
@@ -216,7 +223,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			if ( !ReferenceEquals( lastMaterial, obj.Material ) )
 			{
 				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, obj.Material.Pipeline );
-				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 0, null );
+				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
+				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 1, &uniformOffset );
 				lastMaterial = obj.Material;
 			}
 
@@ -514,7 +522,8 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes = stackalloc DescriptorPoolSize[]
 		{
-			new DescriptorPoolSize( DescriptorType.UniformBuffer, 10 )
+			new DescriptorPoolSize( DescriptorType.UniformBuffer, 10 ),
+			new DescriptorPoolSize( DescriptorType.UniformBufferDynamic, 10 )
 		};
 
 		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
@@ -534,20 +543,21 @@ internal unsafe sealed class VkEngine : IDisposable
 			this.descriptorPool = descriptorPool;
 		}
 
-		var cameraBinding = new DescriptorSetLayoutBinding
+		var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
+		var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
+
+		var bindings = stackalloc DescriptorSetLayoutBinding[]
 		{
-			Binding = 0,
-			DescriptorCount = 1,
-			DescriptorType = DescriptorType.UniformBuffer,
-			StageFlags = ShaderStageFlags.VertexBit
+			cameraBinding,
+			sceneBinding
 		};
 
 		var setLayoutCreateInfo = new DescriptorSetLayoutCreateInfo
 		{
 			SType = StructureType.DescriptorSetLayoutCreateInfo,
 			PNext = null,
-			BindingCount = 1,
-			PBindings = &cameraBinding,
+			BindingCount = 2,
+			PBindings = bindings,
 			Flags = DescriptorSetLayoutCreateFlags.None
 		};
 
@@ -565,9 +575,15 @@ internal unsafe sealed class VkEngine : IDisposable
 			PSetLayouts = &setLayout
 		};
 
+		var sceneParameterBufferSize = (ulong)frameData.Length * PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) );
+		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+
 		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorPool( logicalDevice, descriptorPool, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, globalSetLayout, null ) );
+		deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, sceneParameterBuffer.Buffer, null ) );
 
+		var descriptorWrites = stackalloc WriteDescriptorSet[2];
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
 			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out var descriptorSet ).Verify();
@@ -579,25 +595,26 @@ internal unsafe sealed class VkEngine : IDisposable
 			var index = i;
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
 
-			var bufferInfo = new DescriptorBufferInfo
+			var cameraBufferInfo = new DescriptorBufferInfo
 			{
 				Buffer = frameData[i].CameraBuffer.Buffer,
 				Offset = 0,
 				Range = (ulong)sizeof( GpuCameraData )
 			};
 
-			var write = new WriteDescriptorSet
+			var sceneBufferInfo = new DescriptorBufferInfo
 			{
-				SType = StructureType.WriteDescriptorSet,
-				PNext = null,
-				DstBinding = 0,
-				DstSet = frameData[i].GlobalDescriptor,
-				DescriptorType = DescriptorType.UniformBuffer,
-				DescriptorCount = 1,
-				PBufferInfo = &bufferInfo
+				Buffer = sceneParameterBuffer.Buffer,
+				Offset = 0,
+				Range = (ulong)sizeof( GpuSceneData )
 			};
 
-			Apis.Vk.UpdateDescriptorSets( logicalDevice, 1, &write, 0, null );
+			var cameraWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.UniformBuffer, frameData[i].GlobalDescriptor, cameraBufferInfo, 0 );
+			var sceneWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.UniformBufferDynamic, frameData[i].GlobalDescriptor, sceneBufferInfo, 1 );
+
+			descriptorWrites[0] = cameraWrite;
+			descriptorWrites[1] = sceneWrite;
+			Apis.Vk.UpdateDescriptorSets( logicalDevice, 2, descriptorWrites, 0, null );
 		}
 	}
 
@@ -608,7 +625,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new ApplicationException( "Failed to build mesh triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\colored_triangle.frag.spv", out var meshTriangleFrag ) )
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var meshTriangleFrag ) )
 			throw new ApplicationException( "Failed to build mesh triangle fragment shader" );
 
 		var pushConstant = new PushConstantRange
@@ -797,6 +814,16 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			return result == Result.Success;
 		}
+	}
+
+	private ulong PadUniformBufferSize( ulong currentSize )
+	{
+		var minimumAlignment = physicalDeviceProperties.Limits.MinUniformBufferOffsetAlignment;
+
+		if ( minimumAlignment > 0 )
+			return (currentSize + minimumAlignment - 1) & ~(minimumAlignment - 1);
+		else
+			return currentSize;
 	}
 
 	private void Dispose( bool disposing )

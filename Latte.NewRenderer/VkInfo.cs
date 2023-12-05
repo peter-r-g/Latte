@@ -290,4 +290,31 @@ internal unsafe static class VkInfo
 			StencilTestEnable = Vk.False
 		};
 	}
+
+	internal static DescriptorSetLayoutBinding DescriptorSetLayoutBinding( DescriptorType type, ShaderStageFlags stageFlags, uint binding )
+	{
+		return new DescriptorSetLayoutBinding
+		{
+			Binding = binding,
+			DescriptorCount = 1,
+			DescriptorType = type,
+			StageFlags = stageFlags,
+			PImmutableSamplers = null
+		};
+	}
+
+	internal static WriteDescriptorSet WriteDescriptorBuffer( DescriptorType type, DescriptorSet descriptorSet, DescriptorBufferInfo bufferInfo,
+		uint binding )
+	{
+		return new WriteDescriptorSet
+		{
+			SType = StructureType.WriteDescriptorSet,
+			PNext = null,
+			DstBinding = binding,
+			DstSet = descriptorSet,
+			DescriptorCount = 1,
+			DescriptorType = type,
+			PBufferInfo = &bufferInfo,
+		};
+	}
 }
