@@ -34,6 +34,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private Device logicalDevice;
 	private SurfaceKHR surface;
 	private AllocationManager? allocationManager;
+	private PhysicalDeviceProperties physicalDeviceProperties;
 
 	private SwapchainKHR swapchain;
 	private Format swapchainImageFormat;
@@ -51,6 +52,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private ImmutableArray<FrameData> frameData = [];
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
+
+	private DescriptorSetLayout globalSetLayout;
+	private DescriptorPool descriptorPool;
 
 	private RenderPass renderPass;
 	private ImmutableArray<Framebuffer> framebuffers;
@@ -82,6 +86,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeDefaultRenderPass();
 		InitializeFramebuffers();
 		InitializeSynchronizationStructures();
+		InitializeDescriptors();
 		InitializePipelines();
 		LoadMeshes();
 		InitializeScene();
@@ -183,12 +188,23 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void DrawObjects( CommandBuffer cmd, int first, int count )
 	{
 		ArgumentNullException.ThrowIfNull( this.view, nameof( this.view ) );
+		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
+
+		var currentFrameData = CurrentFrameData;
 
 		var view = Matrix4x4.Identity * Matrix4x4.CreateLookAt( Camera.Main.Position, Camera.Main.Position + Camera.Main.Front, Camera.Main.Up );
 		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( Camera.Main.Zoom ),
 			(float)this.view.Size.X / this.view.Size.Y,
 			Camera.Main.ZNear, Camera.Main.ZFar );
 		projection.M22 *= -1;
+
+		var cameraData = new GpuCameraData
+		{
+			View = view,
+			Projection = projection,
+			ViewProjection = view * projection
+		};
+		allocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
@@ -200,13 +216,11 @@ internal unsafe sealed class VkEngine : IDisposable
 			if ( !ReferenceEquals( lastMaterial, obj.Material ) )
 			{
 				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, obj.Material.Pipeline );
+				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 0, null );
 				lastMaterial = obj.Material;
 			}
 
-			var model = obj.Transform;
-			var matrix = model * view * projection;
-
-			var constants = new MeshPushConstants( Vector4.Zero, matrix );
+			var constants = new MeshPushConstants( Vector4.Zero, obj.Transform );
 			Apis.Vk.CmdPushConstants( cmd, obj.Material.PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( MeshPushConstants ), &constants );
 
 			if ( !ReferenceEquals( lastMesh, obj.Mesh ) )
@@ -278,6 +292,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( presentQueue );
 
 		allocationManager = new AllocationManager( physicalDevice, logicalDevice );
+		physicalDeviceProperties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );
 
 		var frameDataBuilder = ImmutableArray.CreateBuilder<FrameData>( MaxFramesInFlight );
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
@@ -494,6 +509,97 @@ internal unsafe sealed class VkEngine : IDisposable
 			deletionQueue.Push( () => Apis.Vk.DestroyFence( logicalDevice, renderFence, null ) );
 		}
 	}
+	
+	private void InitializeDescriptors()
+	{
+		ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes = stackalloc DescriptorPoolSize[]
+		{
+			new DescriptorPoolSize( DescriptorType.UniformBuffer, 10 )
+		};
+
+		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
+		{
+			var poolCreateInfo = new DescriptorPoolCreateInfo
+			{
+				SType = StructureType.DescriptorPoolCreateInfo,
+				PNext = null,
+				MaxSets = 10,
+				PoolSizeCount = (uint)descriptorPoolSizes.Length,
+				PPoolSizes = descriptorPoolSizesPtr,
+				Flags = DescriptorPoolCreateFlags.None
+			};
+
+			Apis.Vk.CreateDescriptorPool( logicalDevice, poolCreateInfo, null, out var descriptorPool ).Verify();
+			VkInvalidHandleException.ThrowIfInvalid( descriptorPool );
+			this.descriptorPool = descriptorPool;
+		}
+
+		var cameraBinding = new DescriptorSetLayoutBinding
+		{
+			Binding = 0,
+			DescriptorCount = 1,
+			DescriptorType = DescriptorType.UniformBuffer,
+			StageFlags = ShaderStageFlags.VertexBit
+		};
+
+		var setLayoutCreateInfo = new DescriptorSetLayoutCreateInfo
+		{
+			SType = StructureType.DescriptorSetLayoutCreateInfo,
+			PNext = null,
+			BindingCount = 1,
+			PBindings = &cameraBinding,
+			Flags = DescriptorSetLayoutCreateFlags.None
+		};
+
+		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out var globalSetLayout ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( globalSetLayout );
+		this.globalSetLayout = globalSetLayout;
+
+		var setLayout = globalSetLayout; // This is annoying
+		var descriptorSetAllocateInfo = new DescriptorSetAllocateInfo
+		{
+			SType = StructureType.DescriptorSetAllocateInfo,
+			PNext = null,
+			DescriptorPool = descriptorPool,
+			DescriptorSetCount = 1,
+			PSetLayouts = &setLayout
+		};
+
+		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorPool( logicalDevice, descriptorPool, null ) );
+		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, globalSetLayout, null ) );
+
+		for ( var i = 0; i < frameData.Length; i++ )
+		{
+			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out var descriptorSet ).Verify();
+			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
+			frameData[i].GlobalDescriptor = descriptorSet;
+
+			frameData[i].CameraBuffer = CreateBuffer( (ulong)sizeof( GpuCameraData ), BufferUsageFlags.UniformBufferBit,
+				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+			var index = i;
+			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
+
+			var bufferInfo = new DescriptorBufferInfo
+			{
+				Buffer = frameData[i].CameraBuffer.Buffer,
+				Offset = 0,
+				Range = (ulong)sizeof( GpuCameraData )
+			};
+
+			var write = new WriteDescriptorSet
+			{
+				SType = StructureType.WriteDescriptorSet,
+				PNext = null,
+				DstBinding = 0,
+				DstSet = frameData[i].GlobalDescriptor,
+				DescriptorType = DescriptorType.UniformBuffer,
+				DescriptorCount = 1,
+				PBufferInfo = &bufferInfo
+			};
+
+			Apis.Vk.UpdateDescriptorSets( logicalDevice, 1, &write, 0, null );
+		}
+	}
 
 	private void InitializePipelines()
 	{
@@ -511,7 +617,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			Size = (uint)Unsafe.SizeOf<MeshPushConstants>(),
 			StageFlags = ShaderStageFlags.VertexBit
 		};
-		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ) );
+		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ),
+			new ReadOnlySpan<DescriptorSetLayout>( ref globalSetLayout ) );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
 
 		var meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )

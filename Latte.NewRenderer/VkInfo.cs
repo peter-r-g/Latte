@@ -126,19 +126,20 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static PipelineLayoutCreateInfo PipelineLayout( ReadOnlySpan<PushConstantRange> pushConstantRanges )
+	internal static PipelineLayoutCreateInfo PipelineLayout( ReadOnlySpan<PushConstantRange> pushConstantRanges, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts )
 	{
 		fixed ( PushConstantRange* pushConstantRangesPtr = pushConstantRanges )
+		fixed( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
 		{
 			return new PipelineLayoutCreateInfo
 			{
 				SType = StructureType.PipelineLayoutCreateInfo,
 				PNext = null,
 				Flags = PipelineLayoutCreateFlags.None,
-				SetLayoutCount = 0,
-				PSetLayouts = null,
+				SetLayoutCount = (uint)descriptorSetLayouts.Length,
+				PSetLayouts = descriptorSetLayoutsPtr,
 				PushConstantRangeCount = (uint)pushConstantRanges.Length,
-				PPushConstantRanges = pushConstantRangesPtr
+				PPushConstantRanges = pushConstantRangesPtr,
 			};
 		}
 	}
