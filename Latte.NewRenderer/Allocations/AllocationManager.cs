@@ -3,6 +3,7 @@ using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Latte.NewRenderer.Allocations;
@@ -71,6 +72,16 @@ internal sealed class AllocationManager : IDisposable
 
 		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
+		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+	}
+
+	internal unsafe void SetMemory<T>( Allocation allocation, T data ) where T : unmanaged
+	{
+		void* dataPtr;
+		var dataSize = (ulong)sizeof( T );
+
+		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
+		Marshal.StructureToPtr( data, (nint)dataPtr, false );
 		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
 	}
 
