@@ -12,6 +12,7 @@ using Silk.NET.Windowing;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -24,6 +25,8 @@ internal unsafe sealed class VkEngine : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
 	private const int MaxObjects = 10_000;
+	private const string DefaultMeshMaterialName = "defaultmesh";
+	private const string SwapchainTag = "swapchain";
 
 	internal bool IsInitialized { get; private set; }
 
@@ -87,6 +90,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			throw new InvalidOperationException( "The VkEngine has already been initialized" );
 
 		this.view = view;
+		view.FramebufferResize += OnFramebufferResize;
 
 		InitializeVulkan();
 		InitializeSwapchain();
@@ -115,11 +119,22 @@ internal unsafe sealed class VkEngine : IDisposable
 		var cmd = currentFrameData.CommandBuffer;
 
 		Apis.Vk.WaitForFences( logicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
-		Apis.Vk.ResetFences( logicalDevice, 1, renderFence );
 
 		uint swapchainImageIndex;
-		swapchainExtension.AcquireNextImage( logicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
+		var acquireResult = swapchainExtension.AcquireNextImage( logicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
+		switch ( acquireResult )
+		{
+			case Result.ErrorOutOfDateKhr:
+			case Result.SuboptimalKhr:
+				RecreateSwapchain();
+				return;
+			case Result.Success:
+				break;
+			default:
+				throw new VkException( "Failed to acquire next image in the swap chain" );
+		}
 
+		Apis.Vk.ResetFences( logicalDevice, 1, renderFence ).Verify();
 		Apis.Vk.ResetCommandBuffer( cmd, CommandBufferResetFlags.None ).Verify();
 
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
@@ -188,7 +203,18 @@ internal unsafe sealed class VkEngine : IDisposable
 			PImageIndices = &swapchainImageIndex
 		};
 
-		swapchainExtension.QueuePresent( presentQueue, presentInfo ).Verify();
+		var presentResult = swapchainExtension.QueuePresent( presentQueue, presentInfo );
+		switch ( presentResult )
+		{
+			case Result.ErrorOutOfDateKhr:
+			case Result.SuboptimalKhr:
+				RecreateSwapchain();
+				break;
+			case Result.Success:
+				break;
+			default:
+				throw new VkException( "Failed to present queue" );
+		}
 
 		frameNumber++;
 	}
@@ -231,40 +257,54 @@ internal unsafe sealed class VkEngine : IDisposable
 		for ( var i = 0; i < count; i++ )
 		{
 			var obj = Renderables[first + i];
+			var mesh = GetMesh( obj.MeshName );
+			var material = GetMaterial( obj.MaterialName );
 
-			if ( !ReferenceEquals( lastMaterial, obj.Material ) )
+			if ( !ReferenceEquals( lastMaterial, obj.MaterialName ) )
 			{
-				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, obj.Material.Pipeline );
+				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
 				
 				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
-				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 1, &uniformOffset );
-				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, obj.Material.PipelineLayout, 1, 1, currentFrameData.ObjectDescriptor, 0, null );
+				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 1, &uniformOffset );
+				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 1, 1, currentFrameData.ObjectDescriptor, 0, null );
 				
-				lastMaterial = obj.Material;
+				lastMaterial = material;
 			}
 
 			var constants = new MeshPushConstants( Vector4.Zero, obj.Transform );
-			Apis.Vk.CmdPushConstants( cmd, obj.Material.PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( MeshPushConstants ), &constants );
+			Apis.Vk.CmdPushConstants( cmd, material.PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( MeshPushConstants ), &constants );
 
-			if ( !ReferenceEquals( lastMesh, obj.Mesh ) )
+			if ( !ReferenceEquals( lastMesh, obj.MeshName ) )
 			{
-				Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, obj.Mesh.VertexBuffer.Buffer, 0 );
-				if ( obj.Mesh.Indices.Length > 0 )
-					Apis.Vk.CmdBindIndexBuffer( cmd, obj.Mesh.IndexBuffer.Buffer, 0, IndexType.Uint32 );
+				Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, mesh.VertexBuffer.Buffer, 0 );
+				if ( mesh.Indices.Length > 0 )
+					Apis.Vk.CmdBindIndexBuffer( cmd, mesh.IndexBuffer.Buffer, 0, IndexType.Uint32 );
 
-				lastMesh = obj.Mesh;
+				lastMesh = mesh;
 			}
 
 			if ( lastMesh.Indices.Length > 0 )
-				Apis.Vk.CmdDrawIndexed( cmd, (uint)obj.Mesh.Indices.Length, 1, 0, 0, (uint)i );
+				Apis.Vk.CmdDrawIndexed( cmd, (uint)mesh.Indices.Length, 1, 0, 0, (uint)i );
 			else
-				Apis.Vk.CmdDraw( cmd, (uint)obj.Mesh.Vertices.Length, 1, 0, (uint)i );
+				Apis.Vk.CmdDraw( cmd, (uint)mesh.Vertices.Length, 1, 0, (uint)i );
 		}
 	}
 
 	internal void WaitForIdle()
 	{
 		Apis.Vk.DeviceWaitIdle( logicalDevice ).Verify();
+	}
+
+	private void RecreateSwapchain()
+	{
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		WaitForIdle();
+
+		disposalManager.Dispose( SwapchainTag );
+		InitializeSwapchain();
+		InitializeFramebuffers();
+		InitializePipelines();
 	}
 
 	private void InitializeVulkan()
@@ -378,15 +418,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( depthImageView );
 		this.depthImageView = depthImageView;
 
-		disposalManager.Add( () => swapchainExtension.DestroySwapchain( logicalDevice, swapchain, null ) );
+		disposalManager.Add( () => swapchainExtension.DestroySwapchain( logicalDevice, swapchain, null ), SwapchainTag );
 		for ( var i = 0; i < swapchainImageViews.Length; i++ )
 		{
 			var index = i;
-			disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, swapchainImageViews[index], null ) );
+			disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, swapchainImageViews[index], null ), SwapchainTag );
 		}
 
-		disposalManager.Add( () => Apis.Vk.DestroyImage( logicalDevice, depthImage, null ) );
-		disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, depthImageView, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroyImage( logicalDevice, depthImage, null ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, depthImageView, null ), SwapchainTag );
 	}
 
 	private void InitializeCommands()
@@ -518,7 +558,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			VkInvalidHandleException.ThrowIfInvalid( framebuffer );
 			framebufferBuilder.Add( framebuffer );
-			disposalManager.Add( () => Apis.Vk.DestroyFramebuffer( logicalDevice, framebuffer, null ) );
+			disposalManager.Add( () => Apis.Vk.DestroyFramebuffer( logicalDevice, framebuffer, null ), SwapchainTag );
 		}
 
 		framebuffers = framebufferBuilder.MoveToImmutable();
@@ -694,13 +734,14 @@ internal unsafe sealed class VkEngine : IDisposable
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipeline );
 
-		CreateMaterial( "defaultmesh", meshPipeline, meshPipelineLayout );
+		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleFrag, null );
 
-		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ) );
-		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ) );
+		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag );
 	}
 
 	private void LoadMeshes()
@@ -743,17 +784,11 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeScene()
 	{
-		var triangleMesh = GetMesh( "triangle" );
-		var defaultMeshMaterial = GetMaterial( "defaultmesh" );
-
-		foreach ( var (meshName, mesh) in Meshes )
+		foreach ( var (meshName, _) in Meshes )
 		{
-			if ( meshName == "triangle" )
-				continue;
-
-			for ( var i = 0; i < 40; i++ )
+			for ( var i = 0; i < 100; i++ )
 			{
-				var randomMesh = new Renderable( mesh, defaultMeshMaterial );
+				var randomMesh = new Renderable( meshName, DefaultMeshMaterialName );
 				var x = Random.Shared.Next( -20, 21 );
 				var y = Random.Shared.Next( -20, 21 );
 				var translation = Matrix4x4.Identity * Matrix4x4.CreateTranslation( x * 5, 0, y * 5 );
@@ -762,19 +797,11 @@ internal unsafe sealed class VkEngine : IDisposable
 				Renderables.Add( randomMesh );
 			}
 		}
+	}
 
-		for ( var x = -20; x <= 20; x++ )
-		{
-			for ( var y = -20; y <= 20; y++ )
-			{
-				var triangle = new Renderable( triangleMesh, defaultMeshMaterial );
-				var translation = Matrix4x4.Identity * Matrix4x4.CreateTranslation( x * 5, 0, y * 5 );
-				var scale = Matrix4x4.Identity * Matrix4x4.CreateScale( 0.2f, 0.2f, 0.2f );
-				triangle.Transform = translation * scale;
-
-				Renderables.Add( triangle );
-			}
-		}
+	private void OnFramebufferResize( Vector2D<int> newSize )
+	{
+		RecreateSwapchain();
 	}
 
 	private Material CreateMaterial( string name, Pipeline pipeline, PipelineLayout pipelineLayout )
@@ -787,6 +814,14 @@ internal unsafe sealed class VkEngine : IDisposable
 		return material;
 	}
 
+	private void RemoveMaterial( string name )
+	{
+		if ( !Materials.ContainsKey( name ) )
+			throw new ArgumentException( $"No material with the name \"{name}\" exists", nameof( name ) );
+
+		Materials.Remove( name );
+	}
+
 	private Material GetMaterial( string name )
 	{
 		if ( Materials.TryGetValue( name, out var material ) )
@@ -795,12 +830,22 @@ internal unsafe sealed class VkEngine : IDisposable
 		throw new ArgumentException( $"A material with the name \"{name}\" does not exist", nameof( name ) );
 	}
 
+	private bool TryGetMaterial( string name, [NotNullWhen( true )] out Material? material )
+	{
+		return Materials.TryGetValue( name, out material );
+	}
+
 	private Mesh GetMesh( string name )
 	{
-		if ( Meshes.TryGetValue( name, out var material ) )
-			return material;
+		if ( Meshes.TryGetValue( name, out var mesh ) )
+			return mesh;
 
 		throw new ArgumentException( $"A mesh with the name \"{name}\" does not exist", nameof( name ) );
+	}
+
+	private bool TryGetMesh( string name, [NotNullWhen( true )] out Mesh? mesh )
+	{
+		return Meshes.TryGetValue( name, out mesh );
 	}
 
 	private void UploadMesh( Mesh mesh, MemoryPropertyFlags memoryFlags, SharingMode sharingMode = SharingMode.Exclusive )
@@ -872,6 +917,9 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		if ( disposed || !IsInitialized )
 			return;
+
+		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
+		view.FramebufferResize -= OnFramebufferResize;
 
 		allocationManager?.Dispose();
 		disposalManager?.Dispose();

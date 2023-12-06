@@ -4,14 +4,14 @@ namespace Latte.NewRenderer.Temp;
 
 internal sealed class Renderable
 {
-	internal Mesh Mesh { get; }
-	internal Material Material { get; }
+	internal string MeshName { get; }
+	internal string MaterialName { get; }
 	internal Matrix4x4 Transform { get; set; }
 
-	internal Renderable( Mesh mesh, Material material )
+	internal Renderable( string meshName, string materialName )
 	{
-		Mesh = mesh;
-		Material = material;
+		MeshName = meshName;
+		MaterialName = materialName;
 		Transform = Matrix4x4.Identity;
 	}
 }
