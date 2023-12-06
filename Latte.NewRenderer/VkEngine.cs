@@ -5,7 +5,6 @@ using Latte.NewRenderer.Exceptions;
 using Latte.NewRenderer.Extensions;
 using Latte.NewRenderer.Temp;
 using Silk.NET.Maths;
-using Silk.NET.SDL;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;

@@ -1,5 +1,4 @@
-﻿using Latte.NewRenderer.Exceptions;
-using Silk.NET.Vulkan;
+﻿using Silk.NET.Vulkan;
 
 namespace Latte.NewRenderer.Extensions;
 

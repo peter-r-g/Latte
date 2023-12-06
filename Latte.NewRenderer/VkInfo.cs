@@ -1,7 +1,6 @@
 ﻿using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using System;
-using System.Net.Mail;
 
 namespace Latte.NewRenderer;
 
