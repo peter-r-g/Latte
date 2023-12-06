@@ -68,11 +68,11 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
+	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 
 	private GpuSceneData sceneParameters;
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
-	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 
 	private ExtDebugUtils? debugUtilsExtension;
 	private KhrSurface? surfaceExtension;
