@@ -65,14 +65,15 @@ internal unsafe sealed class VkEngine : IDisposable
 	private RenderPass renderPass;
 	private ImmutableArray<Framebuffer> framebuffers;
 
+	internal UploadContext uploadContext;
+	private GpuSceneData sceneParameters;
+	private AllocatedBuffer sceneParameterBuffer;
+	private int frameNumber;
+
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
-
-	private GpuSceneData sceneParameters;
-	private AllocatedBuffer sceneParameterBuffer;
-	private int frameNumber;
 
 	private ExtDebugUtils? debugUtilsExtension;
 	private KhrSurface? surfaceExtension;
@@ -449,6 +450,17 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			disposalManager.Add( () => Apis.Vk.DestroyCommandPool( logicalDevice, commandPool, null ) );
 		}
+
+		Apis.Vk.CreateCommandPool( logicalDevice, poolCreateInfo, null, out var uploadCommandPool ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( uploadCommandPool );
+		uploadContext.CommandPool = uploadCommandPool;
+
+		var uploadBufferAllocateInfo = VkInfo.AllocateCommandBuffer( uploadCommandPool, 1, CommandBufferLevel.Primary );
+		Apis.Vk.AllocateCommandBuffers( logicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( uploadCommandBuffer );
+		uploadContext.CommandBuffer = uploadCommandBuffer;
+
+		disposalManager.Add( () => Apis.Vk.DestroyCommandPool( logicalDevice, uploadCommandPool, null ) );
 	}
 
 	private void InitializeDefaultRenderPass()
@@ -589,6 +601,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroySemaphore( logicalDevice, presentSemaphore, null ) );
 			disposalManager.Add( () => Apis.Vk.DestroyFence( logicalDevice, renderFence, null ) );
 		}
+
+		fenceCreateInfo.Flags = FenceCreateFlags.None;
+		Apis.Vk.CreateFence( logicalDevice, fenceCreateInfo, null, out var uploadFence ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( uploadFence );
+		uploadContext.UploadFence = uploadFence;
+		disposalManager.Add( () => Apis.Vk.DestroyFence( logicalDevice, uploadFence, null ) );
 	}
 	
 	private void InitializeDescriptors()
@@ -753,7 +771,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		], [] );
 
 		Meshes.Add( "triangle", triangleMesh );
-		UploadMesh( triangleMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+		UploadMesh( triangleMesh );
 
 		var models = new string[]
 		{
@@ -778,7 +796,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var monkeyMesh = new Mesh( tempVertices, mesh.Indices );
 
 			Meshes.Add( Path.GetFileNameWithoutExtension( modelPath ), monkeyMesh );
-			UploadMesh( monkeyMesh, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+			UploadMesh( monkeyMesh );
 		}
 	}
 
@@ -802,6 +820,22 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void OnFramebufferResize( Vector2D<int> newSize )
 	{
 		RecreateSwapchain();
+	}
+
+	private void ImmediateSubmit( Action<CommandBuffer> cb )
+	{
+		var cmd = uploadContext.CommandBuffer;
+		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
+
+		Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
+		cb( cmd );
+		Apis.Vk.EndCommandBuffer( cmd ).Verify();
+
+		var submitInfo = VkInfo.SubmitInfo( new ReadOnlySpan<CommandBuffer>( ref cmd ) );
+		Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, uploadContext.UploadFence ).Verify();
+		Apis.Vk.WaitForFences( logicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).Verify();
+		Apis.Vk.ResetFences( logicalDevice, 1, uploadContext.UploadFence ).Verify();
+		Apis.Vk.ResetCommandPool( logicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).Verify();
 	}
 
 	private Material CreateMaterial( string name, Pipeline pipeline, PipelineLayout pipelineLayout )
@@ -848,20 +882,38 @@ internal unsafe sealed class VkEngine : IDisposable
 		return Meshes.TryGetValue( name, out mesh );
 	}
 
-	private void UploadMesh( Mesh mesh, MemoryPropertyFlags memoryFlags, SharingMode sharingMode = SharingMode.Exclusive )
+	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
 	{
 		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
 		// Vertex buffer
 		{
-			var createInfo = VkInfo.Buffer( (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>()), BufferUsageFlags.VertexBufferBit, sharingMode );
-			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
+			var bufferSize = (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>());
 
-			mesh.VertexBuffer = allocationManager.AllocateBuffer( buffer, memoryFlags );
-			allocationManager.SetMemory( mesh.VertexBuffer.Allocation, mesh.Vertices.AsSpan() );
+			var stagingBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.TransferSrcBit, sharingMode );
+			Apis.Vk.CreateBuffer( logicalDevice, stagingBufferInfo, null, out var stagingBuffer ).Verify();
+			var allocatedStagingBuffer = allocationManager.AllocateBuffer( stagingBuffer, MemoryPropertyFlags.HostVisibleBit );
+			allocationManager.SetMemory( allocatedStagingBuffer.Allocation, mesh.Vertices.AsSpan() );
 
-			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, buffer, null ) );
+			var vertexBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit, sharingMode );
+			Apis.Vk.CreateBuffer( logicalDevice, vertexBufferInfo, null, out var vertexBuffer ).Verify();
+			mesh.VertexBuffer = allocationManager.AllocateBuffer( vertexBuffer, MemoryPropertyFlags.DeviceLocalBit );
+
+			ImmediateSubmit( cmd =>
+			{
+				var copyRegion = new BufferCopy
+				{
+					SrcOffset = 0,
+					DstOffset = 0,
+					Size = bufferSize
+				};
+
+				Apis.Vk.CmdCopyBuffer( cmd, stagingBuffer, vertexBuffer, 1, copyRegion );
+			} );
+
+			Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer, null );
+			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, vertexBuffer, null ) );
 		}
 
 		// Index buffer
@@ -869,13 +921,31 @@ internal unsafe sealed class VkEngine : IDisposable
 			return;
 
 		{
-			var createInfo = VkInfo.Buffer( (ulong)(sizeof( uint ) * mesh.Indices.Length), BufferUsageFlags.IndexBufferBit, sharingMode );
-			Apis.Vk.CreateBuffer( logicalDevice, createInfo, null, out var buffer ).Verify();
+			var bufferSize = sizeof( uint ) * (ulong)mesh.Indices.Length;
 
-			mesh.IndexBuffer = allocationManager.AllocateBuffer( buffer, memoryFlags );
-			allocationManager.SetMemory( mesh.IndexBuffer.Allocation, mesh.Indices.AsSpan() );
+			var stagingBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.TransferSrcBit, sharingMode );
+			Apis.Vk.CreateBuffer( logicalDevice, stagingBufferInfo, null, out var stagingBuffer ).Verify();
+			var allocatedStagingBuffer = allocationManager.AllocateBuffer( stagingBuffer, MemoryPropertyFlags.HostVisibleBit );
+			allocationManager.SetMemory( allocatedStagingBuffer.Allocation, mesh.Indices.AsSpan() );
 
-			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, buffer, null ) );
+			var indexBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit, sharingMode );
+			Apis.Vk.CreateBuffer( logicalDevice, indexBufferInfo, null, out var indexBuffer ).Verify();
+			mesh.IndexBuffer = allocationManager.AllocateBuffer( indexBuffer, MemoryPropertyFlags.DeviceLocalBit );
+
+			ImmediateSubmit( cmd =>
+			{
+				var copyRegion = new BufferCopy
+				{
+					SrcOffset = 0,
+					DstOffset = 0,
+					Size = bufferSize
+				};
+
+				Apis.Vk.CmdCopyBuffer( cmd, stagingBuffer, indexBuffer, 1, copyRegion );
+			} );
+
+			Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer, null );
+			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, indexBuffer, null ) );
 		}
 	}
 	

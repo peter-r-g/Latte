@@ -43,6 +43,25 @@ internal unsafe static class VkInfo
 		};
 	}
 
+	internal static SubmitInfo SubmitInfo( ReadOnlySpan<CommandBuffer> commandBuffers )
+	{
+		fixed( CommandBuffer* commandBuffersPtr = commandBuffers )
+		{
+			return new SubmitInfo
+			{
+				SType = StructureType.SubmitInfo,
+				PNext = null,
+				CommandBufferCount = (uint)commandBuffers.Length,
+				PCommandBuffers = commandBuffersPtr,
+				PWaitDstStageMask = null,
+				WaitSemaphoreCount = 0,
+				PWaitSemaphores = null,
+				SignalSemaphoreCount = 0,
+				PSignalSemaphores = null
+			};
+		}
+	}
+
 	internal static PipelineShaderStageCreateInfo PipelineShaderStage( ShaderStageFlags stage, ShaderModule shaderModule )
 	{
 		return new PipelineShaderStageCreateInfo
