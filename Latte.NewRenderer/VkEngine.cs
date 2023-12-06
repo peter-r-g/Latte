@@ -70,6 +70,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private GpuSceneData sceneParameters;
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
+	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 
 	private ExtDebugUtils? debugUtilsExtension;
 	private KhrSurface? surfaceExtension;
@@ -219,12 +220,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		var frameIndex = frameNumber % frameData.Length;
 		allocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
 
-		// TODO: Cache the array
-		var objectData = new GpuObjectData[count];
+		var objectData = this.objectData.AsSpan().Slice( first, count );
 		for ( var i = 0; i < count; i++ )
 			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
 
-		allocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData.AsSpan() );
+		allocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
