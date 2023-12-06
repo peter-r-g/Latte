@@ -1,6 +1,7 @@
 ﻿using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using System;
+using System.Net.Mail;
 
 namespace Latte.NewRenderer;
 
@@ -43,7 +44,7 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static PipelineShaderStageCreateInfo ShaderStage( ShaderStageFlags stage, ShaderModule shaderModule )
+	internal static PipelineShaderStageCreateInfo PipelineShaderStage( ShaderStageFlags stage, ShaderModule shaderModule )
 	{
 		return new PipelineShaderStageCreateInfo
 		{
@@ -51,11 +52,13 @@ internal unsafe static class VkInfo
 			PNext = null,
 			Stage = stage,
 			Module = shaderModule,
-			PName = MainStringPtr
+			PName = MainStringPtr,
+			PSpecializationInfo = null,
+			Flags = PipelineShaderStageCreateFlags.None
 		};
 	}
 
-	internal static PipelineVertexInputStateCreateInfo VertexInputState( VertexInputDescription inputDescription )
+	internal static PipelineVertexInputStateCreateInfo PipelineVertexInputState( VertexInputDescription inputDescription )
 	{
 		fixed ( VertexInputAttributeDescription* attributesPtr = inputDescription.Attributes )
 		fixed ( VertexInputBindingDescription* bindingsPtr = inputDescription.Bindings )
@@ -67,23 +70,25 @@ internal unsafe static class VkInfo
 				VertexAttributeDescriptionCount = (uint)inputDescription.Attributes.Length,
 				PVertexAttributeDescriptions = attributesPtr,
 				VertexBindingDescriptionCount = (uint)inputDescription.Bindings.Length,
-				PVertexBindingDescriptions = bindingsPtr
+				PVertexBindingDescriptions = bindingsPtr,
+				Flags = 0
 			};
 		}
 	}
 
-	internal static PipelineInputAssemblyStateCreateInfo InputAssemblyState( PrimitiveTopology topology )
+	internal static PipelineInputAssemblyStateCreateInfo PipelineInputAssemblyState( PrimitiveTopology topology )
 	{
 		return new PipelineInputAssemblyStateCreateInfo
 		{
 			SType = StructureType.PipelineInputAssemblyStateCreateInfo,
 			PNext = null,
 			Topology = topology,
-			PrimitiveRestartEnable = Vk.False
+			PrimitiveRestartEnable = Vk.False,
+			Flags = 0
 		};
 	}
 
-	internal static PipelineRasterizationStateCreateInfo RasterizationState( PolygonMode polygonMode )
+	internal static PipelineRasterizationStateCreateInfo PipelineRasterizationState( PolygonMode polygonMode )
 	{
 		return new PipelineRasterizationStateCreateInfo
 		{
@@ -98,11 +103,12 @@ internal unsafe static class VkInfo
 			DepthBiasEnable = Vk.False,
 			DepthBiasConstantFactor = 0,
 			DepthBiasClamp = 0,
-			DepthBiasSlopeFactor = 0
+			DepthBiasSlopeFactor = 0,
+			Flags = 0
 		};
 	}
 
-	internal static PipelineMultisampleStateCreateInfo MultisamplingState()
+	internal static PipelineMultisampleStateCreateInfo PipelineMultisamplingState()
 	{
 		return new PipelineMultisampleStateCreateInfo
 		{
@@ -113,16 +119,23 @@ internal unsafe static class VkInfo
 			MinSampleShading = 1,
 			PSampleMask = null,
 			AlphaToCoverageEnable = Vk.False,
-			AlphaToOneEnable = Vk.False
+			AlphaToOneEnable = Vk.False,
+			Flags = 0
 		};
 	}
 
-	internal static PipelineColorBlendAttachmentState ColorBlendAttachmentState()
+	internal static PipelineColorBlendAttachmentState PipelineColorBlendAttachmentState()
 	{
 		return new PipelineColorBlendAttachmentState
 		{
 			ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
-			BlendEnable = Vk.False
+			BlendEnable = Vk.False,
+			AlphaBlendOp = Vk.False,
+			ColorBlendOp = BlendOp.Add,
+			SrcAlphaBlendFactor = BlendFactor.Zero,
+			DstAlphaBlendFactor = BlendFactor.Zero,
+			SrcColorBlendFactor = BlendFactor.Zero,
+			DstColorBlendFactor = BlendFactor.Zero
 		};
 	}
 
@@ -139,7 +152,7 @@ internal unsafe static class VkInfo
 				SetLayoutCount = (uint)descriptorSetLayouts.Length,
 				PSetLayouts = descriptorSetLayoutsPtr,
 				PushConstantRangeCount = (uint)pushConstantRanges.Length,
-				PPushConstantRanges = pushConstantRangesPtr,
+				PPushConstantRanges = pushConstantRangesPtr
 			};
 		}
 	}
@@ -166,18 +179,23 @@ internal unsafe static class VkInfo
 		}
 	}
 
-	internal static FramebufferCreateInfo Framebuffer( RenderPass renderPass, uint width, uint height )
+	internal static FramebufferCreateInfo Framebuffer( RenderPass renderPass, uint width, uint height, ReadOnlySpan<ImageView> attachments )
 	{
-		return new FramebufferCreateInfo
+		fixed( ImageView* attachmentsPtr = attachments )
 		{
-			SType = StructureType.FramebufferCreateInfo,
-			PNext = null,
-			RenderPass = renderPass,
-			AttachmentCount = 1,
-			Width = width,
-			Height = height,
-			Layers = 1
-		};
+			return new FramebufferCreateInfo
+			{
+				SType = StructureType.FramebufferCreateInfo,
+				PNext = null,
+				RenderPass = renderPass,
+				Width = width,
+				Height = height,
+				Layers = 1,
+				AttachmentCount = (uint)attachments.Length,
+				PAttachments = attachmentsPtr,
+				Flags = FramebufferCreateFlags.None
+			};
+		}
 	}
 
 	internal static FenceCreateInfo Fence( FenceCreateFlags flags = FenceCreateFlags.None )
@@ -223,7 +241,10 @@ internal unsafe static class VkInfo
 			PNext = null,
 			Size = size,
 			Usage = usageFlags,
-			SharingMode = sharingMode
+			SharingMode = sharingMode,
+			QueueFamilyIndexCount = 0,
+			PQueueFamilyIndices = null,
+			Flags = BufferCreateFlags.None
 		};
 	}
 
@@ -234,7 +255,7 @@ internal unsafe static class VkInfo
 			SType = StructureType.MemoryAllocateInfo,
 			PNext = null,
 			AllocationSize = size,
-			MemoryTypeIndex = memoryTypeIndex,
+			MemoryTypeIndex = memoryTypeIndex
 		};
 	}
 
@@ -251,7 +272,8 @@ internal unsafe static class VkInfo
 			ArrayLayers = 1,
 			Samples = SampleCountFlags.Count1Bit,
 			Tiling = ImageTiling.Optimal,
-			Usage = usageFlags
+			Usage = usageFlags,
+			Flags = ImageCreateFlags.None
 		};
 	}
 
@@ -271,11 +293,12 @@ internal unsafe static class VkInfo
 				LevelCount = 1,
 				BaseArrayLayer = 0,
 				LayerCount = 1
-			}
+			},
+			Flags = ImageViewCreateFlags.None
 		};
 	}
 
-	internal static PipelineDepthStencilStateCreateInfo DepthStencilState( bool depthTest, bool depthWrite, CompareOp compareOp )
+	internal static PipelineDepthStencilStateCreateInfo PipelineDepthStencilState( bool depthTest, bool depthWrite, CompareOp compareOp )
 	{
 		return new PipelineDepthStencilStateCreateInfo
 		{
@@ -287,8 +310,40 @@ internal unsafe static class VkInfo
 			DepthBoundsTestEnable = Vk.False,
 			MinDepthBounds = 0,
 			MaxDepthBounds = 1,
-			StencilTestEnable = Vk.False
+			StencilTestEnable = Vk.False,
+			Flags = PipelineDepthStencilStateCreateFlags.None
 		};
+	}
+
+	internal static DescriptorPoolCreateInfo DescriptorPool( uint maxSets, ReadOnlySpan<DescriptorPoolSize> poolSizes )
+	{
+		fixed( DescriptorPoolSize* poolSizesPtr = poolSizes )
+		{
+			return new DescriptorPoolCreateInfo
+			{
+				SType = StructureType.DescriptorPoolCreateInfo,
+				PNext = null,
+				MaxSets = maxSets,
+				PoolSizeCount = (uint)poolSizes.Length,
+				PPoolSizes = poolSizesPtr,
+				Flags = DescriptorPoolCreateFlags.None
+			};
+		}
+	}
+
+	internal static DescriptorSetLayoutCreateInfo DescriptorSetLayout( ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
+	{
+		fixed( DescriptorSetLayoutBinding* bindingsPtr = bindings )
+		{
+			return new DescriptorSetLayoutCreateInfo
+			{
+				SType = StructureType.DescriptorSetLayoutCreateInfo,
+				PNext = null,
+				BindingCount = (uint)bindings.Length,
+				PBindings = bindingsPtr,
+				Flags = DescriptorSetLayoutCreateFlags.None
+			};
+		}
 	}
 
 	internal static DescriptorSetLayoutBinding DescriptorSetLayoutBinding( DescriptorType type, ShaderStageFlags stageFlags, uint binding )
@@ -303,6 +358,21 @@ internal unsafe static class VkInfo
 		};
 	}
 
+	internal static DescriptorSetAllocateInfo AllocateDescriptorSet( DescriptorPool descriptorPool, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts )
+	{
+		fixed( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
+		{
+			return new DescriptorSetAllocateInfo
+			{
+				SType = StructureType.DescriptorSetAllocateInfo,
+				PNext = null,
+				DescriptorPool = descriptorPool,
+				DescriptorSetCount = (uint)descriptorSetLayouts.Length,
+				PSetLayouts = descriptorSetLayoutsPtr
+			};
+		}
+	}
+
 	internal static WriteDescriptorSet WriteDescriptorBuffer( DescriptorType type, DescriptorSet descriptorSet, DescriptorBufferInfo bufferInfo,
 		uint binding )
 	{
@@ -314,7 +384,7 @@ internal unsafe static class VkInfo
 			DstSet = descriptorSet,
 			DescriptorCount = 1,
 			DescriptorType = type,
-			PBufferInfo = &bufferInfo,
+			PBufferInfo = &bufferInfo
 		};
 	}
 }

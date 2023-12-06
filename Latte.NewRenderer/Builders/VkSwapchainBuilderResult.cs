@@ -1,24 +1,17 @@
 ﻿using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.NewRenderer.Builders;
 
-internal readonly struct VkSwapchainBuilderResult
+[method: SetsRequiredMembers]
+internal struct VkSwapchainBuilderResult( SwapchainKHR swapchain, KhrSwapchain swapchainExtension,
+	ImmutableArray<Image> swapchainImages, ImmutableArray<ImageView> swapchainImageViews, Format swapchainImageFormat )
 {
-	internal readonly SwapchainKHR Swapchain;
-	internal readonly KhrSwapchain SwapchainExtension;
-	internal readonly ImmutableArray<Image> SwapchainImages;
-	internal readonly ImmutableArray<ImageView> SwapchainImageViews;
-	internal readonly Format SwapchainImageFormat;
-
-	internal VkSwapchainBuilderResult( SwapchainKHR swapchain, KhrSwapchain swapchainExtension,
-		ImmutableArray<Image> swapchainImages, ImmutableArray<ImageView> swapchainImageViews, Format swapchainImageFormat )
-	{
-		Swapchain = swapchain;
-		SwapchainExtension = swapchainExtension;
-		SwapchainImages = swapchainImages;
-		SwapchainImageViews = swapchainImageViews;
-		SwapchainImageFormat = swapchainImageFormat;
-	}
+	internal required SwapchainKHR Swapchain = swapchain;
+	internal required KhrSwapchain SwapchainExtension = swapchainExtension;
+	internal required ImmutableArray<Image> SwapchainImages = swapchainImages;
+	internal required ImmutableArray<ImageView> SwapchainImageViews = swapchainImageViews;
+	internal required Format SwapchainImageFormat = swapchainImageFormat;
 }

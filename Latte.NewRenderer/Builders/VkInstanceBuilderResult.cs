@@ -1,18 +1,13 @@
 ﻿using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.NewRenderer.Builders;
 
-internal readonly struct VkInstanceBuilderResult
+[method: SetsRequiredMembers]
+internal struct VkInstanceBuilderResult( Instance instance, ExtDebugUtils? debugUtilsExtension, DebugUtilsMessengerEXT debugMessenger )
 {
-	internal readonly Instance Instance;
-	internal readonly ExtDebugUtils? DebugUtilsExtension;
-	internal readonly DebugUtilsMessengerEXT DebugMessenger;
-
-	internal VkInstanceBuilderResult( Instance instance, ExtDebugUtils? debugUtilsExtension, DebugUtilsMessengerEXT debugMessenger )
-	{
-		Instance = instance;
-		DebugUtilsExtension = debugUtilsExtension;
-		DebugMessenger = debugMessenger;
-	}
+	internal required Instance Instance = instance;
+	internal required ExtDebugUtils? DebugUtilsExtension = debugUtilsExtension;
+	internal required DebugUtilsMessengerEXT DebugMessenger = debugMessenger;
 }

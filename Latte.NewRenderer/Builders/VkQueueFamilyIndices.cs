@@ -1,19 +1,15 @@
 ﻿using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Vulkan;
 using Latte.NewRenderer.Extensions;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.NewRenderer.Builders;
 
-internal readonly struct VkQueueFamilyIndices
+[method: SetsRequiredMembers]
+internal struct VkQueueFamilyIndices( uint graphicsQueue, uint presentQueue )
 {
-	internal readonly uint GraphicsQueue;
-	internal readonly uint PresentQueue;
-
-	internal VkQueueFamilyIndices( uint graphicsQueue, uint presentQueue )
-	{
-		GraphicsQueue = graphicsQueue;
-		PresentQueue = presentQueue;
-	}
+	internal required uint GraphicsQueue = graphicsQueue;
+	internal required uint PresentQueue = presentQueue;
 
 	internal uint[] ToUnique()
 	{

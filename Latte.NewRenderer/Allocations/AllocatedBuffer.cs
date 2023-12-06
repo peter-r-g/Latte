@@ -1,15 +1,11 @@
 ﻿using Silk.NET.Vulkan;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.NewRenderer.Allocations;
 
-internal readonly struct AllocatedBuffer
+[method: SetsRequiredMembers]
+internal struct AllocatedBuffer( Buffer buffer, Allocation allocation )
 {
-	internal readonly Buffer Buffer;
-	internal readonly Allocation Allocation;
-
-	internal AllocatedBuffer( Buffer buffer, Allocation allocation )
-	{
-		Buffer = buffer;
-		Allocation = allocation;
-	}
+	internal required Buffer Buffer = buffer;
+	internal required Allocation Allocation = allocation;
 }

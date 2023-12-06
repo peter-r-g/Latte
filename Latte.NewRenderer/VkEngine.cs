@@ -501,12 +501,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 
 		var framebufferBuilder = ImmutableArray.CreateBuilder<Framebuffer>( swapchainImages.Length );
-		var imageViews = stackalloc ImageView[2];
+		Span<ImageView> imageViews = stackalloc ImageView[2];
 		imageViews[1] = depthImageView;
 
-		var createInfo = VkInfo.Framebuffer( renderPass, (uint)view.Size.X, (uint)view.Size.Y );
-		createInfo.AttachmentCount = 2;
-		createInfo.PAttachments = imageViews;
+		var createInfo = VkInfo.Framebuffer( renderPass, (uint)view.Size.X, (uint)view.Size.Y, imageViews );
 		for ( var i = 0; i < swapchainImages.Length; i++ )
 		{
 			imageViews[0] = swapchainImageViews[i];
@@ -554,54 +552,31 @@ internal unsafe sealed class VkEngine : IDisposable
 			new DescriptorPoolSize( DescriptorType.StorageBuffer, 10 )
 		};
 
-		fixed ( DescriptorPoolSize* descriptorPoolSizesPtr = descriptorPoolSizes )
+		var poolCreateInfo = VkInfo.DescriptorPool( 10, descriptorPoolSizes );
+		Apis.Vk.CreateDescriptorPool( logicalDevice, poolCreateInfo, null, out var descriptorPool ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( descriptorPool );
+		this.descriptorPool = descriptorPool;
+
+		var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
+		var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
+		var objectBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit, 0 );
+
+		var setLayoutCreateInfo = VkInfo.DescriptorSetLayout( stackalloc DescriptorSetLayoutBinding[]
 		{
-			var poolCreateInfo = new DescriptorPoolCreateInfo
-			{
-				SType = StructureType.DescriptorPoolCreateInfo,
-				PNext = null,
-				MaxSets = 10,
-				PoolSizeCount = (uint)descriptorPoolSizes.Length,
-				PPoolSizes = descriptorPoolSizesPtr,
-				Flags = DescriptorPoolCreateFlags.None
-			};
+			cameraBinding,
+			sceneBinding
+		} );
+		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out var tempLayout ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( tempLayout );
+		globalSetLayout = tempLayout;
 
-			Apis.Vk.CreateDescriptorPool( logicalDevice, poolCreateInfo, null, out var descriptorPool ).Verify();
-			VkInvalidHandleException.ThrowIfInvalid( descriptorPool );
-			this.descriptorPool = descriptorPool;
-		}
-
+		setLayoutCreateInfo = VkInfo.DescriptorSetLayout( stackalloc DescriptorSetLayoutBinding[]
 		{
-			var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
-			var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
-			var objectBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit, 0 );
-
-			var bindings = stackalloc DescriptorSetLayoutBinding[]
-			{
-				cameraBinding,
-				sceneBinding
-			};
-
-			var setLayoutCreateInfo = new DescriptorSetLayoutCreateInfo
-			{
-				SType = StructureType.DescriptorSetLayoutCreateInfo,
-				PNext = null,
-				BindingCount = 2,
-				PBindings = bindings,
-				Flags = DescriptorSetLayoutCreateFlags.None
-			};
-
-			Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out var tempLayout ).Verify();
-			VkInvalidHandleException.ThrowIfInvalid( tempLayout );
-			globalSetLayout = tempLayout;
-
-			setLayoutCreateInfo.BindingCount = 1;
-			setLayoutCreateInfo.PBindings = &objectBinding;
-
-			Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out tempLayout ).Verify();
-			VkInvalidHandleException.ThrowIfInvalid( tempLayout );
-			objectSetLayout = tempLayout;
-		}
+			objectBinding
+		} );
+		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out tempLayout ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( tempLayout );
+		objectSetLayout = tempLayout;
 
 		var sceneParameterBufferSize = (ulong)frameData.Length * PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) );
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
@@ -612,36 +587,26 @@ internal unsafe sealed class VkEngine : IDisposable
 		deletionQueue.Push( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, objectSetLayout, null ) );
 		deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, sceneParameterBuffer.Buffer, null ) );
 
-		var descriptorSetAllocateInfo = new DescriptorSetAllocateInfo
-		{
-			SType = StructureType.DescriptorSetAllocateInfo,
-			PNext = null,
-			DescriptorPool = descriptorPool,
-			DescriptorSetCount = 1
-		};
-
 		var descriptorWrites = stackalloc WriteDescriptorSet[3];
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
-			var setLayout = globalSetLayout;
-			descriptorSetAllocateInfo.PSetLayouts = &setLayout;
+			var descriptorSetAllocateInfo = VkInfo.AllocateDescriptorSet( descriptorPool, new ReadOnlySpan<DescriptorSetLayout>( ref globalSetLayout ) );
 			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out var descriptorSet ).Verify();
 			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
 			frameData[i].GlobalDescriptor = descriptorSet;
 
-			setLayout = objectSetLayout;
-			descriptorSetAllocateInfo.PSetLayouts = &setLayout;
+			descriptorSetAllocateInfo = VkInfo.AllocateDescriptorSet( descriptorPool, new ReadOnlySpan<DescriptorSetLayout>( ref objectSetLayout ) );
 			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out descriptorSet ).Verify();
 			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
 			frameData[i].ObjectDescriptor = descriptorSet;
 
-			var index = i;
 			frameData[i].CameraBuffer = CreateBuffer( (ulong)sizeof( GpuCameraData ), BufferUsageFlags.UniformBufferBit,
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
 			frameData[i].ObjectBuffer = CreateBuffer( (ulong)sizeof( GpuObjectData ) * MaxObjects, BufferUsageFlags.StorageBufferBit,
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
+			var index = i;
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
 			deletionQueue.Push( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
 
@@ -701,19 +666,20 @@ internal unsafe sealed class VkEngine : IDisposable
 		};
 		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
 		var meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
 			.WithViewport( new Viewport( 0, 0, view.Size.X, view.Size.Y, 0, 1 ) )
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) ) )
-			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert ) )
-			.AddShaderStage( VkInfo.ShaderStage( ShaderStageFlags.FragmentBit, meshTriangleFrag ) )
-			.WithVertexInputState( VkInfo.VertexInputState( VertexInputDescription.GetVertexDescription() ) )
-			.WithInputAssemblyState( VkInfo.InputAssemblyState( PrimitiveTopology.TriangleList ) )
-			.WithRasterizerState( VkInfo.RasterizationState( PolygonMode.Fill ) )
-			.WithMultisamplingState( VkInfo.MultisamplingState() )
-			.WithColorBlendAttachmentState( VkInfo.ColorBlendAttachmentState() )
-			.WithDepthStencilState( VkInfo.DepthStencilState( true, true, CompareOp.LessOrEqual ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, meshTriangleFrag ) )
+			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetVertexDescription() ) )
+			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
+			.WithRasterizerState( VkInfo.PipelineRasterizationState( PolygonMode.Fill ) )
+			.WithMultisamplingState( VkInfo.PipelineMultisamplingState() )
+			.WithColorBlendAttachmentState( VkInfo.PipelineColorBlendAttachmentState() )
+			.WithDepthStencilState( VkInfo.PipelineDepthStencilState( true, true, CompareOp.LessOrEqual ) )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipeline );
 

@@ -1,17 +1,15 @@
 ﻿using Silk.NET.Vulkan;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Latte.NewRenderer;
 
-internal struct VertexInputDescription
+[method: SetsRequiredMembers]
+internal struct VertexInputDescription( VertexInputAttributeDescription[] attributes, VertexInputBindingDescription[] bindings )
 {
-	internal VertexInputAttributeDescription[] Attributes = [];
-	internal VertexInputBindingDescription[] Bindings = [];
-
-	public VertexInputDescription()
-	{
-	}
+	internal required VertexInputAttributeDescription[] Attributes = attributes;
+	internal required VertexInputBindingDescription[] Bindings = bindings;
 
 	internal static VertexInputDescription GetVertexDescription()
 	{
@@ -46,10 +44,6 @@ internal struct VertexInputDescription
 			Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.Color ) )
 		};
 
-		return new VertexInputDescription
-		{
-			Attributes = [positionAttribute, normalAttribute, colorAttribute],
-			Bindings = [mainBinding]
-		};
+		return new VertexInputDescription( [positionAttribute, normalAttribute, colorAttribute], [mainBinding] );
 	}
 }

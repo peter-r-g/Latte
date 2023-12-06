@@ -1,7 +1,7 @@
 ﻿using Latte.NewRenderer.Allocations;
 using Silk.NET.Vulkan;
 
-namespace Latte.NewRenderer;
+namespace Latte.NewRenderer.Temp;
 
 internal sealed class FrameData
 {

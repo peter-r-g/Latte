@@ -1,15 +1,11 @@
 ﻿using Silk.NET.Vulkan;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.NewRenderer.Allocations;
 
-internal readonly struct AllocatedImage
+[method: SetsRequiredMembers]
+internal struct AllocatedImage( Image image, Allocation allocation )
 {
-	internal readonly Image Image;
-	internal readonly Allocation Allocation;
-
-	internal AllocatedImage( Image image, Allocation allocation )
-	{
-		Image = image;
-		Allocation = allocation;
-	}
+	internal required Image Image = image;
+	internal required Allocation Allocation = allocation;
 }
