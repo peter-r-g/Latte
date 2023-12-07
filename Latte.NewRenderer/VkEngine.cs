@@ -891,14 +891,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		{
 			var bufferSize = (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>());
 
-			var stagingBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.TransferSrcBit, sharingMode );
-			Apis.Vk.CreateBuffer( logicalDevice, stagingBufferInfo, null, out var stagingBuffer ).Verify();
-			var allocatedStagingBuffer = allocationManager.AllocateBuffer( stagingBuffer, MemoryPropertyFlags.HostVisibleBit );
-			allocationManager.SetMemory( allocatedStagingBuffer.Allocation, mesh.Vertices.AsSpan() );
-
-			var vertexBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit, sharingMode );
-			Apis.Vk.CreateBuffer( logicalDevice, vertexBufferInfo, null, out var vertexBuffer ).Verify();
-			mesh.VertexBuffer = allocationManager.AllocateBuffer( vertexBuffer, MemoryPropertyFlags.DeviceLocalBit );
+			var stagingBuffer = CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
+			allocationManager.SetMemory( stagingBuffer.Allocation, mesh.Vertices.AsSpan() );
+			var vertexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
+				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
 			ImmediateSubmit( cmd =>
 			{
@@ -909,11 +905,13 @@ internal unsafe sealed class VkEngine : IDisposable
 					Size = bufferSize
 				};
 
-				Apis.Vk.CmdCopyBuffer( cmd, stagingBuffer, vertexBuffer, 1, copyRegion );
+				Apis.Vk.CmdCopyBuffer( cmd, stagingBuffer.Buffer, vertexBuffer.Buffer, 1, copyRegion );
 			} );
 
-			Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer, null );
-			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, vertexBuffer, null ) );
+			mesh.VertexBuffer = vertexBuffer;
+
+			Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer.Buffer, null );
+			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, vertexBuffer.Buffer, null ) );
 		}
 
 		// Index buffer
@@ -923,14 +921,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		{
 			var bufferSize = sizeof( uint ) * (ulong)mesh.Indices.Length;
 
-			var stagingBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.TransferSrcBit, sharingMode );
-			Apis.Vk.CreateBuffer( logicalDevice, stagingBufferInfo, null, out var stagingBuffer ).Verify();
-			var allocatedStagingBuffer = allocationManager.AllocateBuffer( stagingBuffer, MemoryPropertyFlags.HostVisibleBit );
-			allocationManager.SetMemory( allocatedStagingBuffer.Allocation, mesh.Indices.AsSpan() );
-
-			var indexBufferInfo = VkInfo.Buffer( bufferSize, BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit, sharingMode );
-			Apis.Vk.CreateBuffer( logicalDevice, indexBufferInfo, null, out var indexBuffer ).Verify();
-			mesh.IndexBuffer = allocationManager.AllocateBuffer( indexBuffer, MemoryPropertyFlags.DeviceLocalBit );
+			var stagingBuffer = CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
+			allocationManager.SetMemory( stagingBuffer.Allocation, mesh.Indices.AsSpan() );
+			var indexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
+				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
 			ImmediateSubmit( cmd =>
 			{
@@ -941,11 +935,13 @@ internal unsafe sealed class VkEngine : IDisposable
 					Size = bufferSize
 				};
 
-				Apis.Vk.CmdCopyBuffer( cmd, stagingBuffer, indexBuffer, 1, copyRegion );
+				Apis.Vk.CmdCopyBuffer( cmd, stagingBuffer.Buffer, indexBuffer.Buffer, 1, copyRegion );
 			} );
 
-			Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer, null );
-			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, indexBuffer, null ) );
+			mesh.IndexBuffer = indexBuffer;
+
+			Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer.Buffer, null );
+			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, indexBuffer.Buffer, null ) );
 		}
 	}
 	
