@@ -57,6 +57,8 @@ internal unsafe sealed class VkEngine : IDisposable
 	private uint graphicsQueueFamily;
 	private Queue presentQueue;
 	private uint presentQueueFamily;
+	private Queue transferQueue;
+	private uint transferQueueFamily;
 
 	private ImmutableArray<FrameData> frameData = [];
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
@@ -371,10 +373,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		graphicsQueueFamily = logicalDeviceBuilderResult.GraphicsQueueFamily;
 		presentQueue = logicalDeviceBuilderResult.PresentQueue;
 		presentQueueFamily = logicalDeviceBuilderResult.PresentQueueFamily;
+		transferQueue = logicalDeviceBuilderResult.TransferQueue;
+		transferQueueFamily = logicalDeviceBuilderResult.TransferQueueFamily;
 
 		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
 		VkInvalidHandleException.ThrowIfInvalid( graphicsQueue );
 		VkInvalidHandleException.ThrowIfInvalid( presentQueue );
+		VkInvalidHandleException.ThrowIfInvalid( transferQueue );
 
 		allocationManager = new AllocationManager( physicalDevice, logicalDevice );
 		disposalManager = new DisposalManager();

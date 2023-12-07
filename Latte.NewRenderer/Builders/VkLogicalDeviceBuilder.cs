@@ -64,7 +64,7 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 	internal VkLogicalDeviceBuilderResult Build()
 	{
 		var queuePriority = 1f;
-		var uniqueIndices = queueFamilyIndices.ToUnique();
+		var uniqueIndices = queueFamilyIndices.UniqueQueues.Span;
 
 		var queueCreateInfos = stackalloc DeviceQueueCreateInfo[uniqueIndices.Length];
 		for ( var i = 0; i < uniqueIndices.Length; i++ )
@@ -96,8 +96,10 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 
 			var graphicsQueue = Apis.Vk.GetDeviceQueue( logicalDevice, queueFamilyIndices.GraphicsQueue, 0 );
 			var presentQueue = Apis.Vk.GetDeviceQueue( logicalDevice, queueFamilyIndices.PresentQueue, 0 );
+			var transferQueue = Apis.Vk.GetDeviceQueue( logicalDevice, queueFamilyIndices.TransferQueue, 0 );
 
-			return new VkLogicalDeviceBuilderResult( logicalDevice, graphicsQueue, queueFamilyIndices.GraphicsQueue, presentQueue, queueFamilyIndices.PresentQueue );
+			return new VkLogicalDeviceBuilderResult( logicalDevice, graphicsQueue, queueFamilyIndices.GraphicsQueue,
+				presentQueue, queueFamilyIndices.PresentQueue, transferQueue, queueFamilyIndices.TransferQueue );
 		}
 	}
 
