@@ -1090,6 +1090,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		view.FramebufferResize -= OnFramebufferResize;
 
+		if ( disposing )
+		{
+		}
+
 		allocationManager?.Dispose();
 		disposalManager?.Dispose();
 		swapchainExtension?.Dispose();
