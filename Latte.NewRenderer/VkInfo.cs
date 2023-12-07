@@ -333,7 +333,8 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static DescriptorPoolCreateInfo DescriptorPool( uint maxSets, ReadOnlySpan<DescriptorPoolSize> poolSizes )
+	internal static DescriptorPoolCreateInfo DescriptorPool( uint maxSets, ReadOnlySpan<DescriptorPoolSize> poolSizes,
+		DescriptorPoolCreateFlags flags = DescriptorPoolCreateFlags.None )
 	{
 		fixed( DescriptorPoolSize* poolSizesPtr = poolSizes )
 		{
@@ -344,7 +345,7 @@ internal unsafe static class VkInfo
 				MaxSets = maxSets,
 				PoolSizeCount = (uint)poolSizes.Length,
 				PPoolSizes = poolSizesPtr,
-				Flags = DescriptorPoolCreateFlags.None
+				Flags = flags
 			};
 		}
 	}
@@ -403,6 +404,35 @@ internal unsafe static class VkInfo
 			DescriptorCount = 1,
 			DescriptorType = type,
 			PBufferInfo = &bufferInfo
+		};
+	}
+
+	internal static WriteDescriptorSet WriteDescriptorImage( DescriptorType type, DescriptorSet descriptorSet, DescriptorImageInfo imageInfo,
+		uint binding )
+	{
+		return new WriteDescriptorSet
+		{
+			SType = StructureType.WriteDescriptorSet,
+			PNext = null,
+			DstBinding = binding,
+			DstSet = descriptorSet,
+			DescriptorCount = 1,
+			DescriptorType = type,
+			PImageInfo = &imageInfo
+		};
+	}
+
+	internal static SamplerCreateInfo Sampler( Filter filters, SamplerAddressMode addressMode = SamplerAddressMode.Repeat )
+	{
+		return new SamplerCreateInfo
+		{
+			SType = StructureType.SamplerCreateInfo,
+			PNext = null,
+			MinFilter = filters,
+			MagFilter = filters,
+			AddressModeU = addressMode,
+			AddressModeV = addressMode,
+			AddressModeW = addressMode
 		};
 	}
 }

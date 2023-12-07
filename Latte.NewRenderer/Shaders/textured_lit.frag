@@ -1,5 +1,6 @@
 //glsl version 4.5
 #version 450
+#extension GL_KHR_vulkan_glsl : enable
 
 //shader input
 layout (location = 0) in vec3 inColor;
@@ -16,8 +17,10 @@ layout(set = 0, binding = 1) uniform sceneData{
 	vec4 sunlightColor;
 } SceneData;
 
+layout(set = 2, binding = 0) uniform sampler2D tex1;
 
 void main()
 {
-	outFragColor = vec4(texCoord.x,texCoord.y,0.5f,1.0f);
+	vec3 color = texture(tex1,texCoord).xyz;
+	outFragColor = vec4(color + SceneData.ambientColor.xyz,1.0f);
 }

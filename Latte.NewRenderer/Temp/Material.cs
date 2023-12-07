@@ -6,6 +6,7 @@ internal sealed class Material
 {
 	internal Pipeline Pipeline { get; }
 	internal PipelineLayout PipelineLayout { get; }
+	internal DescriptorSet TextureSet { get; set; }
 
 	internal Material( Pipeline pipeline, PipelineLayout pipelineLayout )
 	{

@@ -18,6 +18,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Mesh = Latte.NewRenderer.Temp.Mesh;
+using LatteTexture = Latte.Assets.Texture;
 using Texture = Latte.NewRenderer.Temp.Texture;
 
 namespace Latte.NewRenderer;
@@ -62,6 +63,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private DescriptorSetLayout globalSetLayout;
 	private DescriptorSetLayout objectSetLayout;
+	private DescriptorSetLayout singleTextureSetLayout;
 	private DescriptorPool descriptorPool;
 
 	private RenderPass renderPass;
@@ -106,6 +108,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializePipelines();
 		LoadImages();
 		LoadMeshes();
+		SetupSampler();
 		InitializeScene();
 
 		IsInitialized = true;
@@ -272,7 +275,10 @@ internal unsafe sealed class VkEngine : IDisposable
 				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
 				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.GlobalDescriptor, 1, &uniformOffset );
 				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 1, 1, currentFrameData.ObjectDescriptor, 0, null );
-				
+
+				if ( material.TextureSet.IsValid() )
+					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 2, 1, material.TextureSet, 0, null );
+
 				lastMaterial = material;
 			}
 
@@ -310,6 +316,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeSwapchain();
 		InitializeFramebuffers();
 		InitializePipelines();
+		SetupSampler();
 	}
 
 	private void InitializeVulkan()
@@ -621,10 +628,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		{
 			new DescriptorPoolSize( DescriptorType.UniformBuffer, 10 ),
 			new DescriptorPoolSize( DescriptorType.UniformBufferDynamic, 10 ),
-			new DescriptorPoolSize( DescriptorType.StorageBuffer, 10 )
+			new DescriptorPoolSize( DescriptorType.StorageBuffer, 10 ),
+			new DescriptorPoolSize( DescriptorType.CombinedImageSampler, 10 )
 		};
 
-		var poolCreateInfo = VkInfo.DescriptorPool( 10, descriptorPoolSizes );
+		var poolCreateInfo = VkInfo.DescriptorPool( 10, descriptorPoolSizes, DescriptorPoolCreateFlags.FreeDescriptorSetBit );
 		Apis.Vk.CreateDescriptorPool( logicalDevice, poolCreateInfo, null, out var descriptorPool ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( descriptorPool );
 		this.descriptorPool = descriptorPool;
@@ -632,6 +640,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
 		var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
 		var objectBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit, 0 );
+		var textureBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.CombinedImageSampler, ShaderStageFlags.FragmentBit, 0 );
 
 		var setLayoutCreateInfo = VkInfo.DescriptorSetLayout( stackalloc DescriptorSetLayoutBinding[]
 		{
@@ -650,6 +659,14 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( tempLayout );
 		objectSetLayout = tempLayout;
 
+		setLayoutCreateInfo = VkInfo.DescriptorSetLayout( stackalloc DescriptorSetLayoutBinding[]
+		{
+			textureBinding
+		} );
+		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out tempLayout ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( tempLayout );
+		singleTextureSetLayout = tempLayout;
+
 		var sceneParameterBufferSize = (ulong)frameData.Length * PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) );
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
@@ -657,6 +674,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorPool( logicalDevice, descriptorPool, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, globalSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, objectSetLayout, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, singleTextureSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, sceneParameterBuffer.Buffer, null ) );
 
 		var descriptorWrites = stackalloc WriteDescriptorSet[3];
@@ -737,8 +755,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			globalSetLayout,
 			objectSetLayout
 		};
-		var meshPipelineCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
-		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
+		var meshPipelineLayoutCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
+		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineLayoutCreateInfo, null, out var meshPipelineLayout ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
 		var pipelineBuilder = new VkPipelineBuilder( logicalDevice, renderPass )
@@ -761,13 +779,25 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
 
+		descriptorSetLayouts = stackalloc DescriptorSetLayout[]
+		{
+			globalSetLayout,
+			objectSetLayout,
+			singleTextureSetLayout
+		};
+		var texturedPipelineLayoutCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
+		Apis.Vk.CreatePipelineLayout( logicalDevice, texturedPipelineLayoutCreateInfo, null, out var texturedPipelineLayout ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( texturedPipelineLayout );
+
 		var texturedMeshPipeline = pipelineBuilder
+			.WithPipelineLayout( texturedPipelineLayout )
 			.ClearShaderStages()
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert ) )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, texturedLitFrag ) )
 			.Build();
+		VkInvalidHandleException.ThrowIfInvalid( texturedMeshPipeline );
 
-		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, meshPipelineLayout );
+		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, texturedPipelineLayout );
 
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, defaultLitFrag, null );
@@ -777,66 +807,69 @@ internal unsafe sealed class VkEngine : IDisposable
 		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, texturedPipelineLayout, null ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, texturedMeshPipeline, null ), SwapchainTag );
 	}
 
 	private void LoadImages()
 	{
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		var latteTexture = LatteTexture.FromPath( "/Assets/Car 08/Car8.png" );
+		var texture = new Texture( (uint)latteTexture.Width, (uint)latteTexture.Height, (uint)latteTexture.BytesPerPixel, latteTexture.PixelData );
+		UploadTexture( texture );
+
+		var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Srgb, texture.GpuTexture.Image, ImageAspectFlags.ColorBit );
+		Apis.Vk.CreateImageView( logicalDevice, imageViewInfo, null, out var imageView ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( imageView );
+		texture.TextureView = imageView;
+
+		Textures.Add( "car08", texture );
+
+		disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, imageView, null ) );
 	}
 
 	private void LoadMeshes()
 	{
-		var triangleMesh = new Mesh( [
-			new Vertex( new Vector3( 1, 1, 0.5f ), Vector3.Zero, new Vector3( 0, 1, 0 ), Vector2.Zero ), 
-			new Vertex( new Vector3( -1, 1, 0.5f ), Vector3.Zero, new Vector3( 0, 1, 0 ), Vector2.Zero ), 
-			new Vertex( new Vector3( 0, -1, 0.5f ), Vector3.Zero, new Vector3( 0, 1, 0 ), Vector2.Zero ),
-		], [] );
+		var model = Model.FromPath( "/Assets/Car 08/Car8.obj" );
+		var carMesh = new Mesh( model.Meshes.First().Vertices, model.Meshes.First().Indices );
 
-		Meshes.Add( "triangle", triangleMesh );
-		UploadMesh( triangleMesh );
+		UploadMesh( carMesh );
+		Meshes.Add( "car08", carMesh );
+	}
 
-		var models = new string[]
+	private void SetupSampler()
+	{
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		var samplerInfo = VkInfo.Sampler( Filter.Nearest );
+		Apis.Vk.CreateSampler( logicalDevice, samplerInfo, null, out var blockySampler ).Verify();
+
+		var texturedMaterial = GetMaterial( TexturedMeshMaterialName );
+		var allocateInfo = VkInfo.AllocateDescriptorSet( descriptorPool, new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
+		Apis.Vk.AllocateDescriptorSets( logicalDevice, allocateInfo, out var textureSet );
+		texturedMaterial.TextureSet = textureSet;
+
+		var descriptorImageInfo = new DescriptorImageInfo
 		{
-			"/Assets/monkey_smooth.obj",
-			"/Assets/Car.obj",
-			"/Assets/Car2.obj",
-			"/Assets/Car3.obj",
-			"/Assets/Car4.obj",
-			"/Assets/Car5.obj",
-			"/Assets/Car5_Police.obj",
-			"/Assets/Car5_Taxi.obj",
-			"/Assets/Car6.obj",
-			"/Assets/Car7.obj",
+			Sampler = blockySampler,
+			ImageView = Textures["car08"].TextureView,
+			ImageLayout = ImageLayout.ShaderReadOnlyOptimal
 		};
-		foreach ( var modelPath in models )
-		{
-			var model = Model.FromPath( modelPath );
-			var mesh = model.Meshes.First();
-			var tempVertices = mesh.Vertices
-				.Select( vertex => new Vertex( vertex.Position, vertex.Normal, vertex.Normal, vertex.TextureCoordinates ) )
-				.ToImmutableArray();
-			var monkeyMesh = new Mesh( tempVertices, mesh.Indices );
 
-			Meshes.Add( Path.GetFileNameWithoutExtension( modelPath ), monkeyMesh );
-			UploadMesh( monkeyMesh );
-		}
+		var texture1 = VkInfo.WriteDescriptorImage( DescriptorType.CombinedImageSampler, textureSet, descriptorImageInfo, 0 );
+		Apis.Vk.UpdateDescriptorSets( logicalDevice, 1, texture1, 0, null );
+
+		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.FreeDescriptorSets( logicalDevice, descriptorPool, 1, textureSet ), SwapchainTag );
 	}
 
 	private void InitializeScene()
 	{
-		foreach ( var (meshName, _) in Meshes )
+		Renderables.Add( new Renderable( "car08", TexturedMeshMaterialName )
 		{
-			for ( var i = 0; i < 100; i++ )
-			{
-				var randomMesh = new Renderable( meshName, DefaultMeshMaterialName );
-				var x = Random.Shared.Next( -20, 21 );
-				var y = Random.Shared.Next( -20, 21 );
-				var translation = Matrix4x4.Identity * Matrix4x4.CreateTranslation( x * 5, 0, y * 5 );
-				var scale = Matrix4x4.Identity * Matrix4x4.CreateScale( 0.2f, 0.2f, 0.2f );
-				randomMesh.Transform = translation * scale;
-				Renderables.Add( randomMesh );
-			}
-		}
+			Transform = Matrix4x4.Identity
+		} );
 	}
 
 	private void OnFramebufferResize( Vector2D<int> newSize )
