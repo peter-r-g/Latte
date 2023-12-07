@@ -14,6 +14,7 @@ internal sealed class AllocationManager : IDisposable
 	private readonly Device logicalDevice;
 
 	private readonly List<DeviceMemory> memoryAllocations;
+	private readonly Dictionary<Allocation, nint> preservedMaps = [];
 	private bool disposed;
 
 	internal AllocationManager( PhysicalDevice physicalDevice, Device logicalDevice )
@@ -65,24 +66,22 @@ internal sealed class AllocationManager : IDisposable
 		return new AllocatedImage( image, new Allocation( memory, 0 ) );
 	}
 
-	internal unsafe void SetMemory<T>( Allocation allocation, ReadOnlySpan<T> data ) where T : unmanaged
+	internal unsafe void SetMemory<T>( Allocation allocation, ReadOnlySpan<T> data, bool preserveMap = false ) where T : unmanaged
 	{
-		void* dataPtr;
 		var dataSize = (ulong)(sizeof( T ) * data.Length);
 
-		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
+		void* dataPtr = RetrieveDataPointer( allocation, dataSize, preserveMap );
 		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
-		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+		ReturnDataPointer( allocation, dataPtr, preserveMap );
 	}
 
-	internal unsafe void SetMemory<T>( Allocation allocation, T data ) where T : unmanaged
+	internal unsafe void SetMemory<T>( Allocation allocation, T data, bool preserveMap = false ) where T : unmanaged
 	{
-		void* dataPtr;
 		var dataSize = (ulong)sizeof( T );
 
-		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
+		void* dataPtr = RetrieveDataPointer( allocation, dataSize, preserveMap );
 		Marshal.StructureToPtr( data, (nint)dataPtr, false );
-		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+		ReturnDataPointer( allocation, dataPtr, preserveMap );
 	}
 
 	internal unsafe void SetMemory<T>( Allocation allocation, T data, ulong dataSize, int index ) where T : unmanaged
@@ -91,6 +90,32 @@ internal sealed class AllocationManager : IDisposable
 
 		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).Verify();
 		Marshal.StructureToPtr( data, (nint)dataPtr + (nint)(dataSize * (ulong)index), false );
+		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+	}
+
+	private unsafe void* RetrieveDataPointer( Allocation allocation, ulong dataSize, bool preserveMap )
+	{
+		void* dataPtr;
+
+		if ( preserveMap && preservedMaps.TryGetValue( allocation, out var mappedDataPtr ) )
+			dataPtr = (void*)mappedDataPtr;
+		else
+			Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
+
+		return dataPtr;
+	}
+
+	private unsafe void ReturnDataPointer( Allocation allocation, void* dataPtr, bool preserveMap )
+	{
+		if ( preserveMap )
+		{
+			if ( !preservedMaps.ContainsKey( allocation ) )
+				preservedMaps.Add( allocation, (nint)dataPtr );
+
+			return;
+		}
+
+		preservedMaps.Remove( allocation );
 		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
 	}
 
@@ -113,6 +138,9 @@ internal sealed class AllocationManager : IDisposable
 			if ( disposing )
 			{
 			}
+
+			foreach ( var (allocation, _) in preservedMaps )
+				Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
 
 			foreach ( var allocatedMemory in memoryAllocations )
 				Apis.Vk.FreeMemory( logicalDevice, allocatedMemory, null );

@@ -239,7 +239,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Projection = projection,
 			ViewProjection = view * projection
 		};
-		allocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData );
+		allocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData, true );
 
 		var framed = frameNumber / 120f;
 		sceneParameters.AmbientColor = new Vector4( MathF.Sin( framed ), 0, MathF.Cos( framed ), 1 );
@@ -250,7 +250,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		for ( var i = 0; i < count; i++ )
 			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
 
-		allocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData );
+		allocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData, true );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
