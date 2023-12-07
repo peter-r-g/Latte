@@ -18,6 +18,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Mesh = Latte.NewRenderer.Temp.Mesh;
+using Texture = Latte.NewRenderer.Temp.Texture;
 
 namespace Latte.NewRenderer;
 
@@ -26,6 +27,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private const int MaxFramesInFlight = 2;
 	private const int MaxObjects = 10_000;
 	private const string DefaultMeshMaterialName = "defaultmesh";
+	private const string TexturedMeshMaterialName = "texturedmesh";
 	private const string SwapchainTag = "swapchain";
 
 	internal bool IsInitialized { get; private set; }
@@ -73,6 +75,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
+	private readonly Dictionary<string, Texture> Textures = [];
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 
 	private ExtDebugUtils? debugUtilsExtension;
@@ -101,6 +104,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeSynchronizationStructures();
 		InitializeDescriptors();
 		InitializePipelines();
+		LoadImages();
 		LoadMeshes();
 		InitializeScene();
 
@@ -718,8 +722,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new VkException( "Failed to build mesh triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var meshTriangleFrag ) )
-			throw new VkException( "Failed to build mesh triangle fragment shader" );
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
+			throw new VkException( "Failed to build default lit fragment shader" );
 
 		var pushConstant = new PushConstantRange
 		{
@@ -737,29 +741,47 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineCreateInfo, null, out var meshPipelineLayout ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
-		var meshPipeline = new VkPipelineBuilder( logicalDevice, renderPass )
+		var pipelineBuilder = new VkPipelineBuilder( logicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
 			.WithViewport( new Viewport( 0, 0, view.Size.X, view.Size.Y, 0, 1 ) )
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) ) )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, meshTriangleFrag ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitFrag ) )
 			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
 			.WithRasterizerState( VkInfo.PipelineRasterizationState( PolygonMode.Fill ) )
 			.WithMultisamplingState( VkInfo.PipelineMultisamplingState() )
 			.WithColorBlendAttachmentState( VkInfo.PipelineColorBlendAttachmentState() )
-			.WithDepthStencilState( VkInfo.PipelineDepthStencilState( true, true, CompareOp.LessOrEqual ) )
-			.Build();
+			.WithDepthStencilState( VkInfo.PipelineDepthStencilState( true, true, CompareOp.LessOrEqual ) );
+		var meshPipeline = pipelineBuilder.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipeline );
 
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
+			throw new VkException( "Failed to build textured lit shader" );
+
+		var texturedMeshPipeline = pipelineBuilder
+			.ClearShaderStages()
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, texturedLitFrag ) )
+			.Build();
+
+		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, meshPipelineLayout );
+
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
-		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleFrag, null );
+		Apis.Vk.DestroyShaderModule( logicalDevice, defaultLitFrag, null );
+		Apis.Vk.DestroyShaderModule( logicalDevice, texturedLitFrag, null );
 
 		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag );
+		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, texturedMeshPipeline, null ), SwapchainTag );
+	}
+
+	private void LoadImages()
+	{
 	}
 
 	private void LoadMeshes()
@@ -945,6 +967,87 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 	}
 	
+	private void UploadTexture( Texture texture )
+	{
+		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		var imageSize = texture.Width * texture.Height * texture.BytesPerPixel;
+		var imageFormat = Format.R8G8B8A8Srgb;
+
+		var stagingBuffer = CreateBuffer( imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
+		allocationManager.SetMemory( stagingBuffer.Allocation, texture.PixelData.Span );
+
+		var imageExtent = new Extent3D( texture.Width, texture.Height, 1 );
+		var imageInfo = VkInfo.Image( imageFormat, ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit, imageExtent );
+		Apis.Vk.CreateImage( logicalDevice, imageInfo, null, out var textureImage );
+
+		var allocatedTextureImage = allocationManager.AllocateImage( textureImage, MemoryPropertyFlags.DeviceLocalBit );
+		ImmediateSubmit( cmd =>
+		{
+			var range = new ImageSubresourceRange
+			{
+				AspectMask = ImageAspectFlags.ColorBit,
+				BaseMipLevel = 0,
+				LevelCount = 1,
+				BaseArrayLayer = 0,
+				LayerCount = 1
+			};
+
+			var toTransferLayout = new ImageMemoryBarrier
+			{
+				SType = StructureType.ImageMemoryBarrier,
+				PNext = null,
+				Image = textureImage,
+				SubresourceRange = range,
+				OldLayout = ImageLayout.Undefined,
+				NewLayout = ImageLayout.TransferDstOptimal,
+				SrcAccessMask = AccessFlags.None,
+				DstAccessMask = AccessFlags.TransferWriteBit
+			};
+
+			Apis.Vk.CmdPipelineBarrier( cmd, PipelineStageFlags.TopOfPipeBit, PipelineStageFlags.TransferBit, DependencyFlags.None,
+				0, null, 0, null, 1, toTransferLayout );
+
+			var copyRegion = new BufferImageCopy
+			{
+				BufferOffset = 0,
+				BufferRowLength = 0,
+				BufferImageHeight = 0,
+				ImageExtent = imageExtent,
+				ImageSubresource = new ImageSubresourceLayers
+				{
+					AspectMask = ImageAspectFlags.ColorBit,
+					MipLevel = 0,
+					BaseArrayLayer = 0,
+					LayerCount = 1,
+				}
+			};
+
+			Apis.Vk.CmdCopyBufferToImage( cmd, stagingBuffer.Buffer, textureImage, ImageLayout.TransferDstOptimal, 1, copyRegion );
+
+			var toReadableFormat = new ImageMemoryBarrier
+			{
+				SType = StructureType.ImageMemoryBarrier,
+				PNext = null,
+				Image = textureImage,
+				SubresourceRange = range,
+				OldLayout = ImageLayout.TransferDstOptimal,
+				NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+				SrcAccessMask = AccessFlags.TransferWriteBit,
+				DstAccessMask = AccessFlags.ShaderReadBit
+			};
+
+			Apis.Vk.CmdPipelineBarrier( cmd, PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit, DependencyFlags.None,
+				0, null, 0, null, 1, toReadableFormat );
+		} );
+
+		texture.GpuTexture = allocatedTextureImage;
+
+		Apis.Vk.DestroyBuffer( logicalDevice, stagingBuffer.Buffer, null );
+		disposalManager.Add( () => Apis.Vk.DestroyImage( logicalDevice, textureImage, null ) );
+	}
+
 	private AllocatedBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
 		SharingMode sharingMode = SharingMode.Exclusive )
 	{

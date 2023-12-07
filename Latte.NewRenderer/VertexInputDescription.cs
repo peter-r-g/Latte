@@ -44,6 +44,14 @@ internal struct VertexInputDescription( VertexInputAttributeDescription[] attrib
 			Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.Color ) )
 		};
 
-		return new VertexInputDescription( [positionAttribute, normalAttribute, colorAttribute], [mainBinding] );
+		var textureCoordinatesAttribute = new VertexInputAttributeDescription
+		{
+			Binding = 0,
+			Location = 3,
+			Format = Format.R32G32Sfloat,
+			Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.TextureCoordinates ) )
+		};
+
+		return new VertexInputDescription( [positionAttribute, normalAttribute, colorAttribute, textureCoordinatesAttribute], [mainBinding] );
 	}
 }
