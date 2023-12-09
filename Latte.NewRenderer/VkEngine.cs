@@ -351,6 +351,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithSurface( surface, surfaceExtension )
 			.RequireUniqueGraphicsQueue( true )
 			.RequireUniquePresentQueue( true )
+			.RequireUniqueTransferQueue( true )
 			.Select();
 		physicalDevice = physicalDeviceSelectorResult.PhysicalDevice;
 		queueFamilyIndices = physicalDeviceSelectorResult.QueueFamilyIndices;

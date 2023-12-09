@@ -21,6 +21,7 @@ internal sealed class VkPhysicalDeviceSelector
 	private PhysicalDeviceFeatures featuresRequired;
 	private bool requireUniqueGraphicsQueue;
 	private bool requireUniquePresentQueue;
+	private bool requireUniqueTransferQueue;
 	private bool selectFirst;
 
 	internal VkPhysicalDeviceSelector( Instance instance )
@@ -71,6 +72,12 @@ internal sealed class VkPhysicalDeviceSelector
 		return this;
 	}
 
+	internal VkPhysicalDeviceSelector RequireUniqueTransferQueue( bool requireUniqueTransferQueue )
+	{
+		this.requireUniqueTransferQueue = requireUniqueTransferQueue;
+		return this;
+	}
+
 	internal VkPhysicalDeviceSelector ShouldSelectFirst( bool selectFirst )
 	{
 		this.selectFirst = selectFirst;
@@ -90,7 +97,8 @@ internal sealed class VkPhysicalDeviceSelector
 		if ( physicalDeviceCount > 0 && selectFirst )
 		{
 			var physicalDevice = physicalDevices[0];
-			var queueFamilyIndices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension, requireUniqueGraphicsQueue, requireUniquePresentQueue );
+			var queueFamilyIndices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension,
+				requireUniqueGraphicsQueue, requireUniquePresentQueue, requireUniqueTransferQueue );
 			return [new VkPhysicalDeviceSelectorResult( physicalDevice, queueFamilyIndices )];
 		}
 
@@ -151,7 +159,8 @@ internal sealed class VkPhysicalDeviceSelector
 		if ( !IsFeatureComplete( featuresRequired, features ) )
 			return false;
 
-		queueFamilyIndices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension, requireUniqueGraphicsQueue, requireUniquePresentQueue );
+		queueFamilyIndices = VkQueueFamilyIndices.Get( physicalDevice, surface, surfaceExtension,
+			requireUniqueGraphicsQueue, requireUniquePresentQueue, requireUniqueTransferQueue );
 		return queueFamilyIndices.GraphicsQueue != uint.MaxValue && queueFamilyIndices.PresentQueue != uint.MaxValue;
 	}
 
