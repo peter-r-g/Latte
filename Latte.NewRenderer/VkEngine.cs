@@ -150,20 +150,23 @@ internal unsafe sealed class VkEngine : IDisposable
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 		Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
 
-		ClearValue clearValue = default;
-		var flash = MathF.Abs( MathF.Sin( frameNumber / 120f ) );
-		clearValue.Color = new ClearColorValue( 0, 0, flash, 1 );
-
-		ClearValue depthClearValue = default;
-		depthClearValue.DepthStencil.Depth = 1;
+		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) );
 
 		ReadOnlySpan<ClearValue> clearValues = stackalloc ClearValue[]
 		{
-			clearValue,
-			depthClearValue
+			new ClearValue
+			{
+				Color = new ClearColorValue( Camera.Main.ClearColor.X, Camera.Main.ClearColor.Y, Camera.Main.ClearColor.Z )
+			},
+			new ClearValue
+			{
+				DepthStencil = new ClearDepthStencilValue
+				{
+					Depth = 1
+				}
+			}
 		};
 
-		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) );
 		fixed( ClearValue* clearValuesPtr = clearValues )
 		{
 			var rpBeginInfo = new RenderPassBeginInfo

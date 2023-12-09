@@ -31,4 +31,6 @@ public class Camera
 
 	public float ZNear { get; set; } = 0.1f;
 	public float ZFar { get; set; } = 10000;
+
+	public Vector3 ClearColor { get; set; } = Vector3.Zero;
 }
