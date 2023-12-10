@@ -746,10 +746,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new VkException( "Failed to build mesh triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
 			throw new VkException( "Failed to build default lit fragment shader" );
 
 		var pushConstant = new PushConstantRange
@@ -785,7 +785,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
+		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
 
 		descriptorSetLayouts = stackalloc DescriptorSetLayout[]

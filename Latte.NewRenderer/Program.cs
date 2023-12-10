@@ -1,8 +1,7 @@
 ﻿using Latte.NewRenderer.Input;
 using Silk.NET.Maths;
-using Silk.NET.SDL;
-using Silk.NET.Windowing.Sdl;
 using Silk.NET.Windowing;
+using Silk.NET.Windowing.Glfw;
 using System;
 using System.Numerics;
 using Window = Silk.NET.Windowing.Window;
@@ -18,17 +17,13 @@ internal static class Program
 
 	private static unsafe void Main()
 	{
-		SdlWindowing.Use();
-		SdlProvider.SetMainReady = true;
+		GlfwWindowing.Use();
 		var options = WindowOptions.DefaultVulkan with
 		{
 			Size = new Vector2D<int>( 1700, 900 )
 		};
 		window = Window.Create( options );
 		window.Initialize();
-
-		Apis.Sdl.SetWindowMouseGrab( (Silk.NET.SDL.Window*)window.Handle, SdlBool.True );
-		Apis.Sdl.SetRelativeMouseMode( SdlBool.True );
 
 		engine = new VkEngine();
 		engine.Initialize( window );
@@ -37,6 +32,8 @@ internal static class Program
 
 		input = new InputManager( window );
 		input.Initialize();
+
+		input.SetCursorMode( CursorMode.Trapped );
 
 		window.Run( () =>
 		{

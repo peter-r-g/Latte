@@ -1,6 +1,8 @@
 ﻿using Latte.NewRenderer.Extensions;
+using Silk.NET.GLFW;
 using Silk.NET.Input;
 using Silk.NET.Windowing;
+using Silk.NET.Windowing.Glfw;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -141,7 +143,7 @@ public sealed class InputManager
 		return mouseDeltas[mouseIndex];
 	}
 
-	/*/// <summary>
+	/// <summary>
 	/// Sets the mode the cursor will operate in.
 	/// </summary>
 	/// <param name="cursorMode">The mode to set the cursor to.</param>
@@ -166,7 +168,7 @@ public sealed class InputManager
 		
 		var value = (CursorModeValue)Apis.Glfw.GetInputMode( (WindowHandle*)Window.Handle, CursorStateAttribute.Cursor );
 		return value.ToLatte();
-	}*/
+	}
 
 	/// <summary>
 	/// Invoked when a input device has changed its connection.
