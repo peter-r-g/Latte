@@ -63,10 +63,10 @@ internal unsafe sealed class VkEngine : IDisposable
 	private ImmutableArray<FrameData> frameData = [];
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
 
+	private DescriptorAllocator? descriptorAllocator;
 	private DescriptorSetLayout globalSetLayout;
 	private DescriptorSetLayout objectSetLayout;
 	private DescriptorSetLayout singleTextureSetLayout;
-	private DescriptorPool descriptorPool;
 
 	private RenderPass renderPass;
 	private ImmutableArray<Framebuffer> framebuffers;
@@ -633,18 +633,13 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		ReadOnlySpan<DescriptorPoolSize> descriptorPoolSizes = stackalloc DescriptorPoolSize[]
-		{
-			new DescriptorPoolSize( DescriptorType.UniformBuffer, 10 ),
-			new DescriptorPoolSize( DescriptorType.UniformBufferDynamic, 10 ),
-			new DescriptorPoolSize( DescriptorType.StorageBuffer, 10 ),
-			new DescriptorPoolSize( DescriptorType.CombinedImageSampler, 10 )
-		};
-
-		var poolCreateInfo = VkInfo.DescriptorPool( 10, descriptorPoolSizes, DescriptorPoolCreateFlags.FreeDescriptorSetBit );
-		Apis.Vk.CreateDescriptorPool( logicalDevice, poolCreateInfo, null, out var descriptorPool ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( descriptorPool );
-		this.descriptorPool = descriptorPool;
+		descriptorAllocator = new DescriptorAllocator( logicalDevice, 100,
+		[
+			new( DescriptorType.UniformBuffer, 2 ),
+			new( DescriptorType.UniformBufferDynamic, 1 ),
+			new( DescriptorType.StorageBuffer, 1 ),
+			new( DescriptorType.CombinedImageSampler, 4 )
+		] );
 
 		var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
 		var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
@@ -680,24 +675,19 @@ internal unsafe sealed class VkEngine : IDisposable
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
-		disposalManager.Add( () => Apis.Vk.DestroyDescriptorPool( logicalDevice, descriptorPool, null ) );
+		disposalManager.Add( () => disposalManager.Dispose() );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, globalSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, objectSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, singleTextureSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, sceneParameterBuffer.Buffer, null ) );
 
-		var descriptorWrites = stackalloc WriteDescriptorSet[3];
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
-			var descriptorSetAllocateInfo = VkInfo.AllocateDescriptorSet( descriptorPool, new ReadOnlySpan<DescriptorSetLayout>( ref globalSetLayout ) );
-			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out var descriptorSet ).Verify();
-			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
-			frameData[i].GlobalDescriptor = descriptorSet;
+			frameData[i].GlobalDescriptor = descriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref globalSetLayout ) );
+			VkInvalidHandleException.ThrowIfInvalid( frameData[i].GlobalDescriptor );
 
-			descriptorSetAllocateInfo = VkInfo.AllocateDescriptorSet( descriptorPool, new ReadOnlySpan<DescriptorSetLayout>( ref objectSetLayout ) );
-			Apis.Vk.AllocateDescriptorSets( logicalDevice, descriptorSetAllocateInfo, out descriptorSet ).Verify();
-			VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
-			frameData[i].ObjectDescriptor = descriptorSet;
+			frameData[i].ObjectDescriptor = descriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref objectSetLayout ) );
+			VkInvalidHandleException.ThrowIfInvalid( frameData[i].ObjectDescriptor );
 
 			frameData[i].CameraBuffer = CreateBuffer( (ulong)sizeof( GpuCameraData ), BufferUsageFlags.UniformBufferBit,
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
@@ -709,35 +699,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
 
-			var cameraBufferInfo = new DescriptorBufferInfo
-			{
-				Buffer = frameData[i].CameraBuffer.Buffer,
-				Offset = 0,
-				Range = (ulong)sizeof( GpuCameraData )
-			};
-
-			var sceneBufferInfo = new DescriptorBufferInfo
-			{
-				Buffer = sceneParameterBuffer.Buffer,
-				Offset = 0,
-				Range = (ulong)sizeof( GpuSceneData )
-			};
-
-			var objectBufferInfo = new DescriptorBufferInfo
-			{
-				Buffer = frameData[i].ObjectBuffer.Buffer,
-				Offset = 0,
-				Range = (ulong)sizeof( GpuObjectData ) * MaxObjects
-			};
-
-			var cameraWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.UniformBuffer, frameData[i].GlobalDescriptor, cameraBufferInfo, 0 );
-			var sceneWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.UniformBufferDynamic, frameData[i].GlobalDescriptor, sceneBufferInfo, 1 );
-			var objectWrite = VkInfo.WriteDescriptorBuffer( DescriptorType.StorageBuffer, frameData[i].ObjectDescriptor, objectBufferInfo, 0 );
-
-			descriptorWrites[0] = cameraWrite;
-			descriptorWrites[1] = sceneWrite;
-			descriptorWrites[2] = objectWrite;
-			Apis.Vk.UpdateDescriptorSets( logicalDevice, 3, descriptorWrites, 0, null );
+			_ = new DescriptorUpdater( logicalDevice, 3 )
+				.WriteBuffer( 0, DescriptorType.UniformBuffer, frameData[i].CameraBuffer.Buffer, 0, (ulong)sizeof( GpuCameraData ) )
+				.WriteBuffer( 1, DescriptorType.UniformBufferDynamic, sceneParameterBuffer.Buffer, 0, (ulong)sizeof( GpuSceneData ) )
+				.UpdateAndClear( frameData[i].GlobalDescriptor )
+				.WriteBuffer( 0, DescriptorType.StorageBuffer, frameData[i].ObjectBuffer.Buffer, 0, (ulong)sizeof( GpuObjectData ) * MaxObjects )
+				.Update( frameData[i].ObjectDescriptor );
 		}
 	}
 
@@ -746,10 +713,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
 			throw new VkException( "Failed to build mesh triangle vertex shader" );
 
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
 			throw new VkException( "Failed to build default lit fragment shader" );
 
 		var pushConstant = new PushConstantRange
@@ -785,7 +752,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 
-		if ( !TryLoadShaderModule( "D:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
+		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
 
 		descriptorSetLayouts = stackalloc DescriptorSetLayout[]
@@ -850,27 +817,21 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void SetupSampler()
 	{
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+		ArgumentNullException.ThrowIfNull( descriptorAllocator, nameof( descriptorAllocator ) );
 
 		var samplerInfo = VkInfo.Sampler( Filter.Nearest );
 		Apis.Vk.CreateSampler( logicalDevice, samplerInfo, null, out var blockySampler ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( blockySampler );
 
 		var texturedMaterial = GetMaterial( TexturedMeshMaterialName );
-		var allocateInfo = VkInfo.AllocateDescriptorSet( descriptorPool, new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
-		Apis.Vk.AllocateDescriptorSets( logicalDevice, allocateInfo, out var textureSet );
-		texturedMaterial.TextureSet = textureSet;
+		texturedMaterial.TextureSet = descriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
+		VkInvalidHandleException.ThrowIfInvalid( texturedMaterial.TextureSet );
 
-		var descriptorImageInfo = new DescriptorImageInfo
-		{
-			Sampler = blockySampler,
-			ImageView = Textures["car08"].TextureView,
-			ImageLayout = ImageLayout.ShaderReadOnlyOptimal
-		};
-
-		var texture1 = VkInfo.WriteDescriptorImage( DescriptorType.CombinedImageSampler, textureSet, descriptorImageInfo, 0 );
-		Apis.Vk.UpdateDescriptorSets( logicalDevice, 1, texture1, 0, null );
+		_ = new DescriptorUpdater( logicalDevice, 1 )
+			.WriteImage( 0, DescriptorType.CombinedImageSampler, Textures["car08"].TextureView, blockySampler, ImageLayout.ShaderReadOnlyOptimal )
+			.Update( texturedMaterial.TextureSet );
 
 		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag );
-		disposalManager.Add( () => Apis.Vk.FreeDescriptorSets( logicalDevice, descriptorPool, 1, textureSet ), SwapchainTag );
 	}
 
 	private void InitializeScene()

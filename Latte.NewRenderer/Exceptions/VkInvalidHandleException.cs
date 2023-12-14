@@ -143,4 +143,10 @@ internal sealed class VkInvalidHandleException : VkException
 		if ( !descriptorSet.IsValid() )
 			Throw( typeof( DescriptorSet ) );
 	}
+
+	internal static void ThrowIfInvalid( Sampler sampler )
+	{
+		if ( !sampler.IsValid() )
+			Throw( typeof( Sampler ) );
+	}
 }

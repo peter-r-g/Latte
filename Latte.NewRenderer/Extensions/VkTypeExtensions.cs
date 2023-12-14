@@ -25,4 +25,5 @@ internal static class VkTypeExtensions
 	internal static bool IsValid( this DescriptorPool descriptorPool ) => descriptorPool.Handle != 0;
 	internal static bool IsValid( this DescriptorSetLayout descriptorSetLayout ) => descriptorSetLayout.Handle != 0;
 	internal static bool IsValid( this DescriptorSet descriptorSet ) => descriptorSet.Handle != 0;
+	internal static bool IsValid( this Sampler sampler ) => sampler.Handle != 0;
 }
