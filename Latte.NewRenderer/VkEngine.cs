@@ -31,6 +31,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private const string TexturedMeshMaterialName = "texturedmesh";
 	private const string SwapchainTag = "swapchain";
 
+	[MemberNotNullWhen( true, nameof( allocationManager ), nameof( disposalManager ), nameof( descriptorAllocator ) )]
 	internal bool IsInitialized { get; private set; }
 
 	private IView? view;
@@ -71,7 +72,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private RenderPass renderPass;
 	private ImmutableArray<Framebuffer> framebuffers;
 
-	internal UploadContext uploadContext;
+	private UploadContext uploadContext;
 	private GpuSceneData sceneParameters;
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
@@ -85,6 +86,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private ExtDebugUtils? debugUtilsExtension;
 	private KhrSurface? surfaceExtension;
 	private KhrSwapchain? swapchainExtension;
+
 	private bool disposed;
 
 	~VkEngine()
@@ -95,7 +97,9 @@ internal unsafe sealed class VkEngine : IDisposable
 	internal void Initialize( IView view )
 	{
 		if ( IsInitialized )
-			throw new InvalidOperationException( "The VkEngine has already been initialized" );
+			throw new InvalidOperationException( $"This {nameof( VkEngine )} has already been initialized" );
+
+		ObjectDisposedException.ThrowIf( disposed, this );
 
 		this.view = view;
 		view.FramebufferResize += OnFramebufferResize;
@@ -118,6 +122,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void Draw()
 	{
+		if ( !IsInitialized )
+			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
+
+		ObjectDisposedException.ThrowIf( disposed, this );
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
 
@@ -308,6 +316,11 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void WaitForIdle()
 	{
+		if ( !IsInitialized )
+			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
+
+		ObjectDisposedException.ThrowIf( disposed, this );
+
 		Apis.Vk.DeviceWaitIdle( logicalDevice ).Verify();
 	}
 
