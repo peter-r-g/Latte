@@ -712,12 +712,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
 
-			_ = new DescriptorUpdater( logicalDevice, 3 )
+			new DescriptorUpdater( logicalDevice, 2 + 1 )
 				.WriteBuffer( 0, DescriptorType.UniformBuffer, frameData[i].CameraBuffer.Buffer, 0, (ulong)sizeof( GpuCameraData ) )
 				.WriteBuffer( 1, DescriptorType.UniformBufferDynamic, sceneParameterBuffer.Buffer, 0, (ulong)sizeof( GpuSceneData ) )
 				.UpdateAndClear( frameData[i].GlobalDescriptor )
 				.WriteBuffer( 0, DescriptorType.StorageBuffer, frameData[i].ObjectBuffer.Buffer, 0, (ulong)sizeof( GpuObjectData ) * MaxObjects )
-				.Update( frameData[i].ObjectDescriptor );
+				.Update( frameData[i].ObjectDescriptor )
+				.Dispose();
 		}
 	}
 
@@ -840,9 +841,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		texturedMaterial.TextureSet = descriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
 		VkInvalidHandleException.ThrowIfInvalid( texturedMaterial.TextureSet );
 
-		_ = new DescriptorUpdater( logicalDevice, 1 )
+		new DescriptorUpdater( logicalDevice, 2 + 1 )
 			.WriteImage( 0, DescriptorType.CombinedImageSampler, Textures["car08"].TextureView, blockySampler, ImageLayout.ShaderReadOnlyOptimal )
-			.Update( texturedMaterial.TextureSet );
+			.Update( texturedMaterial.TextureSet )
+			.Dispose();
 
 		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag );
 	}
