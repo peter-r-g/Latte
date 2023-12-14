@@ -392,36 +392,6 @@ internal unsafe static class VkInfo
 		}
 	}
 
-	internal static WriteDescriptorSet WriteDescriptorBuffer( DescriptorType type, DescriptorSet descriptorSet, DescriptorBufferInfo bufferInfo,
-		uint binding )
-	{
-		return new WriteDescriptorSet
-		{
-			SType = StructureType.WriteDescriptorSet,
-			PNext = null,
-			DstBinding = binding,
-			DstSet = descriptorSet,
-			DescriptorCount = 1,
-			DescriptorType = type,
-			PBufferInfo = &bufferInfo
-		};
-	}
-
-	internal static WriteDescriptorSet WriteDescriptorImage( DescriptorType type, DescriptorSet descriptorSet, DescriptorImageInfo imageInfo,
-		uint binding )
-	{
-		return new WriteDescriptorSet
-		{
-			SType = StructureType.WriteDescriptorSet,
-			PNext = null,
-			DstBinding = binding,
-			DstSet = descriptorSet,
-			DescriptorCount = 1,
-			DescriptorType = type,
-			PImageInfo = &imageInfo
-		};
-	}
-
 	internal static SamplerCreateInfo Sampler( Filter filters, SamplerAddressMode addressMode = SamplerAddressMode.Repeat )
 	{
 		return new SamplerCreateInfo
