@@ -8,18 +8,22 @@ namespace Latte.NewRenderer.Builders;
 internal unsafe sealed class DescriptorUpdater : IDisposable
 {
 	private readonly Device logicalDevice;
+	private readonly WriteDescriptorSet[] writes = [];
+	private readonly DescriptorBufferInfo* bufferInfos;
+	private readonly DescriptorImageInfo* imageInfos;
 
-	private WriteDescriptorSet[] writes = [];
-	private DescriptorBufferInfo* bufferInfos;
-	private DescriptorImageInfo* imageInfos;
 	private int currentWrites;
 	private bool disposed;
 
-	internal DescriptorUpdater( Device logicalDevice, int initialWrites = 10 )
+	internal DescriptorUpdater( Device logicalDevice, int maxWrites = 10 )
 	{
+		ArgumentOutOfRangeException.ThrowIfNegativeOrZero( maxWrites, nameof( maxWrites ) );
+
 		this.logicalDevice = logicalDevice;
 
-		ReAllocate( initialWrites );
+		writes = new WriteDescriptorSet[maxWrites];
+		bufferInfos = (DescriptorBufferInfo*)Marshal.AllocHGlobal( sizeof( DescriptorBufferInfo ) * maxWrites );
+		imageInfos = (DescriptorImageInfo*)Marshal.AllocHGlobal( sizeof( DescriptorImageInfo ) * maxWrites );
 	}
 
 	~DescriptorUpdater()
@@ -106,29 +110,6 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 	private void AddWrite( WriteDescriptorSet write )
 	{
 		writes[currentWrites++] = write;
-		if ( currentWrites < writes.Length )
-			return;
-
-		ReAllocate( (int)(writes.Length * 1.5f) );
-	}
-
-	private void ReAllocate( int newSize )
-	{
-		var newWrites = new WriteDescriptorSet[newSize];
-		if ( writes is not null && writes.Length > 0 )
-			Array.Copy( writes, newWrites, writes.Length );
-		writes = newWrites;
-
-		if ( (nint)bufferInfos == nint.Zero )
-		{
-			bufferInfos = (DescriptorBufferInfo*)Marshal.AllocHGlobal( sizeof( DescriptorBufferInfo ) * newSize );
-			imageInfos = (DescriptorImageInfo*)Marshal.AllocHGlobal( sizeof( DescriptorImageInfo ) * newSize );
-		}
-		else
-		{
-			bufferInfos = (DescriptorBufferInfo*)Marshal.ReAllocHGlobal( (nint)bufferInfos, sizeof( DescriptorBufferInfo ) * newSize );
-			imageInfos = (DescriptorImageInfo*)Marshal.ReAllocHGlobal( (nint)bufferInfos, sizeof( DescriptorImageInfo ) * newSize );
-		}
 	}
 
 	private void Dispose( bool disposing )
