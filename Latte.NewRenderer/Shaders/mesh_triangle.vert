@@ -1,4 +1,5 @@
 #version 460
+#extension GL_KHR_vulkan_glsl : enable
 
 layout (location = 0) in vec3 vPosition;
 layout (location = 1) in vec3 vNormal;
@@ -26,7 +27,9 @@ layout(std140, set = 0, binding = 2) readonly buffer objectBuffer {
 
 void main()
 {
-	mat4 modelMatrix = ObjectBuffer.objects[gl_BaseInstance].model;
+	int modelIndex = gl_BaseInstance + gl_InstanceIndex;
+	mat4 modelMatrix = ObjectBuffer.objects[modelIndex].model;
+
 	mat4 transformMatrix = (CameraData.viewproj * modelMatrix);
 	gl_Position = transformMatrix * vec4(vPosition, 1.0f);
 

@@ -314,10 +314,28 @@ internal unsafe sealed class VkEngine : IDisposable
 				lastMesh = mesh;
 			}
 
+			var instanceCount = 1;
+			while ( i + instanceCount < count )
+			{
+				var nextObj = Renderables[first + i + instanceCount];
+				var nextMesh = GetMesh( nextObj.MeshName );
+				var nextMaterial = GetMaterial( nextObj.MaterialName );
+
+				if ( !ReferenceEquals( mesh, nextMesh ) )
+					break;
+
+				if ( !ReferenceEquals( material, nextMaterial ) )
+					break;
+
+				instanceCount++;
+			}
+
 			if ( lastMesh.Indices.Length > 0 )
-				Apis.Vk.CmdDrawIndexed( cmd, (uint)mesh.Indices.Length, 1, 0, 0, (uint)i );
+				Apis.Vk.CmdDrawIndexed( cmd, (uint)mesh.Indices.Length, (uint)instanceCount, 0, 0, (uint)i );
 			else
-				Apis.Vk.CmdDraw( cmd, (uint)mesh.Vertices.Length, 1, 0, (uint)i );
+				Apis.Vk.CmdDraw( cmd, (uint)mesh.Vertices.Length, (uint)instanceCount, 0, (uint)i );
+
+			i += instanceCount - 1;
 		}
 	}
 
@@ -851,10 +869,13 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeScene()
 	{
-		Renderables.Add( new Renderable( "car08", TexturedMeshMaterialName )
+		for ( var i = 0; i < 1000; i++ )
 		{
-			Transform = Matrix4x4.Identity
-		} );
+			Renderables.Add( new Renderable( "car08", TexturedMeshMaterialName )
+			{
+				Transform = Matrix4x4.CreateTranslation( Random.Shared.Next( -50, 51 ), 0, Random.Shared.Next( -50, 51 ) )
+			} );
+		}
 	}
 
 	private void OnFramebufferResize( Vector2D<int> newSize )
