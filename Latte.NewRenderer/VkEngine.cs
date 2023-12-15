@@ -30,9 +30,21 @@ internal unsafe sealed class VkEngine : IDisposable
 	private const string DefaultMeshMaterialName = "defaultmesh";
 	private const string TexturedMeshMaterialName = "texturedmesh";
 	private const string SwapchainTag = "swapchain";
+	private const string WireframeTag = "wireframe";
 
 	[MemberNotNullWhen( true, nameof( allocationManager ), nameof( disposalManager ), nameof( descriptorAllocator ) )]
 	internal bool IsInitialized { get; private set; }
+
+	internal bool WireframeEnabled
+	{
+		get => wireframeEnabled;
+		set
+		{
+			wireframeEnabled = value;
+			RecreateWireframe();
+		}
+	}
+	private bool wireframeEnabled;
 
 	private IView? view;
 	private Instance instance;
@@ -334,6 +346,17 @@ internal unsafe sealed class VkEngine : IDisposable
 		SetupSampler();
 	}
 
+	private void RecreateWireframe()
+	{
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		WaitForIdle();
+
+		disposalManager.Dispose( WireframeTag );
+		InitializePipelines();
+		SetupSampler();
+	}
+
 	private void InitializeVulkan()
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
@@ -374,6 +397,10 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithSurface( surface, surfaceExtension )
 			.WithQueueFamilyIndices( queueFamilyIndices )
 			.WithExtensions( KhrSwapchain.ExtensionName )
+			.WithFeatures( new PhysicalDeviceFeatures
+			{
+				FillModeNonSolid = Vk.True
+			} )
 			.WithPNext( new PhysicalDeviceShaderDrawParametersFeatures
 			{
 				SType = StructureType.PhysicalDeviceShaderDrawParametersFeatures,
@@ -746,7 +773,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitFrag ) )
 			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
-			.WithRasterizerState( VkInfo.PipelineRasterizationState( PolygonMode.Fill ) )
+			.WithRasterizerState( VkInfo.PipelineRasterizationState( WireframeEnabled ? PolygonMode.Line : PolygonMode.Fill ) )
 			.WithMultisamplingState( VkInfo.PipelineMultisamplingState() )
 			.WithColorBlendAttachmentState( VkInfo.PipelineColorBlendAttachmentState() )
 			.WithDepthStencilState( VkInfo.PipelineDepthStencilState( true, true, CompareOp.LessOrEqual ) );
@@ -782,12 +809,12 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.DestroyShaderModule( logicalDevice, defaultLitFrag, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, texturedLitFrag, null );
 
-		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag );
-		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag );
-		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag );
-		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag );
-		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, texturedPipelineLayout, null ), SwapchainTag );
-		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, texturedMeshPipeline, null ), SwapchainTag );
+		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
+		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, texturedPipelineLayout, null ), SwapchainTag, WireframeTag );
+		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, texturedMeshPipeline, null ), SwapchainTag, WireframeTag );
 	}
 
 	private void LoadImages()
@@ -835,7 +862,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			.Update( texturedMaterial.TextureSet )
 			.Dispose();
 
-		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag );
+		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag, WireframeTag );
 	}
 
 	private void InitializeScene()

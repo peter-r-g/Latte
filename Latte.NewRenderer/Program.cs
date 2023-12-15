@@ -59,6 +59,9 @@ internal static class Program
 
 		if ( input.Pressed( InputButton.KeyboardEscape ) )
 			window.Close();
+
+		if ( input.Pressed( InputButton.KeyboardE ) )
+			engine.WireframeEnabled = !engine.WireframeEnabled;
 	}
 
 	private static void Render( double dt )
