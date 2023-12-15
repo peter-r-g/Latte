@@ -688,7 +688,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
-		disposalManager.Add( () => disposalManager.Dispose() );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, globalSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, objectSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, singleTextureSetLayout, null ) );
@@ -1113,6 +1112,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		allocationManager?.Dispose();
+		descriptorAllocator?.Dispose();
 		disposalManager?.Dispose();
 		swapchainExtension?.Dispose();
 		debugUtilsExtension?.Dispose();
