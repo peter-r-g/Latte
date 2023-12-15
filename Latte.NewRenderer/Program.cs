@@ -60,6 +60,9 @@ internal static class Program
 		if ( input.Pressed( InputButton.KeyboardEscape ) )
 			window.Close();
 
+		if ( input.Pressed( InputButton.KeyboardTab ) )
+			input.SetCursorMode( input.GetCursorMode() == CursorMode.Visible ? CursorMode.Trapped : CursorMode.Visible );
+
 		if ( input.Pressed( InputButton.KeyboardE ) )
 			engine.WireframeEnabled = !engine.WireframeEnabled;
 	}
@@ -90,11 +93,11 @@ internal static class Program
 		if ( position == Vector2.Zero )
 			return;
 
-		/*if ( Input.GetCursorMode() == CursorMode.Visible || lastMousePosition == default )
+		if ( input.GetCursorMode() == CursorMode.Visible || lastMousePosition == default )
 		{
 			lastMousePosition = position;
 			return;
-		}*/
+		}
 
 		var lookSensitivity = 0.1f;
 		var xOffset = (position.X - lastMousePosition.X) * lookSensitivity;
@@ -105,7 +108,7 @@ internal static class Program
 		Camera.Main.Pitch -= yOffset;
 
 		//We don't want to be able to look behind us by going over our head or under our feet so make sure it stays within these bounds
-		//Camera.Main.Pitch = Math.Clamp( Camera.Main.Pitch, -89.0f, 89.0f );
+		Camera.Main.Pitch = Math.Clamp( Camera.Main.Pitch, -89.0f, 89.0f );
 
 		Camera.Main.Direction = new Vector3(
 			MathF.Cos( Scalar.DegreesToRadians( Camera.Main.Yaw ) ) * MathF.Cos( Scalar.DegreesToRadians( Camera.Main.Pitch ) ),
