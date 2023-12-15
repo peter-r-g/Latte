@@ -295,9 +295,6 @@ internal unsafe sealed class VkEngine : IDisposable
 				lastMaterial = material;
 			}
 
-			var constants = new MeshPushConstants( Vector4.Zero, obj.Transform );
-			Apis.Vk.CmdPushConstants( cmd, material.PipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof( MeshPushConstants ), &constants );
-
 			if ( !ReferenceEquals( lastMesh, obj.MeshName ) )
 			{
 				Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, mesh.VertexBuffer.Buffer, 0 );
@@ -732,19 +729,12 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
 			throw new VkException( "Failed to build default lit fragment shader" );
 
-		var pushConstant = new PushConstantRange
-		{
-			Offset = 0,
-			Size = (uint)Unsafe.SizeOf<MeshPushConstants>(),
-			StageFlags = ShaderStageFlags.VertexBit
-		};
-
 		ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts = stackalloc DescriptorSetLayout[]
 		{
 			globalSetLayout,
 			objectSetLayout
 		};
-		var meshPipelineLayoutCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
+		var meshPipelineLayoutCreateInfo = VkInfo.PipelineLayout( Array.Empty<PushConstantRange>(), descriptorSetLayouts );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineLayoutCreateInfo, null, out var meshPipelineLayout ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
@@ -774,7 +764,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			objectSetLayout,
 			singleTextureSetLayout
 		};
-		var texturedPipelineLayoutCreateInfo = VkInfo.PipelineLayout( new ReadOnlySpan<PushConstantRange>( ref pushConstant ), descriptorSetLayouts );
+		var texturedPipelineLayoutCreateInfo = VkInfo.PipelineLayout( Array.Empty<PushConstantRange>(), descriptorSetLayouts );
 		Apis.Vk.CreatePipelineLayout( logicalDevice, texturedPipelineLayoutCreateInfo, null, out var texturedPipelineLayout ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( texturedPipelineLayout );
 
