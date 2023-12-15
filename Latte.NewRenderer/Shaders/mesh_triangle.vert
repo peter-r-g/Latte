@@ -19,7 +19,7 @@ struct ObjectData{
 };
 
 //all object matrices
-layout(std140, set = 1, binding = 0) readonly buffer objectBuffer {
+layout(std140, set = 0, binding = 2) readonly buffer objectBuffer {
 
 	ObjectData objects[];
 } ObjectBuffer;
