@@ -13,4 +13,9 @@ internal sealed class Material
 		Pipeline = pipeline;
 		PipelineLayout = pipelineLayout;
 	}
+
+	internal Material Clone()
+	{
+		return new Material( Pipeline, PipelineLayout );
+	}
 }

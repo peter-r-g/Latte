@@ -821,29 +821,45 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void LoadImages()
 	{
-		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+		void LoadTexture( string texturePath )
+		{
+			ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		var latteTexture = LatteTexture.FromPath( "/Assets/Car 08/Car8.png" );
-		var texture = new Texture( (uint)latteTexture.Width, (uint)latteTexture.Height, (uint)latteTexture.BytesPerPixel, latteTexture.PixelData );
-		UploadTexture( texture );
+			var latteTexture = LatteTexture.FromPath( texturePath );
+			var texture = new Texture( (uint)latteTexture.Width, (uint)latteTexture.Height, (uint)latteTexture.BytesPerPixel, latteTexture.PixelData );
+			UploadTexture( texture );
 
-		var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Srgb, texture.GpuTexture.Image, ImageAspectFlags.ColorBit );
-		Apis.Vk.CreateImageView( logicalDevice, imageViewInfo, null, out var imageView ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( imageView );
-		texture.TextureView = imageView;
+			var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Srgb, texture.GpuTexture.Image, ImageAspectFlags.ColorBit );
+			Apis.Vk.CreateImageView( logicalDevice, imageViewInfo, null, out var imageView ).Verify();
+			VkInvalidHandleException.ThrowIfInvalid( imageView );
+			texture.TextureView = imageView;
 
-		Textures.Add( "car08", texture );
+			Textures.Add( Path.GetFileNameWithoutExtension( texturePath ).ToLower(), texture );
 
-		disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, imageView, null ) );
+			disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, imageView, null ) );
+		}
+
+		LoadTexture( "/Assets/Car 05/car5.png" );
+		LoadTexture( "/Assets/Car 05/car5_green.png" );
+		LoadTexture( "/Assets/Car 05/car5_grey.png" );
+		LoadTexture( "/Assets/Car 05/car5_police.png" );
+		LoadTexture( "/Assets/Car 05/car5_taxi.png" );
 	}
 
 	private void LoadMeshes()
 	{
-		var model = Model.FromPath( "/Assets/Car 08/Car8.obj" );
-		var carMesh = new Mesh( model.Meshes.First().Vertices, model.Meshes.First().Indices );
+		void LoadMesh( string modelPath )
+		{
+			var model = Model.FromPath( modelPath );
+			var carMesh = new Mesh( model.Meshes.First().Vertices, model.Meshes.First().Indices );
 
-		UploadMesh( carMesh );
-		Meshes.Add( "car08", carMesh );
+			UploadMesh( carMesh );
+			Meshes.Add( Path.GetFileNameWithoutExtension( modelPath ).ToLower(), carMesh );
+		}
+
+		LoadMesh( "/Assets/Car 05/Car5.obj" );
+		LoadMesh( "/Assets/Car 05/Car5_Police.obj" );
+		LoadMesh( "/Assets/Car 05/Car5_Taxi.obj" );
 	}
 
 	private void SetupSampler()
@@ -855,26 +871,43 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.CreateSampler( logicalDevice, samplerInfo, null, out var blockySampler ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( blockySampler );
 
-		var texturedMaterial = GetMaterial( TexturedMeshMaterialName );
-		texturedMaterial.TextureSet = descriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
-		VkInvalidHandleException.ThrowIfInvalid( texturedMaterial.TextureSet );
+		var defaultMaterial = GetMaterial( TexturedMeshMaterialName );
+		foreach ( var (textureName, texture) in Textures )
+		{
+			var texturedMaterial = defaultMaterial.Clone();
+			texturedMaterial.TextureSet = descriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
+			VkInvalidHandleException.ThrowIfInvalid( texturedMaterial.TextureSet );
 
-		new DescriptorUpdater( logicalDevice, 1 )
-			.WriteImage( 0, DescriptorType.CombinedImageSampler, Textures["car08"].TextureView, blockySampler, ImageLayout.ShaderReadOnlyOptimal )
-			.Update( texturedMaterial.TextureSet )
-			.Dispose();
+			new DescriptorUpdater( logicalDevice, 1 )
+				.WriteImage( 0, DescriptorType.CombinedImageSampler, texture.TextureView, blockySampler, ImageLayout.ShaderReadOnlyOptimal )
+				.Update( texturedMaterial.TextureSet )
+				.Dispose();
+
+			Materials.Add( textureName, texturedMaterial );
+			disposalManager.Add( () => RemoveMaterial( textureName ), SwapchainTag, WireframeTag );
+		}
 
 		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag, WireframeTag );
 	}
 
 	private void InitializeScene()
 	{
-		for ( var i = 0; i < 1000; i++ )
+		foreach ( var (materialName, _) in Materials.Skip( 2 ) )
 		{
-			Renderables.Add( new Renderable( "car08", TexturedMeshMaterialName )
+			for ( var i = 0; i < 1000; i++ )
 			{
-				Transform = Matrix4x4.CreateTranslation( Random.Shared.Next( -50, 51 ), 0, Random.Shared.Next( -50, 51 ) )
-			} );
+				var meshName = materialName switch
+				{
+					"car5_police" => "car5_police",
+					"car5_taxi" => "car5_taxi",
+					_ => "car5"
+				};
+
+				Renderables.Add( new Renderable( meshName, materialName )
+				{
+					Transform = Matrix4x4.CreateTranslation( Random.Shared.Next( -250, 251 ), 0, Random.Shared.Next( -250, 251 ) )
+				} );
+			}
 		}
 	}
 
