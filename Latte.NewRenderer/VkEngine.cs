@@ -292,7 +292,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var mesh = GetMesh( obj.MeshName );
 			var material = GetMaterial( obj.MaterialName );
 
-			if ( !ReferenceEquals( lastMaterial, obj.MaterialName ) )
+			if ( !ReferenceEquals( lastMaterial, material ) )
 			{
 				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
 				
@@ -305,7 +305,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				lastMaterial = material;
 			}
 
-			if ( !ReferenceEquals( lastMesh, obj.MeshName ) )
+			if ( !ReferenceEquals( lastMesh, mesh ) )
 			{
 				Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, mesh.VertexBuffer.Buffer, 0 );
 				if ( mesh.Indices.Length > 0 )
@@ -330,7 +330,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				instanceCount++;
 			}
 
-			if ( lastMesh.Indices.Length > 0 )
+			if ( mesh.Indices.Length > 0 )
 				Apis.Vk.CmdDrawIndexed( cmd, (uint)mesh.Indices.Length, (uint)instanceCount, 0, 0, (uint)i );
 			else
 				Apis.Vk.CmdDraw( cmd, (uint)mesh.Vertices.Length, (uint)instanceCount, 0, (uint)i );
