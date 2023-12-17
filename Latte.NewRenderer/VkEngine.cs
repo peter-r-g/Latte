@@ -83,6 +83,9 @@ internal unsafe sealed class VkEngine : IDisposable
 	private RenderPass renderPass;
 	private ImmutableArray<Framebuffer> framebuffers;
 
+	private Sampler linearSampler;
+	private Sampler nearestSampler;
+
 	private UploadContext uploadContext;
 	private GpuSceneData sceneParameters;
 	private AllocatedBuffer sceneParameterBuffer;
@@ -125,7 +128,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializePipelines();
 		LoadImages();
 		LoadMeshes();
-		SetupSampler();
+		InitializeSamplers();
+		SetupTextureSets();
 		InitializeScene();
 
 		IsInitialized = true;
@@ -359,7 +363,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeSwapchain();
 		InitializeFramebuffers();
 		InitializePipelines();
-		SetupSampler();
+		SetupTextureSets();
 	}
 
 	private void RecreateWireframe()
@@ -370,7 +374,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		disposalManager.Dispose( WireframeTag );
 		InitializePipelines();
-		SetupSampler();
+		SetupTextureSets();
 	}
 
 	private void InitializeVulkan()
@@ -862,14 +866,26 @@ internal unsafe sealed class VkEngine : IDisposable
 		LoadMesh( "/Assets/Car 05/Car5_Taxi.obj" );
 	}
 
-	private void SetupSampler()
+	private void InitializeSamplers()
 	{
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
-		ArgumentNullException.ThrowIfNull( descriptorAllocator, nameof( descriptorAllocator ) );
 
-		var samplerInfo = VkInfo.Sampler( Filter.Nearest );
-		Apis.Vk.CreateSampler( logicalDevice, samplerInfo, null, out var blockySampler ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( blockySampler );
+		Apis.Vk.CreateSampler( logicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( linearSampler );
+		this.linearSampler = linearSampler;
+
+		Apis.Vk.CreateSampler( logicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( nearestSampler );
+		this.nearestSampler = nearestSampler;
+
+		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, linearSampler, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, nearestSampler, null ) );
+	}
+
+	private void SetupTextureSets()
+	{
+		ArgumentNullException.ThrowIfNull( descriptorAllocator, nameof( descriptorAllocator ) );
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
 		var defaultMaterial = GetMaterial( TexturedMeshMaterialName );
 		foreach ( var (textureName, texture) in Textures )
@@ -879,15 +895,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			VkInvalidHandleException.ThrowIfInvalid( texturedMaterial.TextureSet );
 
 			new DescriptorUpdater( logicalDevice, 1 )
-				.WriteImage( 0, DescriptorType.CombinedImageSampler, texture.TextureView, blockySampler, ImageLayout.ShaderReadOnlyOptimal )
+				.WriteImage( 0, DescriptorType.CombinedImageSampler, texture.TextureView, nearestSampler, ImageLayout.ShaderReadOnlyOptimal )
 				.Update( texturedMaterial.TextureSet )
 				.Dispose();
 
 			Materials.Add( textureName, texturedMaterial );
 			disposalManager.Add( () => RemoveMaterial( textureName ), SwapchainTag, WireframeTag );
 		}
-
-		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, blockySampler, null ), SwapchainTag, WireframeTag );
 	}
 
 	private void InitializeScene()
