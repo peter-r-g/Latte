@@ -758,11 +758,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\mesh_triangle.vert.spv", out var meshTriangleVert ) )
-			throw new VkException( "Failed to build mesh triangle vertex shader" );
+		var meshTriangleShader = Shader.FromPath( "/Assets/mesh_triangle.vert.spv" );
+		if ( !TryLoadShaderModule( meshTriangleShader.Code.Span, out var meshTriangleVert ) )
+			throw new VkException( "Failed to build mesh triangle shader" );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\default_lit.frag.spv", out var defaultLitFrag ) )
-			throw new VkException( "Failed to build default lit fragment shader" );
+		var defaultLitShader = Shader.FromPath( "/Assets/default_lit.frag.spv" );
+		if ( !TryLoadShaderModule( defaultLitShader.Code.Span, out var defaultLitFrag ) )
+			throw new VkException( "Failed to build default lit shader" );
 
 		ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts = stackalloc DescriptorSetLayout[]
 		{
@@ -789,7 +791,8 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 
-		if ( !TryLoadShaderModule( "E:\\GitHub\\Latte\\Latte.NewRenderer\\Shaders\\textured_lit.frag.spv", out var texturedLitFrag ) )
+		var texturedLitShader = Shader.FromPath( "/Assets/textured_lit.frag.spv" );
+		if ( !TryLoadShaderModule( texturedLitShader.Code.Span, out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
 
 		descriptorSetLayouts = stackalloc DescriptorSetLayout[]
@@ -1145,13 +1148,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		return allocationManager.AllocateBuffer( buffer, memoryFlags );
 	}
 
-	private bool TryLoadShaderModule( string filePath, out ShaderModule shaderModule )
+	private bool TryLoadShaderModule( ReadOnlySpan<byte> shaderBytes, out ShaderModule shaderModule )
 	{
-		var shaderBytes = File.ReadAllBytes( filePath );
-
 		fixed ( byte* shaderBytesPtr = shaderBytes )
 		{
-			var createInfo = VkInfo.ShaderModule( shaderBytes, ShaderModuleCreateFlags.None );
+			var createInfo = VkInfo.ShaderModule( (nuint)shaderBytes.Length, shaderBytesPtr, ShaderModuleCreateFlags.None );
 			var result = Apis.Vk.CreateShaderModule( logicalDevice, createInfo, null, out shaderModule );
 
 			return result == Result.Success;

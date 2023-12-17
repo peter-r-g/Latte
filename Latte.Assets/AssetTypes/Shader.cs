@@ -4,29 +4,15 @@ using Zio;
 
 namespace Latte.Assets;
 
-public sealed class Shader
+[method: SetsRequiredMembers]
+public sealed class Shader( in ReadOnlyMemory<byte> code, string entryPoint )
 {
-	public required ReadOnlyMemory<byte> VertexShaderCode { get; init; }
-	public required string VertexShaderEntryPoint { get; init; }
-	public required ReadOnlyMemory<byte> FragmentShaderCode { get; init; }
-	public required string FragmentShaderEntryPoint { get; init; }
+	public required ReadOnlyMemory<byte> Code { get; init; } = code;
+	public required string EntryPoint { get; init; } = entryPoint;
 
-	[SetsRequiredMembers]
-	public Shader( in ReadOnlyMemory<byte> vertexShaderCode, string vertexShaderEntryPoint,
-		in ReadOnlyMemory<byte> fragmentShaderCode, string fragmentShaderEntryPoint )
+	public static Shader FromPath( in UPath shaderPath, string shaderEntryPoint = "main" )
 	{
-		VertexShaderCode = vertexShaderCode;
-		VertexShaderEntryPoint = vertexShaderEntryPoint;
-		FragmentShaderCode = fragmentShaderCode;
-		FragmentShaderEntryPoint = fragmentShaderEntryPoint;
-	}
-
-	public static Shader FromPath( in UPath vertexShaderPath, in UPath fragmentShaderPath,
-		string vertexShaderEntryPoint = "main", string fragmentShaderEntryPoint = "main" )
-	{
-		var vertexShaderBytes = FileSystems.Assets.ReadAllBytes( vertexShaderPath.ToAbsolute() );
-		var fragmentShaderBytes = FileSystems.Assets.ReadAllBytes( fragmentShaderPath.ToAbsolute() );
-
-		return new Shader( vertexShaderBytes, vertexShaderEntryPoint, fragmentShaderBytes, fragmentShaderEntryPoint );
+		var code = FileSystems.Assets.ReadAllBytes( shaderPath.ToAbsolute() );
+		return new Shader( code, shaderEntryPoint );
 	}
 }

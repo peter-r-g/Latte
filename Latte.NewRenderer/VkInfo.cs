@@ -236,19 +236,16 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static ShaderModuleCreateInfo ShaderModule( byte[] shaderBytes, ShaderModuleCreateFlags flags = ShaderModuleCreateFlags.None )
+	internal static ShaderModuleCreateInfo ShaderModule( nuint byteCount, byte* shaderBytesPtr, ShaderModuleCreateFlags flags = ShaderModuleCreateFlags.None )
 	{
-		fixed ( byte* shaderBytesPtr = shaderBytes )
+		return new ShaderModuleCreateInfo
 		{
-			return new ShaderModuleCreateInfo
-			{
-				SType = StructureType.ShaderModuleCreateInfo,
-				PNext = null,
-				CodeSize = (nuint)shaderBytes.Length,
-				PCode = (uint*)shaderBytesPtr,
-				Flags = flags
-			};
-		}
+			SType = StructureType.ShaderModuleCreateInfo,
+			PNext = null,
+			CodeSize = byteCount,
+			PCode = (uint*)shaderBytesPtr,
+			Flags = flags
+		};
 	}
 
 	internal static BufferCreateInfo Buffer( ulong size, BufferUsageFlags usageFlags, SharingMode sharingMode )
