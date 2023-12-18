@@ -127,9 +127,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeSynchronizationStructures();
 		InitializeDescriptors();
 		InitializePipelines();
+		InitializeSamplers();
 		LoadImages();
 		LoadMeshes();
-		InitializeSamplers();
 		SetupTextureSets();
 		InitializeScene();
 
@@ -819,6 +819,22 @@ internal unsafe sealed class VkEngine : IDisposable
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, texturedMeshPipeline, null ), SwapchainTag, WireframeTag );
 	}
 
+	private void InitializeSamplers()
+	{
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		Apis.Vk.CreateSampler( logicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( linearSampler );
+		this.linearSampler = linearSampler;
+
+		Apis.Vk.CreateSampler( logicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).Verify();
+		VkInvalidHandleException.ThrowIfInvalid( nearestSampler );
+		this.nearestSampler = nearestSampler;
+
+		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, linearSampler, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, nearestSampler, null ) );
+	}
+
 	private void LoadImages()
 	{
 		void LoadTexture( string texturePath )
@@ -861,22 +877,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		LoadMesh( "/Assets/Models/Car 05/Car5_Police.obj" );
 		LoadMesh( "/Assets/Models/Car 05/Car5_Taxi.obj" );
 		LoadMesh( "/Assets/Models/quad.obj" );
-	}
-
-	private void InitializeSamplers()
-	{
-		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
-
-		Apis.Vk.CreateSampler( logicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( linearSampler );
-		this.linearSampler = linearSampler;
-
-		Apis.Vk.CreateSampler( logicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( nearestSampler );
-		this.nearestSampler = nearestSampler;
-
-		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, linearSampler, null ) );
-		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, nearestSampler, null ) );
 	}
 
 	private void SetupTextureSets()
