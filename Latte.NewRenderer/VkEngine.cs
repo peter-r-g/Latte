@@ -759,11 +759,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		var meshTriangleShader = Shader.FromPath( "/Assets/mesh_triangle.vert.spv" );
+		var meshTriangleShader = Shader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" );
 		if ( !TryLoadShaderModule( meshTriangleShader.Code.Span, out var meshTriangleVert ) )
 			throw new VkException( "Failed to build mesh triangle shader" );
 
-		var defaultLitShader = Shader.FromPath( "/Assets/default_lit.frag.spv" );
+		var defaultLitShader = Shader.FromPath( "/Assets/Shaders/default_lit.frag.spv" );
 		if ( !TryLoadShaderModule( defaultLitShader.Code.Span, out var defaultLitFrag ) )
 			throw new VkException( "Failed to build default lit shader" );
 
@@ -797,7 +797,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 
-		var texturedLitShader = Shader.FromPath( "/Assets/textured_lit.frag.spv" );
+		var texturedLitShader = Shader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" );
 		if ( !TryLoadShaderModule( texturedLitShader.Code.Span, out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
 
@@ -857,11 +857,11 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, imageView, null ) );
 		}
 
-		LoadTexture( "/Assets/Car 05/car5.png" );
-		LoadTexture( "/Assets/Car 05/car5_green.png" );
-		LoadTexture( "/Assets/Car 05/car5_grey.png" );
-		LoadTexture( "/Assets/Car 05/car5_police.png" );
-		LoadTexture( "/Assets/Car 05/car5_taxi.png" );
+		LoadTexture( "/Assets/Models/Car 05/car5.png" );
+		LoadTexture( "/Assets/Models/Car 05/car5_green.png" );
+		LoadTexture( "/Assets/Models/Car 05/car5_grey.png" );
+		LoadTexture( "/Assets/Models/Car 05/car5_police.png" );
+		LoadTexture( "/Assets/Models/Car 05/car5_taxi.png" );
 	}
 
 	private void LoadMeshes()
@@ -875,9 +875,9 @@ internal unsafe sealed class VkEngine : IDisposable
 			Meshes.Add( Path.GetFileNameWithoutExtension( modelPath ).ToLower(), carMesh );
 		}
 
-		LoadMesh( "/Assets/Car 05/Car5.obj" );
-		LoadMesh( "/Assets/Car 05/Car5_Police.obj" );
-		LoadMesh( "/Assets/Car 05/Car5_Taxi.obj" );
+		LoadMesh( "/Assets/Models/Car 05/Car5.obj" );
+		LoadMesh( "/Assets/Models/Car 05/Car5_Police.obj" );
+		LoadMesh( "/Assets/Models/Car 05/Car5_Taxi.obj" );
 	}
 
 	private void InitializeSamplers()
