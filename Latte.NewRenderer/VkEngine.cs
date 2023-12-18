@@ -758,12 +758,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( defaultLitShader.Code.Span, out var defaultLitFrag ) )
 			throw new VkException( "Failed to build default lit shader" );
 
-		ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts = stackalloc DescriptorSetLayout[]
-		{
-			frameSetLayout
-		};
-		var meshPipelineLayoutCreateInfo = VkInfo.PipelineLayout( Array.Empty<PushConstantRange>(), descriptorSetLayouts );
-		Apis.Vk.CreatePipelineLayout( logicalDevice, meshPipelineLayoutCreateInfo, null, out var meshPipelineLayout ).Verify();
+		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( logicalDevice );
+		var meshPipelineLayout = pipelineLayoutBuilder
+			.AddDescriptorSetLayout( frameSetLayout )
+			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
 		var meshTriangleEntryPoint = Marshal.StringToHGlobalAnsi( meshTriangleShader.EntryPoint );
@@ -790,13 +788,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( texturedLitShader.Code.Span, out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
 
-		descriptorSetLayouts = stackalloc DescriptorSetLayout[]
-		{
-			frameSetLayout,
-			singleTextureSetLayout
-		};
-		var texturedPipelineLayoutCreateInfo = VkInfo.PipelineLayout( Array.Empty<PushConstantRange>(), descriptorSetLayouts );
-		Apis.Vk.CreatePipelineLayout( logicalDevice, texturedPipelineLayoutCreateInfo, null, out var texturedPipelineLayout ).Verify();
+		var texturedPipelineLayout = pipelineLayoutBuilder
+			.AddDescriptorSetLayout( singleTextureSetLayout )
+			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( texturedPipelineLayout );
 
 		var texturedLitEntryPoint = Marshal.StringToHGlobalAnsi( texturedLitShader.EntryPoint );
