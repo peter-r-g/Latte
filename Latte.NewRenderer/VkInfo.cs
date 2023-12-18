@@ -62,15 +62,17 @@ internal unsafe static class VkInfo
 		}
 	}
 
-	internal static PipelineShaderStageCreateInfo PipelineShaderStage( ShaderStageFlags stage, ShaderModule shaderModule )
+	internal static PipelineShaderStageCreateInfo PipelineShaderStage( ShaderStageFlags stage, ShaderModule shaderModule, byte* entryPointStringPtr = null )
 	{
+		var namePtr = entryPointStringPtr is null ? MainStringPtr : entryPointStringPtr;
+
 		return new PipelineShaderStageCreateInfo
 		{
 			SType = StructureType.PipelineShaderStageCreateInfo,
 			PNext = null,
 			Stage = stage,
 			Module = shaderModule,
-			PName = MainStringPtr,
+			PName = namePtr,
 			PSpecializationInfo = null,
 			Flags = PipelineShaderStageCreateFlags.None
 		};
