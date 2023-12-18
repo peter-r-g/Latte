@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
@@ -26,6 +27,8 @@ internal sealed class VkPhysicalDeviceSelector
 
 	internal VkPhysicalDeviceSelector( Instance instance )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( instance );
+
 		this.instance = instance;
 	}
 
@@ -43,6 +46,8 @@ internal sealed class VkPhysicalDeviceSelector
 
 	internal VkPhysicalDeviceSelector WithSurface( SurfaceKHR surface, KhrSurface surfaceExtension )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( surface );
+
 		this.surface = surface;
 		this.surfaceExtension = surfaceExtension;
 		return this;

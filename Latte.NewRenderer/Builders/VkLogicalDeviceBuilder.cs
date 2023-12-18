@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
@@ -21,6 +22,8 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 
 	internal VkLogicalDeviceBuilder( PhysicalDevice physicalDevice )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( physicalDevice );
+
 		this.physicalDevice = physicalDevice;
 	}
 
@@ -31,6 +34,8 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 
 	internal VkLogicalDeviceBuilder WithSurface( SurfaceKHR surface, KhrSurface? surfaceExtension )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( surface );
+
 		this.surface = surface;
 		this.surfaceExtension = surfaceExtension;
 		return this;
@@ -107,6 +112,10 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 	{
 		if ( disposed )
 			return;
+
+		if ( disposing )
+		{
+		}
 
 		Marshal.FreeHGlobal( pNextPtr );
 		disposed = true;

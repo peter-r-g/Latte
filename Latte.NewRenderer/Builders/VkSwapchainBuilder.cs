@@ -21,6 +21,10 @@ internal sealed class VkSwapchainBuilder
 
 	internal VkSwapchainBuilder( Instance instance, PhysicalDevice physicalDevice, Device logicalDevice )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( instance );
+		VkInvalidHandleException.ThrowIfInvalid( physicalDevice );
+		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
+
 		this.instance = instance;
 		this.physicalDevice = physicalDevice;
 		this.logicalDevice = logicalDevice;
@@ -28,6 +32,8 @@ internal sealed class VkSwapchainBuilder
 
 	internal VkSwapchainBuilder WithSurface( SurfaceKHR surface, KhrSurface? surfaceExtension )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( surface );
+
 		this.surface = surface;
 		this.surfaceExtension = surfaceExtension;
 		return this;

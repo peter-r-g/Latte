@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using System;
 
@@ -22,12 +23,17 @@ internal sealed class VkPipelineBuilder
 
 	internal VkPipelineBuilder( Device logicalDevice, RenderPass renderPass )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
+		VkInvalidHandleException.ThrowIfInvalid( renderPass );
+
 		this.logicalDevice = logicalDevice;
 		this.renderPass = renderPass;
 	}
 
 	internal VkPipelineBuilder WithPipelineLayout( PipelineLayout pipelineLayout )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( pipelineLayout );
+
 		this.pipelineLayout = pipelineLayout;
 		return this;
 	}

@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using System.Collections.Generic;
 
@@ -11,6 +12,8 @@ internal sealed class VkDescriptorSetLayoutBuilder
 
 	internal VkDescriptorSetLayoutBuilder( Device logicalDevice )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
+
 		this.logicalDevice = logicalDevice;
 	}
 

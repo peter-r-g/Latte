@@ -1,4 +1,6 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.NewRenderer.Exceptions;
+using Silk.NET.Vulkan;
+using SixLabors.ImageSharp.Memory;
 using System;
 using System.Runtime.InteropServices;
 using Buffer = Silk.NET.Vulkan.Buffer;
@@ -17,6 +19,7 @@ internal unsafe sealed class VkDescriptorUpdater : IDisposable
 
 	internal VkDescriptorUpdater( Device logicalDevice, int maxWrites = 10 )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero( maxWrites, nameof( maxWrites ) );
 
 		this.logicalDevice = logicalDevice;
@@ -33,6 +36,8 @@ internal unsafe sealed class VkDescriptorUpdater : IDisposable
 
 	internal VkDescriptorUpdater WriteBuffer( uint binding, DescriptorType type, Buffer buffer, ulong offset, ulong size )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( buffer );
+
 		bufferInfos[currentWrites] = new DescriptorBufferInfo
 		{
 			Buffer = buffer,
@@ -55,6 +60,9 @@ internal unsafe sealed class VkDescriptorUpdater : IDisposable
 
 	internal VkDescriptorUpdater WriteImage( uint binding, DescriptorType type, ImageView imageView, Sampler sampler, ImageLayout layout )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( imageView );
+		VkInvalidHandleException.ThrowIfInvalid( sampler );
+
 		imageInfos[currentWrites] = new DescriptorImageInfo
 		{
 			ImageLayout = layout,
@@ -86,6 +94,8 @@ internal unsafe sealed class VkDescriptorUpdater : IDisposable
 
 	internal unsafe VkDescriptorUpdater Update( DescriptorSet descriptorSet )
 	{
+		VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
+
 		for ( var i = 0; i < currentWrites; i++ )
 		{
 			writes[i] = writes[i] with
