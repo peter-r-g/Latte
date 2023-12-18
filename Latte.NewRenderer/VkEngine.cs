@@ -786,8 +786,6 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		Marshal.FreeHGlobal( defaultLitEntryPoint );
 
-		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
-
 		var texturedLitShader = Shader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" );
 		if ( !TryLoadShaderModule( texturedLitShader.Code.Span, out var texturedLitFrag ) )
 			throw new VkException( "Failed to build textured lit shader" );
@@ -814,14 +812,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		Marshal.FreeHGlobal( meshTriangleEntryPoint );
 		Marshal.FreeHGlobal( texturedLitEntryPoint );
 
+		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, texturedPipelineLayout );
+		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
+		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
 
 		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, defaultLitFrag, null );
 		Apis.Vk.DestroyShaderModule( logicalDevice, texturedLitFrag, null );
 
-		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
-		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, texturedPipelineLayout, null ), SwapchainTag, WireframeTag );
