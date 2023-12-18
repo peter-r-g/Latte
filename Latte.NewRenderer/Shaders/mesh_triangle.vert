@@ -28,7 +28,7 @@ layout(std140, set = 0, binding = 2) readonly buffer objectBuffer {
 void main()
 {
 	mat4 modelMatrix = ObjectBuffer.objects[gl_InstanceIndex].model;
-	mat4 transformMatrix = (CameraData.viewproj * modelMatrix);
+	mat4 transformMatrix = CameraData.viewproj * modelMatrix;
 
 	gl_Position = transformMatrix * vec4(vPosition, 1.0f);
 	outColor = vColor;

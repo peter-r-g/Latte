@@ -277,8 +277,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		};
 		allocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData, true );
 
-		var framed = frameNumber / 120f;
-		sceneParameters.AmbientColor = new Vector4( MathF.Sin( framed ), 0, MathF.Cos( framed ), 1 );
 		var frameIndex = frameNumber % frameData.Length;
 		allocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
 

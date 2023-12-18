@@ -21,6 +21,6 @@ layout(set = 1, binding = 0) uniform sampler2D tex1;
 
 void main()
 {
-	vec3 color = texture(tex1,texCoord).xyz;
-	outFragColor = vec4(color + SceneData.ambientColor.xyz,1.0f);
+	vec3 color = texture(tex1, texCoord).xyz;
+	outFragColor = vec4(color, 1.0f);
 }
