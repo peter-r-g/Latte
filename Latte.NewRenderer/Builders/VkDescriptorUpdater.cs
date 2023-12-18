@@ -5,7 +5,7 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Latte.NewRenderer.Builders;
 
-internal unsafe sealed class DescriptorUpdater : IDisposable
+internal unsafe sealed class VkDescriptorUpdater : IDisposable
 {
 	private readonly Device logicalDevice;
 	private readonly WriteDescriptorSet[] writes = [];
@@ -15,7 +15,7 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 	private int currentWrites;
 	private bool disposed;
 
-	internal DescriptorUpdater( Device logicalDevice, int maxWrites = 10 )
+	internal VkDescriptorUpdater( Device logicalDevice, int maxWrites = 10 )
 	{
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero( maxWrites, nameof( maxWrites ) );
 
@@ -26,12 +26,12 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 		imageInfos = (DescriptorImageInfo*)Marshal.AllocHGlobal( sizeof( DescriptorImageInfo ) * maxWrites );
 	}
 
-	~DescriptorUpdater()
+	~VkDescriptorUpdater()
 	{
 		Dispose( disposing: false );
 	}
 
-	internal DescriptorUpdater WriteBuffer( uint binding, DescriptorType type, Buffer buffer, ulong offset, ulong size )
+	internal VkDescriptorUpdater WriteBuffer( uint binding, DescriptorType type, Buffer buffer, ulong offset, ulong size )
 	{
 		bufferInfos[currentWrites] = new DescriptorBufferInfo
 		{
@@ -53,7 +53,7 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 		return this;
 	}
 
-	internal DescriptorUpdater WriteImage( uint binding, DescriptorType type, ImageView imageView, Sampler sampler, ImageLayout layout )
+	internal VkDescriptorUpdater WriteImage( uint binding, DescriptorType type, ImageView imageView, Sampler sampler, ImageLayout layout )
 	{
 		imageInfos[currentWrites] = new DescriptorImageInfo
 		{
@@ -75,7 +75,7 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 		return this;
 	}
 
-	internal DescriptorUpdater Clear()
+	internal VkDescriptorUpdater Clear()
 	{
 		for ( var i = 0; i < currentWrites; i++ )
 			writes[i] = default;
@@ -84,7 +84,7 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 		return this;
 	}
 
-	internal unsafe DescriptorUpdater Update( DescriptorSet descriptorSet )
+	internal unsafe VkDescriptorUpdater Update( DescriptorSet descriptorSet )
 	{
 		for ( var i = 0; i < currentWrites; i++ )
 		{
@@ -100,7 +100,7 @@ internal unsafe sealed class DescriptorUpdater : IDisposable
 		return this;
 	}
 
-	internal DescriptorUpdater UpdateAndClear( DescriptorSet descriptorSet )
+	internal VkDescriptorUpdater UpdateAndClear( DescriptorSet descriptorSet )
 	{
 		Update( descriptorSet );
 		Clear();
