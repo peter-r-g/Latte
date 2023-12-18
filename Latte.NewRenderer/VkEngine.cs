@@ -860,6 +860,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		LoadMesh( "/Assets/Models/Car 05/Car5.obj" );
 		LoadMesh( "/Assets/Models/Car 05/Car5_Police.obj" );
 		LoadMesh( "/Assets/Models/Car 05/Car5_Taxi.obj" );
+		LoadMesh( "/Assets/Models/quad.obj" );
 	}
 
 	private void InitializeSamplers()
@@ -902,6 +903,11 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeScene()
 	{
+		Renderables.Add( new Renderable( "quad", DefaultMeshMaterialName )
+		{
+			Transform = Matrix4x4.CreateScale( 1000, 0, 1000 )
+		} );
+
 		foreach ( var (materialName, _) in Materials.Skip( 2 ) )
 		{
 			for ( var i = 0; i < 1000; i++ )
