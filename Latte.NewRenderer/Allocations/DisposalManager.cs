@@ -74,6 +74,10 @@ internal sealed class DisposalManager : IDisposable
 		if ( disposed )
 			return;
 
+		if ( disposing )
+		{
+		}
+
 		for ( var i = disposals.Count - 1; i >= 0; i-- )
 			disposals[i]();
 
