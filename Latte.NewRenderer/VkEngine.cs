@@ -699,28 +699,19 @@ internal unsafe sealed class VkEngine : IDisposable
 			new( DescriptorType.CombinedImageSampler, 4 )
 		] );
 
-		var cameraBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit, 0 );
-		var sceneBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 1 );
-		var objectBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit, 2 );
-		var textureBinding = VkInfo.DescriptorSetLayoutBinding( DescriptorType.CombinedImageSampler, ShaderStageFlags.FragmentBit, 0 );
+		var layoutBuilder = new VkDescriptorSetLayoutBuilder( logicalDevice );
 
-		var setLayoutCreateInfo = VkInfo.DescriptorSetLayout( stackalloc DescriptorSetLayoutBinding[]
-		{
-			cameraBinding,
-			sceneBinding,
-			objectBinding
-		} );
-		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out var tempLayout ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( tempLayout );
-		frameSetLayout = tempLayout;
+		frameSetLayout = layoutBuilder
+			.AddBinding( 0, DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit )
+			.AddBinding( 1, DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit )
+			.AddBinding( 2, DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit )
+			.Build();
+		VkInvalidHandleException.ThrowIfInvalid( frameSetLayout );
 
-		setLayoutCreateInfo = VkInfo.DescriptorSetLayout( stackalloc DescriptorSetLayoutBinding[]
-		{
-			textureBinding
-		} );
-		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, setLayoutCreateInfo, null, out tempLayout ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( tempLayout );
-		singleTextureSetLayout = tempLayout;
+		singleTextureSetLayout = layoutBuilder.Clear()
+			.AddBinding( 0, DescriptorType.CombinedImageSampler, ShaderStageFlags.FragmentBit )
+			.Build();
+		VkInvalidHandleException.ThrowIfInvalid( singleTextureSetLayout );
 
 		var sceneParameterBufferSize = (ulong)frameData.Length * PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) );
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
