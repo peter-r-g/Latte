@@ -7,22 +7,13 @@ namespace Latte.Assets;
 /// <summary>
 /// Represents a 3D model.
 /// </summary>
-public sealed class Model
+[method: SetsRequiredMembers]
+public sealed class Model( in ImmutableArray<Mesh> meshes )
 {
 	/// <summary>
 	/// All of the meshes that are a part of the model.
 	/// </summary>
-	public required ImmutableArray<Mesh> Meshes { get; init; }
-
-	/// <summary>
-	/// Initializes a new instance of <see cref="Model"/>.
-	/// </summary>
-	/// <param name="meshes">The meshes of the model.</param>
-	[SetsRequiredMembers]
-	public Model( in ImmutableArray<Mesh> meshes )
-	{
-		Meshes = meshes;
-	}
+	public required ImmutableArray<Mesh> Meshes { get; init; } = meshes;
 
 	/// <summary>
 	/// Returns a new model that is loaded from disk.
