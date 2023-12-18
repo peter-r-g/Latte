@@ -91,7 +91,7 @@ internal sealed class VkInstanceBuilder
 		if ( useDefaultDebugMessenger )
 		{
 			if ( !Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( instance, out debugUtilsExtension ) )
-				throw new InvalidOperationException( $"Failed to get the {nameof( ExtDebugUtils )} extension" );
+				throw new VkException( $"Failed to get the {nameof( ExtDebugUtils )} extension" );
 
 			var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
 			PopulateDebugMessengerCreateInfo( ref debugCreateInfo );

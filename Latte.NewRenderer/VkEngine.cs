@@ -112,7 +112,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	internal void Initialize( IView view )
 	{
 		if ( IsInitialized )
-			throw new InvalidOperationException( $"This {nameof( VkEngine )} has already been initialized" );
+			throw new VkException( $"This {nameof( VkEngine )} has already been initialized" );
 
 		ObjectDisposedException.ThrowIf( disposed, this );
 

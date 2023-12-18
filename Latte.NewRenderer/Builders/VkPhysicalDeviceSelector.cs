@@ -176,11 +176,11 @@ internal sealed class VkPhysicalDeviceSelector
 		{
 			var requiredValueObj = featuresFields[i].GetValue( requiredFeatures );
 			if ( requiredValueObj is not Bool32 requiredValue )
-				throw new InvalidCastException();
+				throw new VkException( $"Failed to get {nameof( PhysicalDeviceFeatures )}.{featuresFields[i].Name} required value" );
 
 			var supportedValueObj = featuresFields[i].GetValue( physicalDeviceFeatures );
 			if ( supportedValueObj is not Bool32 supportedValue )
-				throw new InvalidCastException();
+				throw new VkException( $"Failed to get {nameof( PhysicalDeviceFeatures )}.{featuresFields[i].Name} supported value" );
 
 			if ( requiredValue && !supportedValue )
 				return false;

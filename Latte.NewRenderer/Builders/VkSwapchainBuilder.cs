@@ -81,10 +81,10 @@ internal sealed class VkSwapchainBuilder
 
 		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( physicalDevice, surface, out var capabilities ).Verify();
 		if ( extent.Width < capabilities.MinImageExtent.Width || extent.Height < capabilities.MinImageExtent.Height )
-			throw new InvalidOperationException( $"The chosen physical device does not support the extent \"{extent}\"" );
+			throw new VkException( $"The chosen physical device does not support the extent \"{extent}\"" );
 
 		if ( extent.Width > capabilities.MaxImageExtent.Width || extent.Height > capabilities.MaxImageExtent.Height )
-			throw new InvalidOperationException( $"The chosen physical device does not support the extent \"{extent}\"" );
+			throw new VkException( $"The chosen physical device does not support the extent \"{extent}\"" );
 
 		uint formatCount;
 		surfaceExtension.GetPhysicalDeviceSurfaceFormats( physicalDevice, surface, &formatCount, null ).Verify();
@@ -104,7 +104,7 @@ internal sealed class VkSwapchainBuilder
 		}
 
 		if ( !hasFormat )
-			throw new InvalidOperationException( $"The chosen physical device does not support the format \"{swapchainFormat}\"" );
+			throw new VkException( $"The chosen physical device does not support the format \"{swapchainFormat}\"" );
 		var surfaceImageFormat = surfaceFormat.Format;
 
 		uint presentModeCount;
@@ -123,7 +123,7 @@ internal sealed class VkSwapchainBuilder
 		}
 
 		if ( !hasPresentMode )
-			throw new InvalidOperationException( $"The chosen physical device does not support the present mode \"{presentMode}\"" );
+			throw new VkException( $"The chosen physical device does not support the present mode \"{presentMode}\"" );
 
 		// FIXME: Get proper image count.
 		var imageCount = capabilities.MinImageCount;
