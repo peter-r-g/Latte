@@ -18,9 +18,10 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Mesh = Latte.NewRenderer.Temp.Mesh;
+using LatteShader = Latte.Assets.Shader;
 using LatteTexture = Latte.Assets.Texture;
+using Shader = Latte.NewRenderer.Temp.Shader;
 using Texture = Latte.NewRenderer.Temp.Texture;
-using System.Runtime.InteropServices;
 
 namespace Latte.NewRenderer;
 
@@ -95,6 +96,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
+	private readonly Dictionary<string, Shader> Shaders = [];
 	private readonly Dictionary<string, Texture> Textures = [];
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 
@@ -748,13 +750,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		var meshTriangleShader = Shader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" );
-		if ( !TryLoadShaderModule( meshTriangleShader.Code.Span, out var meshTriangleVert ) )
-			throw new VkException( "Failed to build mesh triangle shader" );
-
-		var defaultLitShader = Shader.FromPath( "/Assets/Shaders/default_lit.frag.spv" );
-		if ( !TryLoadShaderModule( defaultLitShader.Code.Span, out var defaultLitFrag ) )
-			throw new VkException( "Failed to build default lit shader" );
+		var meshTriangleShader = CreateShader( "mesh_triangle.vert", LatteShader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" ) );
+		var defaultLitShader = CreateShader( "default_lit.frag", LatteShader.FromPath( "/Assets/Shaders/default_lit.frag.spv" ) );
 
 		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( logicalDevice, 0, 2 );
 		var meshPipelineLayout = pipelineLayoutBuilder
@@ -762,15 +759,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
-		var meshTriangleEntryPoint = Marshal.StringToHGlobalAnsi( meshTriangleShader.EntryPoint );
-		var defaultLitEntryPoint = Marshal.StringToHGlobalAnsi( defaultLitShader.EntryPoint );
-
 		var pipelineBuilder = new VkPipelineBuilder( logicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
 			.WithViewport( new Viewport( 0, 0, view.Size.X, view.Size.Y, 0, 1 ) )
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert, (byte*)meshTriangleEntryPoint ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitFrag, (byte*)defaultLitEntryPoint ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module, (byte*)meshTriangleShader.EntryPointPtr ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitShader.Module, (byte*)defaultLitShader.EntryPointPtr ) )
 			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
 			.WithRasterizerState( VkInfo.PipelineRasterizationState( WireframeEnabled ? PolygonMode.Line : PolygonMode.Fill ) )
@@ -780,38 +774,29 @@ internal unsafe sealed class VkEngine : IDisposable
 		var meshPipeline = pipelineBuilder.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipeline );
 
-		Marshal.FreeHGlobal( defaultLitEntryPoint );
-
-		var texturedLitShader = Shader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" );
-		if ( !TryLoadShaderModule( texturedLitShader.Code.Span, out var texturedLitFrag ) )
-			throw new VkException( "Failed to build textured lit shader" );
+		var texturedLitShader = CreateShader( "textured_lit.frag", LatteShader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" ) );
 
 		var texturedPipelineLayout = pipelineLayoutBuilder
 			.AddDescriptorSetLayout( singleTextureSetLayout )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( texturedPipelineLayout );
 
-		var texturedLitEntryPoint = Marshal.StringToHGlobalAnsi( texturedLitShader.EntryPoint );
-
 		var texturedMeshPipeline = pipelineBuilder
 			.WithPipelineLayout( texturedPipelineLayout )
 			.ClearShaderStages()
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleVert, (byte*)meshTriangleEntryPoint ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, texturedLitFrag, (byte*)texturedLitEntryPoint ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module, (byte*)meshTriangleShader.EntryPointPtr ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, texturedLitShader.Module, (byte*)texturedLitShader.EntryPointPtr ) )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( texturedMeshPipeline );
-
-		Marshal.FreeHGlobal( meshTriangleEntryPoint );
-		Marshal.FreeHGlobal( texturedLitEntryPoint );
 
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, texturedPipelineLayout );
 		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
 
-		Apis.Vk.DestroyShaderModule( logicalDevice, meshTriangleVert, null );
-		Apis.Vk.DestroyShaderModule( logicalDevice, defaultLitFrag, null );
-		Apis.Vk.DestroyShaderModule( logicalDevice, texturedLitFrag, null );
+		disposalManager.Add( meshTriangleShader.Dispose );
+		disposalManager.Add( defaultLitShader.Dispose );
+		disposalManager.Add( texturedLitShader.Dispose );
 
 		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
@@ -946,6 +931,27 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.WaitForFences( logicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).Verify();
 		Apis.Vk.ResetFences( logicalDevice, 1, uploadContext.UploadFence ).Verify();
 		Apis.Vk.ResetCommandPool( logicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).Verify();
+	}
+
+	private Shader CreateShader( string name, LatteShader latteShader )
+	{
+		if ( Shaders.ContainsKey( name ) )
+			throw new ArgumentException( $"A shader with the name \"{name}\" already exists", nameof( name ) );
+
+		var shader = new Shader( logicalDevice, latteShader.Code, latteShader.EntryPoint );
+		if ( !TryLoadShaderModule( shader.Code.Span, out var shaderModule ) )
+			throw new VkException( $"Failed to load {name} shader" );
+
+		shader.Module = shaderModule;
+		return shader;
+	}
+
+	private Shader GetShader( string name )
+	{
+		if ( Shaders.TryGetValue( name, out var shader ) )
+			return shader;
+
+		throw new ArgumentException( $"A shader with the name \"{name}\" does not exist", nameof( name ) );
 	}
 
 	private Material CreateMaterial( string name, Pipeline pipeline, PipelineLayout pipelineLayout )
