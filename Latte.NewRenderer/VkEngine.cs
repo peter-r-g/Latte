@@ -128,6 +128,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeFramebuffers();
 		InitializeSynchronizationStructures();
 		InitializeDescriptors();
+		InitializeShaders();
 		InitializePipelines();
 		InitializeSamplers();
 		LoadImages();
@@ -745,13 +746,27 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 	}
 
+	private void InitializeShaders()
+	{
+		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
+
+		var meshTriangleShader = CreateShader( "mesh_triangle.vert", LatteShader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" ) );
+		var defaultLitShader = CreateShader( "default_lit.frag", LatteShader.FromPath( "/Assets/Shaders/default_lit.frag.spv" ) );
+		var texturedLitShader = CreateShader( "textured_lit.frag", LatteShader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" ) );
+
+		disposalManager.Add( meshTriangleShader.Dispose );
+		disposalManager.Add( defaultLitShader.Dispose );
+		disposalManager.Add( texturedLitShader.Dispose );
+	}
+
 	private void InitializePipelines()
 	{
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
 
-		var meshTriangleShader = CreateShader( "mesh_triangle.vert", LatteShader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" ) );
-		var defaultLitShader = CreateShader( "default_lit.frag", LatteShader.FromPath( "/Assets/Shaders/default_lit.frag.spv" ) );
+		var meshTriangleShader = GetShader( "mesh_triangle.vert" );
+		var defaultLitShader = GetShader( "default_lit.frag" );
+		var texturedLitShader = GetShader( "textured_lit.frag" );
 
 		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( logicalDevice, 0, 2 );
 		var meshPipelineLayout = pipelineLayoutBuilder
@@ -774,8 +789,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		var meshPipeline = pipelineBuilder.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipeline );
 
-		var texturedLitShader = CreateShader( "textured_lit.frag", LatteShader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" ) );
-
 		var texturedPipelineLayout = pipelineLayoutBuilder
 			.AddDescriptorSetLayout( singleTextureSetLayout )
 			.Build();
@@ -793,10 +806,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, texturedPipelineLayout );
 		disposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
-
-		disposalManager.Add( meshTriangleShader.Dispose );
-		disposalManager.Add( defaultLitShader.Dispose );
-		disposalManager.Add( texturedLitShader.Dispose );
 
 		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
@@ -943,6 +952,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			throw new VkException( $"Failed to load {name} shader" );
 
 		shader.Module = shaderModule;
+		Shaders.Add( name, shader );
 		return shader;
 	}
 
