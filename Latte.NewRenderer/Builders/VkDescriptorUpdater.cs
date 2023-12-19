@@ -85,9 +85,6 @@ internal unsafe sealed class VkDescriptorUpdater : IDisposable
 
 	internal VkDescriptorUpdater Clear()
 	{
-		for ( var i = 0; i < currentWrites; i++ )
-			writes[i] = default;
-
 		currentWrites = 0;
 		return this;
 	}
