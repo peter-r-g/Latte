@@ -6,7 +6,6 @@ namespace Latte.NewRenderer;
 
 internal unsafe static class VkInfo
 {
-	// FIXME: Is there a better way to do this?
 	private static readonly byte* MainStringPtr = (byte*)SilkMarshal.StringToPtr( "main" );
 
 	internal static CommandPoolCreateInfo CommandPool( uint queueFamily, CommandPoolCreateFlags flags = CommandPoolCreateFlags.None )

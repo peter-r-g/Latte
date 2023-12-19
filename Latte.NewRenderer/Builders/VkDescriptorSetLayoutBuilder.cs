@@ -1,38 +1,44 @@
 ﻿using Latte.NewRenderer.Exceptions;
 using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
-using System.Collections.Generic;
+using System;
 
 namespace Latte.NewRenderer.Builders;
 
 internal sealed class VkDescriptorSetLayoutBuilder
 {
 	private readonly Device logicalDevice;
-	private readonly List<DescriptorSetLayoutBinding> bindings = [];
+	private readonly DescriptorSetLayoutBinding[] bindings;
 
-	internal VkDescriptorSetLayoutBuilder( Device logicalDevice )
+	private int currentBindings;
+
+	internal VkDescriptorSetLayoutBuilder( Device logicalDevice, int maxBindings )
 	{
 		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
 
 		this.logicalDevice = logicalDevice;
+		bindings = new DescriptorSetLayoutBinding[maxBindings];
 	}
 
 	internal VkDescriptorSetLayoutBuilder AddBinding( uint binding, DescriptorType type, ShaderStageFlags shaderStageFlags )
 	{
-		bindings.Add( VkInfo.DescriptorSetLayoutBinding( type, shaderStageFlags, binding ) );
+		if ( currentBindings >= bindings.Length )
+			throw new InvalidOperationException( "The maximum amount of descriptor set layout bindings has been exceeded" );
+
+		bindings[currentBindings++] = VkInfo.DescriptorSetLayoutBinding( type, shaderStageFlags, binding );
 		return this;
 	}
 
 	internal VkDescriptorSetLayoutBuilder Clear()
 	{
-		bindings.Clear();
+		currentBindings = 0;
 		return this;
 	}
 
 	internal unsafe DescriptorSetLayout Build()
 	{
-		// FIXME: Don't create a new array for this.
-		var layoutInfo = VkInfo.DescriptorSetLayout( bindings.ToArray() );
+		var bindingsSpan = bindings.AsSpan()[..currentBindings];
+		var layoutInfo = VkInfo.DescriptorSetLayout( bindingsSpan );
 
 		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, layoutInfo, null, out var layout ).Verify();
 		return layout;

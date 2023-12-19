@@ -697,7 +697,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			new( DescriptorType.CombinedImageSampler, 4 )
 		] );
 
-		var layoutBuilder = new VkDescriptorSetLayoutBuilder( logicalDevice );
+		var layoutBuilder = new VkDescriptorSetLayoutBuilder( logicalDevice, 3 );
 
 		frameSetLayout = layoutBuilder
 			.AddBinding( 0, DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit )
@@ -756,7 +756,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !TryLoadShaderModule( defaultLitShader.Code.Span, out var defaultLitFrag ) )
 			throw new VkException( "Failed to build default lit shader" );
 
-		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( logicalDevice );
+		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( logicalDevice, 0, 2 );
 		var meshPipelineLayout = pipelineLayoutBuilder
 			.AddDescriptorSetLayout( frameSetLayout )
 			.Build();

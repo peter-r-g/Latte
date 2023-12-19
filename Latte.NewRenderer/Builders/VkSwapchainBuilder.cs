@@ -125,7 +125,6 @@ internal sealed class VkSwapchainBuilder
 		if ( !hasPresentMode )
 			throw new VkException( $"The chosen physical device does not support the present mode \"{presentMode}\"" );
 
-		// FIXME: Get proper image count.
 		var imageCount = capabilities.MinImageCount;
 
 		var createInfo = new SwapchainCreateInfoKHR
