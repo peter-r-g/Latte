@@ -22,7 +22,7 @@ internal static class CursorModeExtensions
 			CursorMode.Visible => CursorModeValue.CursorNormal,
 			CursorMode.Hidden => CursorModeValue.CursorHidden,
 			CursorMode.Trapped => CursorModeValue.CursorDisabled,
-			_ => throw new ArgumentException( $"Received unknown cursor mode \"{cursorMode}\"", nameof(cursorMode) )
+			_ => throw new ArgumentException( $"Received unknown cursor mode \"{cursorMode}\"", nameof( cursorMode ) )
 		};
 	}
 }

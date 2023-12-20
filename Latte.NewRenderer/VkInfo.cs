@@ -44,7 +44,7 @@ internal unsafe static class VkInfo
 
 	internal static SubmitInfo SubmitInfo( ReadOnlySpan<CommandBuffer> commandBuffers )
 	{
-		fixed( CommandBuffer* commandBuffersPtr = commandBuffers )
+		fixed ( CommandBuffer* commandBuffersPtr = commandBuffers )
 		{
 			return new SubmitInfo
 			{
@@ -161,7 +161,7 @@ internal unsafe static class VkInfo
 	internal static PipelineLayoutCreateInfo PipelineLayout( ReadOnlySpan<PushConstantRange> pushConstantRanges, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts )
 	{
 		fixed ( PushConstantRange* pushConstantRangesPtr = pushConstantRanges )
-		fixed( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
+		fixed ( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
 		{
 			return new PipelineLayoutCreateInfo
 			{
@@ -200,7 +200,7 @@ internal unsafe static class VkInfo
 
 	internal static FramebufferCreateInfo Framebuffer( RenderPass renderPass, uint width, uint height, ReadOnlySpan<ImageView> attachments )
 	{
-		fixed( ImageView* attachmentsPtr = attachments )
+		fixed ( ImageView* attachmentsPtr = attachments )
 		{
 			return new FramebufferCreateInfo
 			{
@@ -334,7 +334,7 @@ internal unsafe static class VkInfo
 	internal static DescriptorPoolCreateInfo DescriptorPool( uint maxSets, ReadOnlySpan<DescriptorPoolSize> poolSizes,
 		DescriptorPoolCreateFlags flags = DescriptorPoolCreateFlags.None )
 	{
-		fixed( DescriptorPoolSize* poolSizesPtr = poolSizes )
+		fixed ( DescriptorPoolSize* poolSizesPtr = poolSizes )
 		{
 			return new DescriptorPoolCreateInfo
 			{
@@ -350,7 +350,7 @@ internal unsafe static class VkInfo
 
 	internal static DescriptorSetLayoutCreateInfo DescriptorSetLayout( ReadOnlySpan<DescriptorSetLayoutBinding> bindings )
 	{
-		fixed( DescriptorSetLayoutBinding* bindingsPtr = bindings )
+		fixed ( DescriptorSetLayoutBinding* bindingsPtr = bindings )
 		{
 			return new DescriptorSetLayoutCreateInfo
 			{
@@ -377,7 +377,7 @@ internal unsafe static class VkInfo
 
 	internal static DescriptorSetAllocateInfo AllocateDescriptorSet( DescriptorPool descriptorPool, ReadOnlySpan<DescriptorSetLayout> descriptorSetLayouts )
 	{
-		fixed( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
+		fixed ( DescriptorSetLayout* descriptorSetLayoutsPtr = descriptorSetLayouts )
 		{
 			return new DescriptorSetAllocateInfo
 			{

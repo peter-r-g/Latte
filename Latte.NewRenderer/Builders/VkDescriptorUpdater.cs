@@ -101,7 +101,7 @@ internal unsafe sealed class VkDescriptorUpdater : IDisposable
 			};
 		}
 
-		fixed( WriteDescriptorSet* writesPtr = writes )
+		fixed ( WriteDescriptorSet* writesPtr = writes )
 			Apis.Vk.UpdateDescriptorSets( logicalDevice, (uint)currentWrites, writesPtr, null );
 
 		return this;

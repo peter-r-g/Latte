@@ -194,7 +194,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			}
 		};
 
-		fixed( ClearValue* clearValuesPtr = clearValues )
+		fixed ( ClearValue* clearValuesPtr = clearValues )
 		{
 			var rpBeginInfo = new RenderPassBeginInfo
 			{
@@ -301,7 +301,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			if ( !ReferenceEquals( lastMaterial, material ) )
 			{
 				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
-				
+
 				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
 				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.FrameDescriptor, 1, &uniformOffset );
 
@@ -516,7 +516,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		var poolCreateInfo = VkInfo.CommandPool( graphicsQueueFamily, CommandPoolCreateFlags.ResetCommandBufferBit );
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
-		{			
+		{
 			Apis.Vk.CreateCommandPool( logicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
 			var bufferAllocateInfo = VkInfo.AllocateCommandBuffer( commandPool, 1, CommandBufferLevel.Primary );
 			Apis.Vk.AllocateCommandBuffers( logicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
@@ -687,7 +687,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		uploadContext.UploadFence = uploadFence;
 		disposalManager.Add( () => Apis.Vk.DestroyFence( logicalDevice, uploadFence, null ) );
 	}
-	
+
 	private void InitializeDescriptors()
 	{
 		ArgumentNullException.ThrowIfNull( disposalManager, nameof( disposalManager ) );
@@ -1070,7 +1070,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( logicalDevice, indexBuffer.Buffer, null ) );
 		}
 	}
-	
+
 	private void UploadTexture( Texture texture )
 	{
 		ArgumentNullException.ThrowIfNull( allocationManager, nameof( allocationManager ) );

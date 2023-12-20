@@ -28,7 +28,7 @@ internal sealed class DisposalManager : IDisposable
 			if ( !taggedDisposals.ContainsKey( tag ) )
 				taggedDisposals.Add( tag, [] );
 
-			
+
 			taggedDisposals[tag].Add( weakCb );
 		}
 	}

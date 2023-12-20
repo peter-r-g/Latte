@@ -83,7 +83,7 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 			};
 		}
 
-		fixed( PhysicalDeviceFeatures* featuresRequiredPtr = &featuresRequired )
+		fixed ( PhysicalDeviceFeatures* featuresRequiredPtr = &featuresRequired )
 		{
 			var createInfo = new DeviceCreateInfo
 			{

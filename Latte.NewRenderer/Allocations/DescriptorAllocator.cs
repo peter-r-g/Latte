@@ -53,7 +53,7 @@ internal sealed class DescriptorAllocator : IDisposable
 
 		var allocateInfo = VkInfo.AllocateDescriptorSet( pool, layouts );
 		var result = Apis.Vk.AllocateDescriptorSets( logicalDevice, allocateInfo, out var descriptorSet );
-		
+
 		if ( result == Result.ErrorOutOfPoolMemory || result == Result.ErrorFragmentedPool )
 		{
 			fullPools.Add( pool );

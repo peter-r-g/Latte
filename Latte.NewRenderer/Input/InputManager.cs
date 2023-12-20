@@ -165,7 +165,7 @@ public sealed class InputManager
 	{
 		if ( !GlfwWindowing.IsViewGlfw( Window ) )
 			throw new NotImplementedException( "Only GLFW windows are supported currently" );
-		
+
 		var value = (CursorModeValue)Apis.Glfw.GetInputMode( (WindowHandle*)Window.Handle, CursorStateAttribute.Cursor );
 		return value.ToLatte();
 	}

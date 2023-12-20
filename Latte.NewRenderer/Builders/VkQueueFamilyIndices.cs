@@ -57,7 +57,7 @@ internal readonly struct VkQueueFamilyIndices
 			graphicsQueueIndex = i;
 			break;
 		}
-		
+
 		// Present queue.
 		for ( uint i = 0; i < queueFamilyCount; i++ )
 		{

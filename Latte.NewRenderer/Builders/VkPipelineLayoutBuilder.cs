@@ -19,8 +19,8 @@ internal sealed class VkPipelineLayoutBuilder
 		VkInvalidHandleException.ThrowIfInvalid( logicalDevice );
 
 		this.logicalDevice = logicalDevice;
-		pushConstantRanges = new PushConstantRange[ maxPushConstantRanges ];
-		descriptorSetLayouts = new DescriptorSetLayout[ maxDescriptorSetLayouts ];
+		pushConstantRanges = new PushConstantRange[maxPushConstantRanges];
+		descriptorSetLayouts = new DescriptorSetLayout[maxDescriptorSetLayouts];
 	}
 
 	internal VkPipelineLayoutBuilder AddPushConstantRange( PushConstantRange pushConstantRange )

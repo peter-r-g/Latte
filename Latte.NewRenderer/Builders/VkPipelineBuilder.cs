@@ -133,7 +133,7 @@ internal sealed class VkPipelineBuilder
 			PAttachments = &colorBlendAttachment
 		};
 
-		fixed( PipelineShaderStageCreateInfo* shaderStagesPtr = shaderStages )
+		fixed ( PipelineShaderStageCreateInfo* shaderStagesPtr = shaderStages )
 		{
 			var pipelineCreateInfo = new GraphicsPipelineCreateInfo
 			{
