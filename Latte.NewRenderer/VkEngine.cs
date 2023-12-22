@@ -22,6 +22,8 @@ using LatteShader = Latte.Assets.Shader;
 using LatteTexture = Latte.Assets.Texture;
 using Shader = Latte.NewRenderer.Temp.Shader;
 using Texture = Latte.NewRenderer.Temp.Texture;
+using Silk.NET.Input;
+using Latte.NewRenderer.ImGui;
 
 namespace Latte.NewRenderer;
 
@@ -47,6 +49,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 	}
 	private bool wireframeEnabled;
+
+	internal ImGuiController? ImGuiController { get; private set; }
 
 	private IView? view;
 	private Instance instance;
@@ -111,7 +115,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		Dispose( disposing: false );
 	}
 
-	internal void Initialize( IView view )
+	internal void Initialize( IView view, IInputContext input )
 	{
 		if ( IsInitialized )
 			throw new VkException( $"This {nameof( VkEngine )} has already been initialized" );
@@ -131,6 +135,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeShaders();
 		InitializePipelines();
 		InitializeSamplers();
+		InitializeImGui( input );
 		LoadImages();
 		LoadMeshes();
 		SetupTextureSets();
@@ -147,6 +152,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		ObjectDisposedException.ThrowIf( disposed, this );
 		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
 		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
+		ArgumentNullException.ThrowIfNull( ImGuiController, nameof( ImGuiController ) );
 
 		var swapchain = this.swapchain;
 		var currentFrameData = CurrentFrameData;
@@ -213,6 +219,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		DrawObjects( cmd, 0, Renderables.Count );
 
 		Apis.Vk.CmdEndRenderPass( cmd );
+
+		ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)view.Size.X, (uint)view.Size.Y ) );
 
 		Apis.Vk.EndCommandBuffer( cmd ).Verify();
 
@@ -829,6 +837,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		disposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, nearestSampler, null ) );
 	}
 
+	private void InitializeImGui( IInputContext input )
+	{
+		ArgumentNullException.ThrowIfNull( view, nameof( view ) );
+
+		ImGuiController = new ImGuiController( view, input, physicalDevice, graphicsQueueFamily, swapchainImages.Length, swapchainImageFormat, depthFormat );
+	}
+
 	private void LoadImages()
 	{
 		void LoadTexture( string texturePath )
@@ -1198,6 +1213,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		allocationManager?.Dispose();
 		descriptorAllocator?.Dispose();
+		ImGuiController?.Dispose();
 		disposalManager?.Dispose();
 		swapchainExtension?.Dispose();
 		debugUtilsExtension?.Dispose();
