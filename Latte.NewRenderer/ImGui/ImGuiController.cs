@@ -1,4 +1,5 @@
 ﻿using ImGuiNET;
+using Latte.NewRenderer.Exceptions;
 using Latte.NewRenderer.Extensions;
 using Silk.NET.Core.Native;
 using Silk.NET.Input;
@@ -18,13 +19,9 @@ public sealed class ImGuiController : IDisposable
 {
 	private readonly List<char> pressedChars = [];
 
-	private IView view = null!;
+	private VkEngine engine = null!;
 	private IInputContext input = null!;
 	private IKeyboard keyboard = null!;
-	private PhysicalDevice physicalDevice;
-	private Device logicalDevice;
-	private int swapchainImageCount;
-
 	private bool frameBegun;
 	private DescriptorPool descriptorPool;
 	private RenderPass renderPass;
@@ -52,7 +49,7 @@ public sealed class ImGuiController : IDisposable
 	/// <param name="swapChainImageCt">The number of images used in the swap chain</param>
 	/// <param name="swapChainFormat">The image format used by the swap chain</param>
 	/// <param name="depthBufferFormat">The image formate used by the depth buffer, or null if no depth buffer is used</param>
-	public ImGuiController( IView view, IInputContext input, PhysicalDevice physicalDevice, uint graphicsFamilyIndex, int swapChainImageCt, Format swapChainFormat, Format? depthBufferFormat )
+	internal ImGuiController( VkEngine engine, IInputContext input )
 	{
 		var context = ImGuiNET.ImGui.CreateContext();
 		ImGuiNET.ImGui.SetCurrentContext( context );
@@ -62,7 +59,7 @@ public sealed class ImGuiController : IDisposable
 		io.Fonts.AddFontDefault();
 		io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
 
-		Init( view, input, physicalDevice, graphicsFamilyIndex, swapChainImageCt, swapChainFormat, depthBufferFormat );
+		Init( engine, input );
 
 		SetPerFrameImGuiData( 1f / 60f );
 
@@ -80,7 +77,7 @@ public sealed class ImGuiController : IDisposable
 	/// <param name="swapChainImageCt">The number of images used in the swap chain</param>
 	/// <param name="swapChainFormat">The image format used by the swap chain</param>
 	/// <param name="depthBufferFormat">The image formate used by the depth buffer, or null if no depth buffer is used</param>
-	public unsafe ImGuiController( IView view, IInputContext input, ImGuiFontConfig imGuiFontConfig, PhysicalDevice physicalDevice, uint graphicsFamilyIndex, int swapChainImageCt, Format swapChainFormat, Format? depthBufferFormat )
+	internal unsafe ImGuiController( VkEngine engine, IInputContext input, ImGuiFontConfig imGuiFontConfig )
 	{
 		var context = ImGuiNET.ImGui.CreateContext();
 		ImGuiNET.ImGui.SetCurrentContext( context );
@@ -93,38 +90,27 @@ public sealed class ImGuiController : IDisposable
 			throw new Exception( $"Failed to load ImGui font" );
 		}
 
-		Init( view, input, physicalDevice, graphicsFamilyIndex, swapChainImageCt, swapChainFormat, depthBufferFormat );
+		Init( engine, input );
 
 		SetPerFrameImGuiData( 1f / 60f );
 
 		BeginFrame();
 	}
 
-	private unsafe void Init( IView view, IInputContext input, PhysicalDevice physicalDevice, uint graphicsFamilyIndex, int swapchainImageCount, Format swapchainFormat, Format? depthBufferFormat )
+	private unsafe void Init( VkEngine engine, IInputContext input )
 	{
-		this.view = view;
+		this.engine = engine;
 		this.input = input;
-		this.physicalDevice = physicalDevice;
-		this.swapchainImageCount = swapchainImageCount;
 
-		if ( swapchainImageCount < 2 )
-		{
+		if ( engine.SwapchainImageCount < 2 )
 			throw new Exception( $"Swap chain image count must be >= 2" );
-		}
-
-		if ( !Apis.Vk.CurrentDevice.HasValue )
-		{
-			throw new InvalidOperationException( "vk.CurrentDevice is null. Apis.Vk.CurrentDevice must be set to the current device." );
-		}
-
-		logicalDevice = Apis.Vk.CurrentDevice.Value;
 
 		InitializeStyle();
-		InitializeRenderPass( swapchainFormat, depthBufferFormat );
+		InitializeRenderPass( engine.SwapchainImageFormat, engine.DepthFormat );
 		InitializeSampler();
 		InitializeDescriptors();
 		InitializePipeline();
-		UploadDefaultFontAtlas( graphicsFamilyIndex );
+		UploadDefaultFontAtlas( engine.GraphicsQueueFamily );
 	}
 
 	/// <summary>
@@ -332,7 +318,7 @@ public sealed class ImGuiController : IDisposable
 			PDependencies = (SubpassDependency*)Unsafe.AsPointer( ref dependencies.GetPinnableReference() )
 		};
 
-		if ( Apis.Vk.CreateRenderPass( logicalDevice, renderPassInfo, default, out renderPass ) != Result.Success )
+		if ( Apis.Vk.CreateRenderPass( engine.LogicalDevice, renderPassInfo, default, out renderPass ) != Result.Success )
 		{
 			throw new Exception( $"Failed to create render pass" );
 		}
@@ -354,7 +340,7 @@ public sealed class ImGuiController : IDisposable
 			MaxAnisotropy = 1.0f
 		};
 
-		if ( Apis.Vk.CreateSampler( logicalDevice, info, default, out fontSampler ) != Result.Success )
+		if ( Apis.Vk.CreateSampler( engine.LogicalDevice, info, default, out fontSampler ) != Result.Success )
 		{
 			throw new Exception( $"Unable to create sampler" );
 		}
@@ -362,6 +348,8 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void InitializeDescriptors()
 	{
+		var logicalDevice = engine.LogicalDevice;
+
 		// Create the descriptor pool for ImGui
 		Span<DescriptorPoolSize> poolSizes = stackalloc DescriptorPoolSize[] { new DescriptorPoolSize( DescriptorType.CombinedImageSampler, 1 ) };
 		var descriptorPool = new DescriptorPoolCreateInfo
@@ -415,6 +403,8 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void InitializePipeline()
 	{
+		var logicalDevice = engine.LogicalDevice;
+
 		var vertPushConst = new PushConstantRange
 		{
 			StageFlags = ShaderStageFlags.VertexBit,
@@ -600,6 +590,8 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void UploadDefaultFontAtlas( uint graphicsFamilyIndex )
 	{
+		var logicalDevice = engine.LogicalDevice;
+
 		// Initialise ImGui Vulkan adapter
 		var io = ImGuiNET.ImGui.GetIO();
 		io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
@@ -830,7 +822,7 @@ public sealed class ImGuiController : IDisposable
 
 	private uint GetMemoryTypeIndex( MemoryPropertyFlags properties, uint type_bits )
 	{
-		Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice, out var prop );
+		Apis.Vk.GetPhysicalDeviceMemoryProperties( engine.PhysicalDevice, out var prop );
 		for ( int i = 0; i < prop.MemoryTypeCount; i++ )
 		{
 			if ( (prop.MemoryTypes[i].PropertyFlags & properties) == properties && (type_bits & (1u << i)) != 0 )
@@ -857,6 +849,7 @@ public sealed class ImGuiController : IDisposable
 	private void SetPerFrameImGuiData( float deltaSeconds )
 	{
 		var io = ImGuiNET.ImGui.GetIO();
+		var view = engine.View!;
 		var width = view.Size.X;
 		var height = view.Size.Y;
 		io.DisplaySize = new Vector2( width, height );
@@ -909,6 +902,8 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void RenderImDrawData( in ImDrawDataPtr drawDataPtr, in CommandBuffer commandBuffer, in Framebuffer framebuffer, in Extent2D swapchainExtent )
 	{
+		var logicalDevice = engine.LogicalDevice;
+
 		int framebufferWidth = (int)(drawDataPtr.DisplaySize.X * drawDataPtr.FramebufferScale.X);
 		int framebufferHeight = (int)(drawDataPtr.DisplaySize.Y * drawDataPtr.FramebufferScale.Y);
 		if ( framebufferWidth <= 0 || framebufferHeight <= 0 )
@@ -943,7 +938,7 @@ public sealed class ImGuiController : IDisposable
 		if ( mainWindowRenderBuffers.FrameRenderBuffers is null )
 		{
 			mainWindowRenderBuffers.Index = 0;
-			mainWindowRenderBuffers.Count = (uint)swapchainImageCount;
+			mainWindowRenderBuffers.Count = (uint)engine.SwapchainImageCount;
 			frameRenderBuffers = GlobalMemory.Allocate( sizeof( FrameRenderBuffer ) * (int)mainWindowRenderBuffers.Count );
 			mainWindowRenderBuffers.FrameRenderBuffers = frameRenderBuffers.AsPtr<FrameRenderBuffer>();
 			for ( int i = 0; i < (int)mainWindowRenderBuffers.Count; i++ )
@@ -1094,6 +1089,8 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void CreateOrResizeBuffer( ref Buffer buffer, ref DeviceMemory buffer_memory, ref ulong bufferSize, ulong newSize, BufferUsageFlags usage )
 	{
+		var logicalDevice = engine.LogicalDevice;
+
 		if ( buffer.Handle != default )
 		{
 			Apis.Vk.DestroyBuffer( logicalDevice, buffer, default );
@@ -1141,6 +1138,8 @@ public sealed class ImGuiController : IDisposable
 	/// </summary>
 	public unsafe void Dispose()
 	{
+		var logicalDevice = engine.LogicalDevice;
+
 		keyboard.KeyChar -= OnKeyChar;
 
 		for ( uint n = 0; n < mainWindowRenderBuffers.Count; n++ )
