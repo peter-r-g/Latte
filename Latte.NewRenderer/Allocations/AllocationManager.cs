@@ -3,6 +3,7 @@ using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
@@ -81,6 +82,13 @@ internal sealed class AllocationManager : IDisposable
 
 		void* dataPtr = RetrieveDataPointer( allocation, dataSize, preserveMap );
 		Marshal.StructureToPtr( data, (nint)dataPtr, false );
+		ReturnDataPointer( allocation, dataPtr, preserveMap );
+	}
+
+	internal unsafe void SetMemory( Allocation allocation, nint srcDataPtr, ulong count, nint offset = 0, bool preserveMap = false )
+	{
+		var dataPtr = RetrieveDataPointer( allocation, count, preserveMap );
+		Unsafe.CopyBlock( (void*)((nint)dataPtr + offset), (void*)srcDataPtr, (uint)count );
 		ReturnDataPointer( allocation, dataPtr, preserveMap );
 	}
 
