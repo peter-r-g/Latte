@@ -3,6 +3,7 @@ using Latte.NewRenderer.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
@@ -46,7 +47,7 @@ internal sealed class AllocationManager : IDisposable
 		Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory, 0 ).Verify();
 
 		memoryAllocations.Add( memory );
-		return new AllocatedBuffer( buffer, new Allocation( memory, 0 ) );
+		return new AllocatedBuffer( buffer, new Allocation( memory, 0, requirements.Size ) );
 	}
 
 	internal unsafe AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags )
@@ -63,7 +64,7 @@ internal sealed class AllocationManager : IDisposable
 		Apis.Vk.BindImageMemory( logicalDevice, image, memory, 0 );
 
 		memoryAllocations.Add( memory );
-		return new AllocatedImage( image, new Allocation( memory, 0 ) );
+		return new AllocatedImage( image, new Allocation( memory, 0, requirements.Size ) );
 	}
 
 	internal unsafe void SetMemory<T>( Allocation allocation, ReadOnlySpan<T> data, bool preserveMap = false ) where T : unmanaged
@@ -81,6 +82,13 @@ internal sealed class AllocationManager : IDisposable
 
 		void* dataPtr = RetrieveDataPointer( allocation, dataSize, preserveMap );
 		Marshal.StructureToPtr( data, (nint)dataPtr, false );
+		ReturnDataPointer( allocation, dataPtr, preserveMap );
+	}
+
+	internal unsafe void SetMemory( Allocation allocation, nint srcDataPtr, ulong count, nint offset = 0, bool preserveMap = false )
+	{
+		var dataPtr = RetrieveDataPointer( allocation, count, preserveMap );
+		Unsafe.CopyBlock( (void*)((nint)dataPtr + offset), (void*)srcDataPtr, (uint)count );
 		ReturnDataPointer( allocation, dataPtr, preserveMap );
 	}
 

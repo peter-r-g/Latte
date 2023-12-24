@@ -45,13 +45,13 @@ internal static class Program
 		window = Window.Create( options );
 		window.Initialize();
 
-		engine = new VkEngine();
-		engine.Initialize( window );
-		window.Update += Update;
-		window.Render += Render;
-
 		input = new InputManager( window );
 		input.Initialize();
+
+		engine = new VkEngine();
+		engine.Initialize( window, input.InputContext );
+		window.Update += Update;
+		window.Render += Render;
 
 		input.SetCursorMode( CursorMode.Trapped );
 
@@ -78,6 +78,9 @@ internal static class Program
 
 	private static unsafe void Update( double dt )
 	{
+		ArgumentNullException.ThrowIfNull( engine.ImGuiController, nameof( engine.ImGuiController ) );
+		engine.ImGuiController.Update( (float)dt );
+
 		UpdateCamera( dt );
 
 		if ( input.Pressed( InputButton.KeyboardEscape ) )
@@ -92,6 +95,8 @@ internal static class Program
 
 	private static void Render( double dt )
 	{
+		ImGuiNET.ImGui.ShowDemoWindow();
+
 		engine.Draw();
 	}
 

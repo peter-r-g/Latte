@@ -8,7 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ImGui.NET" Version="1.90.0.1" />
     <PackageReference Include="Silk.NET.Assimp" Version="2.20.0" />
+    <PackageReference Include="Silk.NET.Input.Extensions" Version="2.20.0" />
     <PackageReference Include="Silk.NET.Input.Glfw" Version="2.20.0" />
     <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.20.0" />
     <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.20.0" />

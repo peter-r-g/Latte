@@ -20,6 +20,7 @@ internal sealed class VkPipelineBuilder
 	private PipelineRasterizationStateCreateInfo rasterizerInfo;
 	private PipelineColorBlendAttachmentState colorBlendAttachment;
 	private PipelineMultisampleStateCreateInfo multisamplingInfo;
+	private DynamicState[] dynamicStates = [];
 
 	internal VkPipelineBuilder( Device logicalDevice, RenderPass renderPass )
 	{
@@ -102,6 +103,22 @@ internal sealed class VkPipelineBuilder
 		return this;
 	}
 
+	internal VkPipelineBuilder AddDynamicState( DynamicState dynamicState )
+	{
+		var newDynamicStates = new DynamicState[dynamicStates.Length + 1];
+		Array.Copy( dynamicStates, newDynamicStates, dynamicStates.Length );
+		newDynamicStates[^1] = dynamicState;
+		dynamicStates = newDynamicStates;
+
+		return this;
+	}
+
+	internal VkPipelineBuilder ClearDynamicStates()
+	{
+		dynamicStates = [];
+		return this;
+	}
+
 	internal unsafe Pipeline Build()
 	{
 		var viewport = this.viewport;
@@ -134,7 +151,17 @@ internal sealed class VkPipelineBuilder
 		};
 
 		fixed ( PipelineShaderStageCreateInfo* shaderStagesPtr = shaderStages )
+		fixed ( DynamicState* dynamicStatesPtr = dynamicStates )
 		{
+			var dynamicStateInfo = new PipelineDynamicStateCreateInfo
+			{
+				SType = StructureType.PipelineDynamicStateCreateInfo,
+				PNext = null,
+				DynamicStateCount = (uint)dynamicStates.Length,
+				PDynamicStates = dynamicStatesPtr,
+				Flags = 0
+			};
+
 			var pipelineCreateInfo = new GraphicsPipelineCreateInfo
 			{
 				SType = StructureType.GraphicsPipelineCreateInfo,
@@ -148,6 +175,7 @@ internal sealed class VkPipelineBuilder
 				PRasterizationState = &rasterizerInfo,
 				PMultisampleState = &multisamplingInfo,
 				PColorBlendState = &colorBlendingCreateInfo,
+				PDynamicState = &dynamicStateInfo,
 				Layout = pipelineLayout,
 				RenderPass = renderPass,
 				Subpass = 0,

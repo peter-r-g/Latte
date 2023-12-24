@@ -18,24 +18,24 @@ public sealed class InputManager
 	/// <summary>
 	/// The window that this input manager is operating on.
 	/// </summary>
-	private IWindow Window { get; set; }
+	internal IWindow Window { get; set; }
 	/// <summary>
 	/// The input context of the window.
 	/// </summary>
-	private IInputContext InputContext { get; set; } = null!;
+	internal IInputContext InputContext { get; set; } = null!;
 
 	/// <summary>
 	/// Contains a set of keys that have been pressed this frame on all keyboards.
 	/// </summary>
-	private readonly Dictionary<int, HashSet<Key>> pressedKeyboards = new();
+	private readonly Dictionary<int, HashSet<Key>> pressedKeyboards = [];
 	/// <summary>
 	/// Contains a set of buttons that have been pressed this frame on all mice.
 	/// </summary>
-	private readonly Dictionary<int, HashSet<MouseButton>> pressedMice = new();
+	private readonly Dictionary<int, HashSet<MouseButton>> pressedMice = [];
 	/// <summary>
 	/// Contains the mouse deltas of all mice.
 	/// </summary>
-	private readonly Dictionary<int, Vector2> mouseDeltas = new();
+	private readonly Dictionary<int, Vector2> mouseDeltas = [];
 
 	internal InputManager( IWindow window )
 	{
