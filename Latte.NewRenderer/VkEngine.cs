@@ -789,7 +789,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) ) )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module, (byte*)meshTriangleShader.EntryPointPtr ) )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitShader.Module, (byte*)defaultLitShader.EntryPointPtr ) )
-			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetVertexDescription() ) )
+			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetLatteVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
 			.WithRasterizerState( VkInfo.PipelineRasterizationState( WireframeEnabled ? PolygonMode.Line : PolygonMode.Fill ) )
 			.WithMultisamplingState( VkInfo.PipelineMultisamplingState() )

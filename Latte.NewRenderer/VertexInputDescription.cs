@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿using ImGuiNET;
+using Silk.NET.Vulkan;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -11,7 +12,7 @@ internal struct VertexInputDescription( VertexInputAttributeDescription[] attrib
 	internal required VertexInputAttributeDescription[] Attributes = attributes;
 	internal required VertexInputBindingDescription[] Bindings = bindings;
 
-	internal static VertexInputDescription GetVertexDescription()
+	internal static VertexInputDescription GetLatteVertexDescription()
 	{
 		var mainBinding = new VertexInputBindingDescription
 		{
@@ -53,5 +54,41 @@ internal struct VertexInputDescription( VertexInputAttributeDescription[] attrib
 		};
 
 		return new VertexInputDescription( [positionAttribute, normalAttribute, colorAttribute, textureCoordinatesAttribute], [mainBinding] );
+	}
+
+	internal static VertexInputDescription GetImGuiVertexDescription()
+	{
+		var mainBinding = new VertexInputBindingDescription
+		{
+			Binding = 0,
+			Stride = (uint)Unsafe.SizeOf<ImDrawVert>(),
+			InputRate = VertexInputRate.Vertex
+		};
+
+		var positionAttribute = new VertexInputAttributeDescription
+		{
+			Binding = 0,
+			Location = 0,
+			Format = Format.R32G32Sfloat,
+			Offset = (uint)Marshal.OffsetOf<ImDrawVert>( nameof( ImDrawVert.pos ) )
+		};
+
+		var textureCoordinatesAttribute = new VertexInputAttributeDescription
+		{
+			Binding = 0,
+			Location = 1,
+			Format = Format.R32G32Sfloat,
+			Offset = (uint)Marshal.OffsetOf<ImDrawVert>( nameof( ImDrawVert.uv ) )
+		};
+
+		var colorAttribute = new VertexInputAttributeDescription
+		{
+			Binding = 0,
+			Location = 2,
+			Format = Format.R8G8B8A8Unorm,
+			Offset = (uint)Marshal.OffsetOf<ImDrawVert>( nameof( ImDrawVert.col ) )
+		};
+
+		return new VertexInputDescription( [positionAttribute, textureCoordinatesAttribute, colorAttribute], [mainBinding] );
 	}
 }
