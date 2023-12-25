@@ -94,6 +94,8 @@ internal static class Program
 
 		if ( input.Pressed( InputButton.KeyboardE ) )
 			engine.WireframeEnabled = !engine.WireframeEnabled;
+
+		engine.ImGuiShowRendererStatistics();
 	}
 
 	private static void Render( double dt )

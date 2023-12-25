@@ -25,6 +25,9 @@ using Texture = Latte.NewRenderer.Temp.Texture;
 using Silk.NET.Input;
 using Latte.NewRenderer.ImGui;
 using Silk.NET.Core.Native;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
+using ImGuiNET;
 
 namespace Latte.NewRenderer;
 
@@ -114,6 +117,11 @@ internal unsafe sealed class VkEngine : IDisposable
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
 
+	private QueryPool gpuExecuteQueryPool;
+	private TimeSpan cpuRecordTime;
+	private TimeSpan gpuExecuteTime;
+	private int drawCalls;
+
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
@@ -153,9 +161,12 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializePipelines();
 		InitializeSamplers();
 		InitializeImGui( input );
+
 		LoadImages();
 		LoadMeshes();
 		SetupTextureSets();
+		InitializeQueries();
+
 		InitializeScene();
 
 		IsInitialized = true;
@@ -200,6 +211,18 @@ internal unsafe sealed class VkEngine : IDisposable
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 		Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
 
+		Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
+
+		drawCalls = 0;
+		var startRecordTicks = Stopwatch.GetTimestamp();
+		Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.TopOfPipeBit, gpuExecuteQueryPool, 0 );
+
+		foreach ( var (_, material) in Materials )
+		{
+			if ( material.PipelineQueryPool.IsValid() )
+				Apis.Vk.CmdResetQueryPool( cmd, material.PipelineQueryPool, 0, 1 );
+		}
+
 		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
 
 		ReadOnlySpan<ClearValue> clearValues = stackalloc ClearValue[]
@@ -238,6 +261,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.CmdEndRenderPass( cmd );
 
 		ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
+
+		Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
+		cpuRecordTime = Stopwatch.GetElapsedTime( startRecordTicks );
 
 		Apis.Vk.EndCommandBuffer( cmd ).Verify();
 
@@ -325,7 +351,12 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			if ( !ReferenceEquals( lastMaterial, material ) )
 			{
+				if ( lastMaterial?.PipelineQueryPool.IsValid() ?? false )
+					Apis.Vk.CmdEndQuery( cmd, lastMaterial.PipelineQueryPool, 0 );
+
 				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
+				if ( material.PipelineQueryPool.IsValid() )
+					Apis.Vk.CmdBeginQuery( cmd, material.PipelineQueryPool, 0, QueryControlFlags.None );
 
 				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
 				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.FrameDescriptor, 1, &uniformOffset );
@@ -366,8 +397,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			else
 				Apis.Vk.CmdDraw( cmd, (uint)mesh.Vertices.Length, (uint)instanceCount, 0, (uint)i );
 
+			drawCalls++;
 			i += instanceCount - 1;
 		}
+
+		if ( lastMaterial?.PipelineQueryPool.IsValid() ?? false )
+			Apis.Vk.CmdEndQuery( cmd, lastMaterial.PipelineQueryPool, 0 );
 	}
 
 	internal void WaitForIdle()
@@ -378,6 +413,50 @@ internal unsafe sealed class VkEngine : IDisposable
 		ObjectDisposedException.ThrowIf( disposed, this );
 
 		Apis.Vk.DeviceWaitIdle( LogicalDevice ).Verify();
+	}
+
+	internal void ImGuiShowRendererStatistics()
+	{
+		var overlayFlags = ImGuiWindowFlags.AlwaysAutoResize |
+			ImGuiWindowFlags.NoSavedSettings |
+			ImGuiWindowFlags.NoFocusOnAppearing |
+			ImGuiWindowFlags.NoNav |
+			ImGuiWindowFlags.NoMove;
+
+		const float PAD = 10.0f;
+		var viewport = ImGuiNET.ImGui.GetMainViewport();
+		var workPos = viewport.WorkPos; // Use work area to avoid menu-bar/task-bar, if any!
+		var windowPos = new Vector2( workPos.X + PAD, workPos.Y + PAD );
+		var windowPivot = Vector2.Zero;
+
+		ImGuiNET.ImGui.SetNextWindowPos( windowPos, ImGuiCond.Always, windowPivot );
+		ImGuiNET.ImGui.SetNextWindowBgAlpha( 0.95f );
+		if ( ImGuiNET.ImGui.Begin( "Renderer Statistics", overlayFlags ) )
+		{
+			var stats = GetStatistics();
+
+			ImGuiNET.ImGui.Text( GraphicsDeviceName );
+
+			ImGuiNET.ImGui.SeparatorText( "Performance" );
+			ImGuiNET.ImGui.Text( $"CPU Record: {stats.CpuRecordTime.TotalMilliseconds:0.##}ms" );
+			ImGuiNET.ImGui.Text( $"GPU Execute: {stats.GpuExecuteTime.TotalMilliseconds:0.##}ms" );
+			ImGuiNET.ImGui.Text( $"Draw Calls: " + stats.DrawCalls );
+
+			ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
+			foreach ( var (materialName, materialStats) in stats.MaterialStatistics )
+			{
+				if ( !ImGuiNET.ImGui.CollapsingHeader( materialName ) )
+					continue;
+
+				ImGuiNET.ImGui.Text( "Input assembly vertex count        : " + materialStats.InputAssemblyVertexCount );
+				ImGuiNET.ImGui.Text( "Input assembly primitives count    : " + materialStats.InputAssemblyPrimitivesCount );
+				ImGuiNET.ImGui.Text( "Vertex shader invocations          : " + materialStats.VertexShaderInvocationCount );
+				ImGuiNET.ImGui.Text( "Clipping stage primitives processed: " + materialStats.ClippingStagePrimitivesProcessed );
+				ImGuiNET.ImGui.Text( "Clipping stage primitives output   : " + materialStats.ClippingStagePrimitivesOutput );
+				ImGuiNET.ImGui.Text( "Fragment shader invocations        : " + materialStats.FragmentShaderInvocations );
+			}
+		}
+		ImGuiNET.ImGui.End();
 	}
 
 	private void RecreateSwapchain()
@@ -391,6 +470,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeFramebuffers();
 		InitializePipelines();
 		SetupTextureSets();
+		InitializeQueries();
 	}
 
 	private void RecreateWireframe()
@@ -402,6 +482,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		DisposalManager.Dispose( WireframeTag );
 		InitializePipelines();
 		SetupTextureSets();
+		InitializeQueries();
 	}
 
 	private void InitializeVulkan()
@@ -446,7 +527,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithExtensions( KhrSwapchain.ExtensionName )
 			.WithFeatures( new PhysicalDeviceFeatures
 			{
-				FillModeNonSolid = Vk.True
+				FillModeNonSolid = Vk.True,
+				PipelineStatisticsQuery = Vk.True
 			} )
 			.WithPNext( new PhysicalDeviceShaderDrawParametersFeatures
 			{
@@ -925,6 +1007,62 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 	}
 
+	private void InitializeQueries()
+	{
+		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var gpuExecutePoolInfo = new QueryPoolCreateInfo
+		{
+			SType = StructureType.QueryPoolCreateInfo,
+			PNext = null,
+			QueryCount = 2,
+			QueryType = QueryType.Timestamp,
+			PipelineStatistics = QueryPipelineStatisticFlags.None,
+			Flags = 0
+		};
+
+		Apis.Vk.CreateQueryPool( LogicalDevice, gpuExecutePoolInfo, null, out var queryPool );
+		VkInvalidHandleException.ThrowIfInvalid( queryPool );
+		gpuExecuteQueryPool = queryPool;
+
+		ImmediateSubmit( cmd =>
+		{
+			Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 2 );
+		} );
+
+		DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( LogicalDevice, gpuExecuteQueryPool, null ), SwapchainTag, WireframeTag );
+
+		foreach ( var (_, material) in Materials )
+		{
+			var poolInfo = new QueryPoolCreateInfo
+			{
+				SType = StructureType.QueryPoolCreateInfo,
+				PNext = null,
+				QueryCount = 1,
+				QueryType = QueryType.PipelineStatistics,
+				PipelineStatistics =
+					QueryPipelineStatisticFlags.InputAssemblyVerticesBit |
+					QueryPipelineStatisticFlags.InputAssemblyPrimitivesBit |
+					QueryPipelineStatisticFlags.VertexShaderInvocationsBit |
+					QueryPipelineStatisticFlags.FragmentShaderInvocationsBit |
+					QueryPipelineStatisticFlags.ClippingInvocationsBit |
+					QueryPipelineStatisticFlags.ClippingPrimitivesBit,
+				Flags = 0,
+			};
+
+			Apis.Vk.CreateQueryPool( LogicalDevice, poolInfo, null, out queryPool );
+			VkInvalidHandleException.ThrowIfInvalid( queryPool );
+			material.PipelineQueryPool = queryPool;
+
+			ImmediateSubmit( cmd =>
+			{
+				Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 1 );
+			} );
+
+			DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( LogicalDevice, material.PipelineQueryPool, null ), SwapchainTag, WireframeTag );
+		}
+	}
+
 	private void InitializeScene()
 	{
 		Renderables.Add( new Renderable( "quad", DefaultMeshMaterialName )
@@ -1036,6 +1174,50 @@ internal unsafe sealed class VkEngine : IDisposable
 	internal bool TryGetMesh( string name, [NotNullWhen( true )] out Mesh? mesh )
 	{
 		return Meshes.TryGetValue( name, out mesh );
+	}
+
+	private VkStatistics GetStatistics()
+	{
+		var statsStorage = (ulong*)Marshal.AllocHGlobal( 6 * sizeof( ulong ) );
+		var materialStatistics = new Dictionary<string, PipelineStatistics>();
+
+		var result = Apis.Vk.GetQueryPoolResults( LogicalDevice, gpuExecuteQueryPool, 0, 2,
+			2 * sizeof( ulong ),
+			statsStorage,
+			sizeof( ulong ),
+			QueryResultFlags.Result64Bit );
+
+		if ( result == Result.Success )
+			gpuExecuteTime = TimeSpan.FromMicroseconds( (statsStorage[1] - statsStorage[0]) * physicalDeviceProperties.Limits.TimestampPeriod / 1000 );
+		if ( result == Result.NotReady )
+			gpuExecuteTime = TimeSpan.Zero;
+		else
+			result.Verify();
+
+		foreach ( var (materialName, material) in Materials )
+		{
+			result = Apis.Vk.GetQueryPoolResults( LogicalDevice, material.PipelineQueryPool, 0, 1,
+				6 * sizeof( ulong ),
+				statsStorage,
+				6 * sizeof( ulong ),
+				QueryResultFlags.Result64Bit );
+
+			if ( result == Result.NotReady )
+				continue;
+			else
+				result.Verify();
+
+			materialStatistics.Add( materialName, new PipelineStatistics(
+				statsStorage[0],
+				statsStorage[1],
+				statsStorage[2],
+				statsStorage[3],
+				statsStorage[4],
+				statsStorage[5] ) );
+		}
+
+		Marshal.FreeHGlobal( (nint)statsStorage );
+		return new VkStatistics( cpuRecordTime, gpuExecuteTime, drawCalls, materialStatistics );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
