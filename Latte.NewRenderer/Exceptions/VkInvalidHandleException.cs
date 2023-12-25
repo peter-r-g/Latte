@@ -149,4 +149,10 @@ internal sealed class VkInvalidHandleException : VkException
 		if ( !sampler.IsValid() )
 			Throw( typeof( Sampler ) );
 	}
+
+	internal static void ThrowIfInvalid( QueryPool queryPool )
+	{
+		if ( !queryPool.IsValid() )
+			Throw( typeof( QueryPool ) );
+	}
 }
