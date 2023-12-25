@@ -24,6 +24,7 @@ using Shader = Latte.NewRenderer.Temp.Shader;
 using Texture = Latte.NewRenderer.Temp.Texture;
 using Silk.NET.Input;
 using Latte.NewRenderer.ImGui;
+using Silk.NET.Core.Native;
 
 namespace Latte.NewRenderer;
 
@@ -49,6 +50,21 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 	}
 	private bool wireframeEnabled;
+
+	internal string GraphicsDeviceName
+	{
+		get
+		{
+			fixed ( byte* namePtr = physicalDeviceProperties.DeviceName )
+			{
+				var nameStr = SilkMarshal.PtrToString( (nint)namePtr );
+				if ( nameStr is null )
+					throw new VkException( "Failed to get name of physical device" );
+
+				return nameStr;
+			}
+		}
+	}
 
 	internal ImGuiController? ImGuiController { get; private set; }
 
