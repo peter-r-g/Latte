@@ -76,7 +76,7 @@ internal static class Program
 		isWindowActive = false;
 	}
 
-	private static unsafe void Update( double dt )
+	private static void Update( double dt )
 	{
 		ArgumentNullException.ThrowIfNull( engine.ImGuiController, nameof( engine.ImGuiController ) );
 		engine.ImGuiController.Update( (float)dt );
