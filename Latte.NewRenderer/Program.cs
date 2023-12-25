@@ -89,14 +89,15 @@ internal static class Program
 		if ( input.Pressed( InputButton.KeyboardTab ) )
 			input.SetCursorMode( input.GetCursorMode() == CursorMode.Visible ? CursorMode.Trapped : CursorMode.Visible );
 
+		if ( input.Down( InputButton.KeyboardQ ) )
+			ImGuiNET.ImGui.ShowDemoWindow();
+
 		if ( input.Pressed( InputButton.KeyboardE ) )
 			engine.WireframeEnabled = !engine.WireframeEnabled;
 	}
 
 	private static void Render( double dt )
 	{
-		ImGuiNET.ImGui.ShowDemoWindow();
-
 		engine.Draw();
 	}
 
