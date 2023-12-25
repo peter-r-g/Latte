@@ -1,6 +1,5 @@
 ﻿using Latte.NewRenderer.Exceptions;
 using Silk.NET.Vulkan;
-using SixLabors.ImageSharp.Memory;
 using System;
 using System.Runtime.InteropServices;
 using Buffer = Silk.NET.Vulkan.Buffer;
