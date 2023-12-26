@@ -54,6 +54,17 @@ internal unsafe sealed class VkEngine : IDisposable
 	}
 	private bool wireframeEnabled;
 
+	internal bool VsyncEnabled
+	{
+		get => vsyncEnabled;
+		set
+		{
+			vsyncEnabled = value;
+			RecreateVsync();
+		}
+	}
+	private bool vsyncEnabled = true;
+
 	internal string GraphicsDeviceName
 	{
 		get
@@ -560,6 +571,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeQueries();
 	}
 
+	private void RecreateVsync() => RecreateSwapchain();
+
 	private void InitializeVulkan()
 	{
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
@@ -651,7 +664,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			.WithSurface( surface, surfaceExtension )
 			.WithQueueFamilyIndices( queueFamilyIndices )
 			.UseDefaultFormat()
-			.SetPresentMode( PresentModeKHR.FifoKhr )
+			.SetPresentMode( VsyncEnabled ? PresentModeKHR.FifoKhr : PresentModeKHR.MailboxKhr )
 			.SetExtent( (uint)View.Size.X, (uint)View.Size.Y )
 			.Build();
 
