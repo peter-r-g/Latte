@@ -48,6 +48,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		get => wireframeEnabled;
 		set
 		{
+			if ( wireframeEnabled == value )
+				return;
+
 			wireframeEnabled = value;
 			RecreateWireframe();
 		}
@@ -59,6 +62,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		get => vsyncEnabled;
 		set
 		{
+			if ( vsyncEnabled == value )
+				return;
+
 			vsyncEnabled = value;
 			RecreateVsync();
 		}
@@ -485,6 +491,16 @@ internal unsafe sealed class VkEngine : IDisposable
 			return;
 
 		ImGuiNET.ImGui.Text( GraphicsDeviceName );
+
+		ImGuiNET.ImGui.SeparatorText( "Options" );
+
+		var wireframeEnabled = WireframeEnabled;
+		ImGuiNET.ImGui.Checkbox( "Wireframe Enabled", ref wireframeEnabled );
+		WireframeEnabled = wireframeEnabled;
+
+		var vsyncEnabled = VsyncEnabled;
+		ImGuiNET.ImGui.Checkbox( "VSync Enabled", ref vsyncEnabled );
+		VsyncEnabled = vsyncEnabled;
 
 		var stats = GetStatistics();
 

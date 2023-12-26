@@ -95,12 +95,6 @@ internal static class Program
 		if ( input.Pressed( InputButton.KeyboardF1 ) )
 			showImguiDemo = !showImguiDemo;
 
-		if ( input.Pressed( InputButton.KeyboardF2 ) )
-			engine.WireframeEnabled = !engine.WireframeEnabled;
-
-		if ( input.Pressed( InputButton.KeyboardF3 ) )
-			engine.VsyncEnabled = !engine.VsyncEnabled;
-
 		engine.ImGuiShowRendererStatistics();
 		if ( showImguiDemo )
 			ImGuiNET.ImGui.ShowDemoWindow();
