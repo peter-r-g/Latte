@@ -120,7 +120,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private QueryPool gpuExecuteQueryPool;
 	private TimeSpan cpuRecordTime;
 	private TimeSpan gpuExecuteTime;
-	private int drawCalls;
 
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
@@ -213,7 +212,6 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
 
-		drawCalls = 0;
 		var startRecordTicks = Stopwatch.GetTimestamp();
 		Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.TopOfPipeBit, gpuExecuteQueryPool, 0 );
 
@@ -397,7 +395,6 @@ internal unsafe sealed class VkEngine : IDisposable
 			else
 				Apis.Vk.CmdDraw( cmd, (uint)mesh.Vertices.Length, (uint)instanceCount, 0, (uint)i );
 
-			drawCalls++;
 			i += instanceCount - 1;
 		}
 
@@ -440,7 +437,6 @@ internal unsafe sealed class VkEngine : IDisposable
 			ImGuiNET.ImGui.SeparatorText( "Performance" );
 			ImGuiNET.ImGui.Text( $"CPU Record: {stats.CpuRecordTime.TotalMilliseconds:0.##}ms" );
 			ImGuiNET.ImGui.Text( $"GPU Execute: {stats.GpuExecuteTime.TotalMilliseconds:0.##}ms" );
-			ImGuiNET.ImGui.Text( $"Draw Calls: " + stats.DrawCalls );
 
 			ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
 			foreach ( var (materialName, materialStats) in stats.MaterialStatistics )
@@ -1217,7 +1213,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		Marshal.FreeHGlobal( (nint)statsStorage );
-		return new VkStatistics( cpuRecordTime, gpuExecuteTime, drawCalls, materialStatistics );
+		return new VkStatistics( cpuRecordTime, gpuExecuteTime, materialStatistics );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
