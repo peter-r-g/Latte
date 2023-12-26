@@ -17,6 +17,7 @@ internal static class Program
 	private static Vector2 lastMousePosition;
 
 	private static bool isWindowActive;
+	private static bool showImguiDemo;
 
 	private static unsafe void Main()
 	{
@@ -81,6 +82,8 @@ internal static class Program
 		ArgumentNullException.ThrowIfNull( engine.ImGuiController, nameof( engine.ImGuiController ) );
 		engine.ImGuiController.Update( (float)dt );
 
+		window.Title = $"Latte.NewRenderer ({(int)(1 / dt)} FPS)";
+
 		UpdateCamera( dt );
 
 		if ( input.Pressed( InputButton.KeyboardEscape ) )
@@ -89,13 +92,18 @@ internal static class Program
 		if ( input.Pressed( InputButton.KeyboardTab ) )
 			input.SetCursorMode( input.GetCursorMode() == CursorMode.Visible ? CursorMode.Trapped : CursorMode.Visible );
 
-		if ( input.Down( InputButton.KeyboardQ ) )
-			ImGuiNET.ImGui.ShowDemoWindow();
+		if ( input.Pressed( InputButton.KeyboardF1 ) )
+			showImguiDemo = !showImguiDemo;
 
-		if ( input.Pressed( InputButton.KeyboardE ) )
+		if ( input.Pressed( InputButton.KeyboardF2 ) )
 			engine.WireframeEnabled = !engine.WireframeEnabled;
 
+		if ( input.Pressed( InputButton.KeyboardF3 ) )
+			engine.VsyncEnabled = !engine.VsyncEnabled;
+
 		engine.ImGuiShowRendererStatistics();
+		if ( showImguiDemo )
+			ImGuiNET.ImGui.ShowDemoWindow();
 	}
 
 	private static void Render( double dt )
