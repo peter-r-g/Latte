@@ -126,8 +126,9 @@ internal unsafe sealed class VkEngine : IDisposable
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
 
+	private readonly Dictionary<string, TimeSpan> cpuPerformanceTimes = [];
+	private readonly Dictionary<string, PipelineStatistics> materialPipelineStatistics = [];
 	private QueryPool gpuExecuteQueryPool;
-	private TimeSpan cpuRecordTime;
 	private TimeSpan gpuExecuteTime;
 
 	private readonly List<Renderable> Renderables = [];
@@ -185,6 +186,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !IsInitialized )
 			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
 
+		var drawProfile = CpuProfile.New( "Total" );
+
 		if ( !IsVisible )
 			return;
 
@@ -200,124 +203,148 @@ internal unsafe sealed class VkEngine : IDisposable
 		var renderSemaphore = currentFrameData.RenderSemaphore;
 		var cmd = currentFrameData.CommandBuffer;
 
-		Apis.Vk.WaitForFences( LogicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
+		var waitForRenderProfile = CpuProfile.New( "Wait for last render" );
+		using ( waitForRenderProfile )
+			Apis.Vk.WaitForFences( LogicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
+		cpuPerformanceTimes[waitForRenderProfile.Name] = waitForRenderProfile.Time;
 
 		uint swapchainImageIndex;
-		var acquireResult = swapchainExtension.AcquireNextImage( LogicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
-		switch ( acquireResult )
+		var acquireSwapchainImageProfile = CpuProfile.New( "Acquire swapchain image" );
+		using ( acquireSwapchainImageProfile )
 		{
-			case Result.ErrorOutOfDateKhr:
-			case Result.SuboptimalKhr:
-				RecreateSwapchain();
-				return;
-			case Result.Success:
-				break;
-			default:
-				throw new VkException( "Failed to acquire next image in the swap chain" );
-		}
-
-		Apis.Vk.ResetFences( LogicalDevice, 1, renderFence ).Verify();
-		Apis.Vk.ResetCommandBuffer( cmd, CommandBufferResetFlags.None ).Verify();
-
-		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
-		Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
-
-		Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
-
-		var startRecordTicks = Stopwatch.GetTimestamp();
-		Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.TopOfPipeBit, gpuExecuteQueryPool, 0 );
-
-		foreach ( var (_, material) in Materials )
-		{
-			if ( material.PipelineQueryPool.IsValid() )
-				Apis.Vk.CmdResetQueryPool( cmd, material.PipelineQueryPool, 0, 1 );
-		}
-
-		var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
-
-		ReadOnlySpan<ClearValue> clearValues = stackalloc ClearValue[]
-		{
-			new ClearValue
+			var acquireResult = swapchainExtension.AcquireNextImage( LogicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
+			switch ( acquireResult )
 			{
-				Color = new ClearColorValue( Camera.Main.ClearColor.X, Camera.Main.ClearColor.Y, Camera.Main.ClearColor.Z )
-			},
-			new ClearValue
-			{
-				DepthStencil = new ClearDepthStencilValue
-				{
-					Depth = 1
-				}
+				case Result.ErrorOutOfDateKhr:
+				case Result.SuboptimalKhr:
+					RecreateSwapchain();
+					return;
+				case Result.Success:
+					break;
+				default:
+					throw new VkException( "Failed to acquire next image in the swap chain" );
 			}
-		};
 
-		fixed ( ClearValue* clearValuesPtr = clearValues )
+			Apis.Vk.ResetFences( LogicalDevice, 1, renderFence ).Verify();
+		}
+		cpuPerformanceTimes[acquireSwapchainImageProfile.Name] = acquireSwapchainImageProfile.Time;
+
+		var recordProfile = CpuProfile.New( "Record command buffer" );
+		using ( recordProfile )
 		{
-			var rpBeginInfo = new RenderPassBeginInfo
+			Apis.Vk.ResetCommandBuffer( cmd, CommandBufferResetFlags.None ).Verify();
+
+			var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
+			Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
+
+			Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
+
+			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.TopOfPipeBit, gpuExecuteQueryPool, 0 );
+
+			foreach ( var (_, material) in Materials )
 			{
-				SType = StructureType.RenderPassBeginInfo,
-				PNext = null,
-				RenderPass = renderPass,
-				RenderArea = renderArea,
-				Framebuffer = framebuffers[(int)swapchainImageIndex],
-				ClearValueCount = (uint)clearValues.Length,
-				PClearValues = clearValuesPtr
+				if ( material.PipelineQueryPool.IsValid() )
+					Apis.Vk.CmdResetQueryPool( cmd, material.PipelineQueryPool, 0, 1 );
+			}
+
+			var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
+
+			ReadOnlySpan<ClearValue> clearValues = stackalloc ClearValue[]
+			{
+				new ClearValue
+				{
+					Color = new ClearColorValue( Camera.Main.ClearColor.X, Camera.Main.ClearColor.Y, Camera.Main.ClearColor.Z )
+				},
+				new ClearValue
+				{
+					DepthStencil = new ClearDepthStencilValue
+					{
+						Depth = 1
+					}
+				}
 			};
 
-			Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
+			fixed ( ClearValue* clearValuesPtr = clearValues )
+			{
+				var rpBeginInfo = new RenderPassBeginInfo
+				{
+					SType = StructureType.RenderPassBeginInfo,
+					PNext = null,
+					RenderPass = renderPass,
+					RenderArea = renderArea,
+					Framebuffer = framebuffers[(int)swapchainImageIndex],
+					ClearValueCount = (uint)clearValues.Length,
+					PClearValues = clearValuesPtr
+				};
+
+				Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
+			}
+
+			DrawObjects( cmd, 0, Renderables.Count );
+
+			Apis.Vk.CmdEndRenderPass( cmd );
+
+			ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
+
+			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
+
+			Apis.Vk.EndCommandBuffer( cmd ).Verify();
 		}
+		cpuPerformanceTimes[recordProfile.Name] = recordProfile.Time;
 
-		DrawObjects( cmd, 0, Renderables.Count );
-
-		Apis.Vk.CmdEndRenderPass( cmd );
-
-		ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
-
-		Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
-		cpuRecordTime = Stopwatch.GetElapsedTime( startRecordTicks );
-
-		Apis.Vk.EndCommandBuffer( cmd ).Verify();
-
-		var waitStage = PipelineStageFlags.ColorAttachmentOutputBit;
-		var submitInfo = new SubmitInfo
+		var submitProfile = CpuProfile.New( "Submit" );
+		using ( submitProfile )
 		{
-			SType = StructureType.SubmitInfo,
-			PNext = null,
-			PWaitDstStageMask = &waitStage,
-			WaitSemaphoreCount = 1,
-			PWaitSemaphores = &presentSemaphore,
-			SignalSemaphoreCount = 1,
-			PSignalSemaphores = &renderSemaphore,
-			CommandBufferCount = 1,
-			PCommandBuffers = &cmd,
-		};
+			var waitStage = PipelineStageFlags.ColorAttachmentOutputBit;
+			var submitInfo = new SubmitInfo
+			{
+				SType = StructureType.SubmitInfo,
+				PNext = null,
+				PWaitDstStageMask = &waitStage,
+				WaitSemaphoreCount = 1,
+				PWaitSemaphores = &presentSemaphore,
+				SignalSemaphoreCount = 1,
+				PSignalSemaphores = &renderSemaphore,
+				CommandBufferCount = 1,
+				PCommandBuffers = &cmd,
+			};
 
-		Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, renderFence ).Verify();
-
-		var presentInfo = new PresentInfoKHR
-		{
-			SType = StructureType.PresentInfoKhr,
-			PNext = null,
-			SwapchainCount = 1,
-			PSwapchains = &swapchain,
-			WaitSemaphoreCount = 1,
-			PWaitSemaphores = &renderSemaphore,
-			PImageIndices = &swapchainImageIndex
-		};
-
-		var presentResult = swapchainExtension.QueuePresent( presentQueue, presentInfo );
-		switch ( presentResult )
-		{
-			case Result.ErrorOutOfDateKhr:
-			case Result.SuboptimalKhr:
-				RecreateSwapchain();
-				break;
-			case Result.Success:
-				break;
-			default:
-				throw new VkException( "Failed to present queue" );
+			Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, renderFence ).Verify();
 		}
+		cpuPerformanceTimes[submitProfile.Name] = submitProfile.Time;
+
+		var presentProfile = CpuProfile.New( "Present" );
+		using ( presentProfile )
+		{
+			var presentInfo = new PresentInfoKHR
+			{
+				SType = StructureType.PresentInfoKhr,
+				PNext = null,
+				SwapchainCount = 1,
+				PSwapchains = &swapchain,
+				WaitSemaphoreCount = 1,
+				PWaitSemaphores = &renderSemaphore,
+				PImageIndices = &swapchainImageIndex
+			};
+
+			var presentResult = swapchainExtension.QueuePresent( presentQueue, presentInfo );
+			switch ( presentResult )
+			{
+				case Result.ErrorOutOfDateKhr:
+				case Result.SuboptimalKhr:
+					RecreateSwapchain();
+					break;
+				case Result.Success:
+					break;
+				default:
+					throw new VkException( "Failed to present queue" );
+			}
+		}
+		cpuPerformanceTimes[presentProfile.Name] = presentProfile.Time;
 
 		frameNumber++;
+		drawProfile.Dispose();
+		cpuPerformanceTimes[drawProfile.Name] = drawProfile.Time;
 	}
 
 	private void DrawObjects( CommandBuffer cmd, int first, int count )
@@ -443,30 +470,63 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		ImGuiNET.ImGui.SetNextWindowPos( windowPos, ImGuiCond.Always, windowPivot );
 		ImGuiNET.ImGui.SetNextWindowBgAlpha( 0.95f );
-		if ( ImGuiNET.ImGui.Begin( "Renderer Statistics", overlayFlags ) )
+		if ( !ImGuiNET.ImGui.Begin( "Renderer Statistics", overlayFlags ) )
+			return;
+
+		ImGuiNET.ImGui.Text( GraphicsDeviceName );
+
+		var stats = GetStatistics();
+
+		ImGuiNET.ImGui.SeparatorText( "Performance" );
+
+		if ( ImGuiNET.ImGui.CollapsingHeader( "CPU" ) && ImGuiNET.ImGui.BeginTable( "CPU Timings", 2, ImGuiTableFlags.Borders ) )
 		{
-			var stats = GetStatistics();
+			ImGuiNET.ImGui.TableSetupColumn( "Section" );
+			ImGuiNET.ImGui.TableSetupColumn( "Time (ms)" );
+			ImGuiNET.ImGui.TableHeadersRow();
 
-			ImGuiNET.ImGui.Text( GraphicsDeviceName );
-
-			ImGuiNET.ImGui.SeparatorText( "Performance" );
-			ImGuiNET.ImGui.Text( $"CPU Record: {stats.CpuRecordTime.TotalMilliseconds:0.##}ms" );
-			ImGuiNET.ImGui.Text( $"GPU Execute: {stats.GpuExecuteTime.TotalMilliseconds:0.##}ms" );
-
-			ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
-			foreach ( var (materialName, materialStats) in stats.MaterialStatistics )
+			ImGuiNET.ImGui.TableNextColumn();
+			foreach ( var (timingName, time) in stats.CpuTimings )
 			{
-				if ( !ImGuiNET.ImGui.CollapsingHeader( materialName ) )
-					continue;
-
-				ImGuiNET.ImGui.Text( "Input assembly vertex count        : " + materialStats.InputAssemblyVertexCount );
-				ImGuiNET.ImGui.Text( "Input assembly primitives count    : " + materialStats.InputAssemblyPrimitivesCount );
-				ImGuiNET.ImGui.Text( "Vertex shader invocations          : " + materialStats.VertexShaderInvocationCount );
-				ImGuiNET.ImGui.Text( "Clipping stage primitives processed: " + materialStats.ClippingStagePrimitivesProcessed );
-				ImGuiNET.ImGui.Text( "Clipping stage primitives output   : " + materialStats.ClippingStagePrimitivesOutput );
-				ImGuiNET.ImGui.Text( "Fragment shader invocations        : " + materialStats.FragmentShaderInvocations );
+				ImGuiNET.ImGui.Text( timingName );
+				ImGuiNET.ImGui.TableNextColumn();
+				ImGuiNET.ImGui.Text( $"{time.TotalMilliseconds:0.##}" );
+				ImGuiNET.ImGui.TableNextColumn();
 			}
+
+			ImGuiNET.ImGui.EndTable();
 		}
+
+		if ( ImGuiNET.ImGui.CollapsingHeader( "GPU" ) && ImGuiNET.ImGui.BeginTable( "GPU Timings", 2, ImGuiTableFlags.Borders ) )
+		{
+			ImGuiNET.ImGui.TableSetupColumn( "Section" );
+			ImGuiNET.ImGui.TableSetupColumn( "Time (ms)" );
+			ImGuiNET.ImGui.TableHeadersRow();
+
+			ImGuiNET.ImGui.TableNextColumn();
+
+			ImGuiNET.ImGui.Text( "Execute" );
+			ImGuiNET.ImGui.TableNextColumn();
+			ImGuiNET.ImGui.Text( $"{stats.GpuExecuteTime.TotalMilliseconds:0.##}" );
+			ImGuiNET.ImGui.TableNextColumn();
+
+			ImGuiNET.ImGui.EndTable();
+		}
+		ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
+		foreach ( var (materialName, materialStats) in stats.MaterialStatistics )
+		{
+			if ( !ImGuiNET.ImGui.CollapsingHeader( materialName ) )
+				continue;
+
+			ImGuiNET.ImGui.Text( "Input assembly vertex count        : " + materialStats.InputAssemblyVertexCount );
+			ImGuiNET.ImGui.Text( "Input assembly primitives count    : " + materialStats.InputAssemblyPrimitivesCount );
+			ImGuiNET.ImGui.Text( "Vertex shader invocations          : " + materialStats.VertexShaderInvocationCount );
+			ImGuiNET.ImGui.Text( "Clipping stage primitives processed: " + materialStats.ClippingStagePrimitivesProcessed );
+			ImGuiNET.ImGui.Text( "Clipping stage primitives output   : " + materialStats.ClippingStagePrimitivesOutput );
+			ImGuiNET.ImGui.Text( "Fragment shader invocations        : " + materialStats.FragmentShaderInvocations );
+		}
+
+
 		ImGuiNET.ImGui.End();
 	}
 
@@ -1194,7 +1254,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private VkStatistics GetStatistics()
 	{
 		var statsStorage = (ulong*)Marshal.AllocHGlobal( 6 * sizeof( ulong ) );
-		var materialStatistics = new Dictionary<string, PipelineStatistics>();
 
 		var result = Apis.Vk.GetQueryPoolResults( LogicalDevice, gpuExecuteQueryPool, 0, 2,
 			2 * sizeof( ulong ),
@@ -1204,9 +1263,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		if ( result == Result.Success )
 			gpuExecuteTime = TimeSpan.FromMicroseconds( (statsStorage[1] - statsStorage[0]) * physicalDeviceProperties.Limits.TimestampPeriod / 1000 );
-		if ( result == Result.NotReady )
-			gpuExecuteTime = TimeSpan.Zero;
-		else
+		else if ( result != Result.NotReady )
 			result.Verify();
 
 		foreach ( var (materialName, material) in Materials )
@@ -1222,17 +1279,17 @@ internal unsafe sealed class VkEngine : IDisposable
 			else
 				result.Verify();
 
-			materialStatistics.Add( materialName, new PipelineStatistics(
+			materialPipelineStatistics[materialName] = new PipelineStatistics(
 				statsStorage[0],
 				statsStorage[1],
 				statsStorage[2],
 				statsStorage[3],
 				statsStorage[4],
-				statsStorage[5] ) );
+				statsStorage[5] );
 		}
 
 		Marshal.FreeHGlobal( (nint)statsStorage );
-		return new VkStatistics( cpuRecordTime, gpuExecuteTime, materialStatistics );
+		return new VkStatistics( cpuPerformanceTimes, gpuExecuteTime, materialPipelineStatistics );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
