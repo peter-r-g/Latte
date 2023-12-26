@@ -72,6 +72,15 @@ internal unsafe sealed class VkEngine : IDisposable
 	internal ImGuiController? ImGuiController { get; private set; }
 
 	internal IView? View { get; private set; }
+	internal bool IsVisible
+	{
+		get
+		{
+			ArgumentNullException.ThrowIfNull( View, nameof( View ) );
+			return View.Size.X != 0 && View.Size.Y != 0;
+		}
+	}
+
 	private Instance instance;
 	private DebugUtilsMessengerEXT debugMessenger;
 	internal PhysicalDevice PhysicalDevice { get; private set; }
@@ -175,6 +184,9 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		if ( !IsInitialized )
 			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
+
+		if ( !IsVisible )
+			return;
 
 		ObjectDisposedException.ThrowIf( disposed, this );
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
@@ -414,6 +426,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void ImGuiShowRendererStatistics()
 	{
+		if ( !IsVisible )
+			return;
+
 		var overlayFlags = ImGuiWindowFlags.AlwaysAutoResize |
 			ImGuiWindowFlags.NoSavedSettings |
 			ImGuiWindowFlags.NoFocusOnAppearing |
@@ -458,10 +473,14 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void RecreateSwapchain()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 
 		WaitForIdle();
 
 		DisposalManager.Dispose( SwapchainTag );
+		if ( View.Size.X <= 0 || View.Size.Y <= 0 )
+			return;
+
 		InitializeSwapchain();
 		InitializeFramebuffers();
 		InitializePipelines();

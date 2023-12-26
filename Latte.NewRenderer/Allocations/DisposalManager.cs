@@ -36,7 +36,7 @@ internal sealed class DisposalManager : IDisposable
 	internal void Dispose( string tag )
 	{
 		if ( !taggedDisposals.TryGetValue( tag, out var disposals ) || disposals.Count == 0 )
-			throw new ArgumentException( $"There is nothing to be disposed with the tag \"{tag}\"", nameof( tag ) );
+			return;
 
 		for ( var i = disposals.Count - 1; i >= 0; i-- )
 		{
