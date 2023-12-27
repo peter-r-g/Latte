@@ -37,6 +37,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private const int MaxObjects = 10_000;
 	private const string DefaultMeshMaterialName = "defaultmesh";
 	private const string TexturedMeshMaterialName = "texturedmesh";
+	private const string BillboardMaterialName = "billboard";
 	private const string SwapchainTag = "swapchain";
 	private const string WireframeTag = "wireframe";
 
@@ -964,10 +965,14 @@ internal unsafe sealed class VkEngine : IDisposable
 		var meshTriangleShader = CreateShader( "mesh_triangle.vert", LatteShader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" ) );
 		var defaultLitShader = CreateShader( "default_lit.frag", LatteShader.FromPath( "/Assets/Shaders/default_lit.frag.spv" ) );
 		var texturedLitShader = CreateShader( "textured_lit.frag", LatteShader.FromPath( "/Assets/Shaders/textured_lit.frag.spv" ) );
+		var billboardVertShader = CreateShader( "default_billboard.vert", LatteShader.FromPath( "/Assets/Shaders/default_billboard.vert.spv" ) );
+		var billboardFragShader = CreateShader( "default_billboard.frag", LatteShader.FromPath( "/Assets/Shaders/default_billboard.frag.spv" ) );
 
 		DisposalManager.Add( meshTriangleShader.Dispose );
 		DisposalManager.Add( defaultLitShader.Dispose );
 		DisposalManager.Add( texturedLitShader.Dispose );
+		DisposalManager.Add( billboardVertShader.Dispose );
+		DisposalManager.Add( billboardFragShader.Dispose );
 	}
 
 	private void InitializePipelines()
@@ -978,6 +983,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		var meshTriangleShader = GetShader( "mesh_triangle.vert" );
 		var defaultLitShader = GetShader( "default_lit.frag" );
 		var texturedLitShader = GetShader( "textured_lit.frag" );
+		var billboardVertShader = GetShader( "default_billboard.vert" );
+		var billboardFragShader = GetShader( "default_billboard.frag" );
 
 		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( LogicalDevice, 0, 2 );
 		var meshPipelineLayout = pipelineLayoutBuilder
@@ -1013,15 +1020,26 @@ internal unsafe sealed class VkEngine : IDisposable
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( texturedMeshPipeline );
 
+		var billboardPipeline = pipelineBuilder
+			.WithPipelineLayout( meshPipelineLayout )
+			.ClearShaderStages()
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, billboardVertShader.Module, (byte*)billboardVertShader.EntryPointPtr ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, billboardFragShader.Module, (byte*)billboardFragShader.EntryPointPtr ) )
+			.Build();
+		VkInvalidHandleException.ThrowIfInvalid( billboardPipeline );
+
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, texturedPipelineLayout );
+		var billboardMaterial = CreateMaterial( BillboardMaterialName, billboardPipeline, meshPipelineLayout );
 		DisposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
 		DisposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
+		DisposalManager.Add( () => RemoveMaterial( BillboardMaterialName ), SwapchainTag, WireframeTag );
 
 		DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( LogicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
 		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
 		DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( LogicalDevice, texturedPipelineLayout, null ), SwapchainTag, WireframeTag );
 		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, texturedMeshPipeline, null ), SwapchainTag, WireframeTag );
+		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, billboardPipeline, null ), SwapchainTag, WireframeTag );
 	}
 
 	private void InitializeSamplers()
@@ -1174,7 +1192,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Transform = Matrix4x4.CreateScale( 1000, 0, 1000 )
 		} );
 
-		foreach ( var (materialName, _) in Materials.Skip( 2 ) )
+		foreach ( var (materialName, _) in Materials.Skip( 3 ) )
 		{
 			for ( var i = 0; i < 1000; i++ )
 			{
