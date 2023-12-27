@@ -12,6 +12,11 @@ internal struct VertexInputDescription( VertexInputAttributeDescription[] attrib
 	internal required VertexInputAttributeDescription[] Attributes = attributes;
 	internal required VertexInputBindingDescription[] Bindings = bindings;
 
+	internal static VertexInputDescription Empty()
+	{
+		return new VertexInputDescription( [], [] );
+	}
+
 	internal static VertexInputDescription GetLatteVertexDescription()
 	{
 		var mainBinding = new VertexInputBindingDescription
