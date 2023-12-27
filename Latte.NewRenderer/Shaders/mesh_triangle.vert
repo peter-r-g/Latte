@@ -7,30 +7,43 @@ layout (location = 2) in vec3 vColor;
 layout (location = 3) in vec2 vTexCoord;
 
 layout (location = 0) out vec3 outColor;
-layout (location = 1) out vec2 texCoord;
+layout (location = 1) out vec2 outTexCoord;
+layout (location = 2) out vec3 outPosWorld;
+layout (location = 3) out vec3 outNormalWorld;
 
-layout(set = 0, binding = 0) uniform CameraBuffer{
+layout(set = 0, binding = 0) uniform CameraBuffer
+{
 	mat4 view;
 	mat4 projection;
 	mat4 viewproj;
 } CameraData;
 
-struct ObjectData{
+layout(set = 0, binding = 1) uniform sceneData
+{
+	vec4 AmbientLightColor; // W for intensity.
+	vec4 SunPosition; // W is ignored.
+	vec4 SunLightColor; // W for intensity.
+} SceneData;
+
+struct ObjectData
+{
 	mat4 model;
 };
 
 //all object matrices
-layout(std140, set = 0, binding = 2) readonly buffer objectBuffer {
-
+layout(std140, set = 0, binding = 2) readonly buffer objectBuffer
+{
 	ObjectData objects[];
 } ObjectBuffer;
 
 void main()
 {
 	mat4 modelMatrix = ObjectBuffer.objects[gl_InstanceIndex].model;
-	mat4 transformMatrix = CameraData.viewproj * modelMatrix;
+	vec4 positionWorld = modelMatrix * vec4(vPosition, 1.0);
+	gl_Position = CameraData.viewproj * positionWorld;
 
-	gl_Position = transformMatrix * vec4(vPosition, 1.0f);
 	outColor = vColor;
-	texCoord = vTexCoord;
+	outTexCoord = vTexCoord;
+	outPosWorld = positionWorld.xyz;
+	outNormalWorld = normalize(mat3(modelMatrix) * vNormal);
 }

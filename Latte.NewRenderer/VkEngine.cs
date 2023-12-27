@@ -1187,6 +1187,15 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeScene()
 	{
+		sceneParameters.AmbientLightColor = new Vector4( 1, 1, 1, 0.02f );
+		sceneParameters.SunPosition = new Vector4( 1 );
+		sceneParameters.SunLightColor = new Vector4( 1, 1, 1, 1000 );
+
+		Renderables.Add( new Renderable( "quad", BillboardMaterialName )
+		{
+			Transform = Matrix4x4.CreateTranslation( 1, 1, 1 )
+		} );
+
 		Renderables.Add( new Renderable( "quad", DefaultMeshMaterialName )
 		{
 			Transform = Matrix4x4.CreateScale( 1000, 0, 1000 )
