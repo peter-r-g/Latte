@@ -56,8 +56,6 @@ internal static class Program
 
 		input.SetCursorMode( CursorMode.Trapped );
 
-		Camera.Main.ClearColor = new Vector3( 1, 1, 1 );
-
 		window.Run( () =>
 		{
 			window.DoEvents();
