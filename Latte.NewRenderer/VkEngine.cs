@@ -35,6 +35,7 @@ internal unsafe sealed class VkEngine : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
 	private const int MaxObjects = 10_000;
+	private const int MaxLights = 10;
 	private const string DefaultMeshMaterialName = "defaultmesh";
 	private const string TexturedMeshMaterialName = "texturedmesh";
 	private const string BillboardMaterialName = "billboard";
@@ -992,12 +993,49 @@ internal unsafe sealed class VkEngine : IDisposable
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( meshPipelineLayout );
 
+		var shaderSpecializationEntries = stackalloc SpecializationMapEntry[]
+		{
+			// MaxObjects
+			new SpecializationMapEntry
+			{
+				ConstantID = 0,
+				Offset = 0,
+				Size = sizeof( int )
+			},
+			// MaxLights
+			new SpecializationMapEntry
+			{
+				ConstantID = 1,
+				Offset = sizeof( int ),
+				Size = sizeof( int )
+			}
+		};
+
+		var shaderSpecializationData = stackalloc int[]
+		{
+			MaxObjects,
+			MaxLights
+		};
+
+		var shaderSpecializationInfo = stackalloc SpecializationInfo[]
+		{
+			new SpecializationInfo
+			{
+				MapEntryCount = 2,
+				PMapEntries = shaderSpecializationEntries,
+				DataSize = sizeof( int ) * 2,
+				PData = shaderSpecializationData
+			}
+		};
+
 		var pipelineBuilder = new VkPipelineBuilder( LogicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
 			.WithViewport( new Viewport( 0, 0, View.Size.X, View.Size.Y, 0, 1 ) )
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module, (byte*)meshTriangleShader.EntryPointPtr ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitShader.Module, (byte*)defaultLitShader.EntryPointPtr ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module,
+				(byte*)meshTriangleShader.EntryPointPtr, shaderSpecializationInfo ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitShader.Module,
+				(byte*)defaultLitShader.EntryPointPtr, shaderSpecializationInfo ) )
 			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetLatteVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
 			.WithRasterizerState( VkInfo.PipelineRasterizationState( WireframeEnabled ? PolygonMode.Line : PolygonMode.Fill ) )
@@ -1015,16 +1053,20 @@ internal unsafe sealed class VkEngine : IDisposable
 		var texturedMeshPipeline = pipelineBuilder
 			.WithPipelineLayout( texturedPipelineLayout )
 			.ClearShaderStages()
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module, (byte*)meshTriangleShader.EntryPointPtr ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, texturedLitShader.Module, (byte*)texturedLitShader.EntryPointPtr ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, meshTriangleShader.Module,
+				(byte*)meshTriangleShader.EntryPointPtr, shaderSpecializationInfo ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, texturedLitShader.Module,
+				(byte*)texturedLitShader.EntryPointPtr, shaderSpecializationInfo ) )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( texturedMeshPipeline );
 
 		var billboardPipeline = pipelineBuilder
 			.WithPipelineLayout( meshPipelineLayout )
 			.ClearShaderStages()
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, billboardVertShader.Module, (byte*)billboardVertShader.EntryPointPtr ) )
-			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, billboardFragShader.Module, (byte*)billboardFragShader.EntryPointPtr ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, billboardVertShader.Module,
+				(byte*)billboardVertShader.EntryPointPtr, shaderSpecializationInfo ) )
+			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, billboardFragShader.Module,
+				(byte*)billboardFragShader.EntryPointPtr, shaderSpecializationInfo ) )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( billboardPipeline );
 

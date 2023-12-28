@@ -61,7 +61,8 @@ internal unsafe static class VkInfo
 		}
 	}
 
-	internal static PipelineShaderStageCreateInfo PipelineShaderStage( ShaderStageFlags stage, ShaderModule shaderModule, byte* entryPointStringPtr = null )
+	internal static PipelineShaderStageCreateInfo PipelineShaderStage( ShaderStageFlags stage, ShaderModule shaderModule, byte* entryPointStringPtr = null,
+		SpecializationInfo* specializationInfo = null )
 	{
 		var namePtr = entryPointStringPtr is null ? MainStringPtr : entryPointStringPtr;
 
@@ -72,7 +73,7 @@ internal unsafe static class VkInfo
 			Stage = stage,
 			Module = shaderModule,
 			PName = namePtr,
-			PSpecializationInfo = null,
+			PSpecializationInfo = specializationInfo,
 			Flags = PipelineShaderStageCreateFlags.None
 		};
 	}

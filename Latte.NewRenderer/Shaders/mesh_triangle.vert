@@ -13,6 +13,9 @@ layout (location = 1) out vec2 outTexCoord;
 layout (location = 2) out vec3 outPosWorld;
 layout (location = 3) out vec3 outNormalWorld;
 
+// Specialized constant for maximum object count.
+layout (constant_id = 0) const int MAX_OBJECTS = 10000;
+
 layout (set = 0, binding = 0) uniform CameraBuffer
 {
 	mat4 view;
@@ -35,7 +38,7 @@ struct ObjectData
 // All object matrices.
 layout (std140, set = 0, binding = 2) readonly buffer objectBuffer
 {
-	ObjectData objects[];
+	ObjectData objects[MAX_OBJECTS];
 } ObjectBuffer;
 
 void main()
