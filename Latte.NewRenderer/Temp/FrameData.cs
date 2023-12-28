@@ -14,5 +14,6 @@ internal sealed class FrameData
 
 	internal AllocatedBuffer CameraBuffer;
 	internal AllocatedBuffer ObjectBuffer;
+	internal AllocatedBuffer LightBuffer;
 	internal DescriptorSet FrameDescriptor;
 }

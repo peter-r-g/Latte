@@ -10,6 +10,9 @@ layout (location = 3) in vec2 vTexCoord;
 // Output.
 layout (location = 0) out vec2 outOffset;
 
+// Specialized constant for maximum object count.
+layout (constant_id = 0) const int MAX_OBJECTS = 10000;
+
 layout (set = 0, binding = 0) uniform CameraBuffer
 {
 	mat4 view;
@@ -17,14 +20,18 @@ layout (set = 0, binding = 0) uniform CameraBuffer
 	mat4 viewproj;
 } CameraData;
 
-layout(set = 0, binding = 1) uniform sceneData
+struct ObjectData
 {
-	vec4 AmbientLightColor; // W for intensity.
-	vec4 SunPosition; // W is ignored.
-	vec4 SunLightColor; // W for intensity.
-} SceneData;
+	mat4 model;
+};
 
-const float LIGHT_RADIUS = 0.1;
+// All object matrices
+layout (std140, set = 0, binding = 2) readonly buffer objectBuffer
+{
+	ObjectData objects[MAX_OBJECTS];
+} ObjectBuffer;
+
+const float BILLBOARD_RADIUS = 0.1;
 
 void main()
 {
@@ -32,9 +39,11 @@ void main()
 	vec3 cameraRightWorld = {CameraData.view[0][0], CameraData.view[1][0], CameraData.view[2][0]};
 	vec3 cameraUpWorld = {CameraData.view[0][1], CameraData.view[1][1], CameraData.view[2][1]};
 
-	vec3 positionWorld = SceneData.SunPosition.xyz
-	+ LIGHT_RADIUS * outOffset.x * cameraRightWorld
-	+ LIGHT_RADIUS * outOffset.y * cameraUpWorld;
+	mat4 modelMatrix = ObjectBuffer.objects[gl_InstanceIndex].model;
+	vec3 modelPosition = {modelMatrix[3][0], modelMatrix[3][1], modelMatrix[3][2]};
+	vec3 positionWorld = modelPosition
+	+ BILLBOARD_RADIUS * outOffset.x * cameraRightWorld
+	+ BILLBOARD_RADIUS * outOffset.y * cameraUpWorld;
 
 	gl_Position = CameraData.viewproj * vec4(positionWorld, 1.0);
 }

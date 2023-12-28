@@ -150,12 +150,14 @@ internal unsafe sealed class VkEngine : IDisposable
 	private QueryPool gpuExecuteQueryPool;
 	private TimeSpan gpuExecuteTime;
 
+	private readonly List<Light> Lights = [];
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
 	private readonly Dictionary<string, Shader> Shaders = [];
 	private readonly Dictionary<string, Texture> Textures = [];
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
+	private readonly GpuLightData[] lightData = new GpuLightData[MaxLights];
 
 	private ExtDebugUtils? debugUtilsExtension;
 	private KhrSurface? surfaceExtension;
@@ -388,6 +390,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		AllocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData, true );
 
 		var frameIndex = frameNumber % frameData.Length;
+		sceneParameters.LightCount = Lights.Count;
 		AllocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
 
 		var objectData = this.objectData.AsSpan().Slice( first, count );
@@ -395,6 +398,14 @@ internal unsafe sealed class VkEngine : IDisposable
 			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
 
 		AllocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData, true );
+
+		for ( var i = 0; i < Lights.Count; i++ )
+		{
+			var light = Lights[i];
+			lightData[i] = new GpuLightData( light.Position, light.Color );
+		}
+
+		AllocationManager.SetMemory( currentFrameData.LightBuffer.Allocation, (ReadOnlySpan<GpuLightData>)lightData, true );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
@@ -913,12 +924,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			new( DescriptorType.CombinedImageSampler, 4 )
 		] );
 
-		var layoutBuilder = new VkDescriptorSetLayoutBuilder( LogicalDevice, 3 );
+		var layoutBuilder = new VkDescriptorSetLayoutBuilder( LogicalDevice, 4 );
 
 		frameSetLayout = layoutBuilder
 			.AddBinding( 0, DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit )
 			.AddBinding( 1, DescriptorType.UniformBufferDynamic, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit )
 			.AddBinding( 2, DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit )
+			.AddBinding( 3, DescriptorType.StorageBuffer, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( frameSetLayout );
 
@@ -946,14 +958,19 @@ internal unsafe sealed class VkEngine : IDisposable
 			frameData[i].ObjectBuffer = CreateBuffer( (ulong)sizeof( GpuObjectData ) * MaxObjects, BufferUsageFlags.StorageBufferBit,
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
+			frameData[i].LightBuffer = CreateBuffer( (ulong)sizeof( GpuLightData ) * MaxLights, BufferUsageFlags.StorageBufferBit,
+				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
+
 			var index = i;
 			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
 			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
+			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, frameData[index].LightBuffer.Buffer, null ) );
 
-			new VkDescriptorUpdater( LogicalDevice, 3 )
+			new VkDescriptorUpdater( LogicalDevice, 4 )
 				.WriteBuffer( 0, DescriptorType.UniformBuffer, frameData[i].CameraBuffer.Buffer, 0, (ulong)sizeof( GpuCameraData ) )
 				.WriteBuffer( 1, DescriptorType.UniformBufferDynamic, sceneParameterBuffer.Buffer, 0, (ulong)sizeof( GpuSceneData ) )
 				.WriteBuffer( 2, DescriptorType.StorageBuffer, frameData[i].ObjectBuffer.Buffer, 0, (ulong)sizeof( GpuObjectData ) * MaxObjects )
+				.WriteBuffer( 3, DescriptorType.StorageBuffer, frameData[i].LightBuffer.Buffer, 0, (ulong)sizeof( GpuLightData ) * MaxLights )
 				.Update( frameData[i].FrameDescriptor )
 				.Dispose();
 		}
@@ -1230,13 +1247,21 @@ internal unsafe sealed class VkEngine : IDisposable
 	private void InitializeScene()
 	{
 		sceneParameters.AmbientLightColor = new Vector4( 1, 1, 1, 0.02f );
-		sceneParameters.SunPosition = new Vector4( 1 );
-		sceneParameters.SunLightColor = new Vector4( 1, 1, 1, 1000 );
 
-		Renderables.Add( new Renderable( "quad", BillboardMaterialName )
+		for ( var i = 0; i < MaxLights; i++ )
 		{
-			Transform = Matrix4x4.CreateTranslation( 1, 1, 1 )
-		} );
+			var light = new Light
+			{
+				Position = new Vector3( Random.Shared.Next( -125, 126 ), 10, Random.Shared.Next( -125, 126 ) ),
+				Color = new Vector4( Random.Shared.NextSingle(), Random.Shared.NextSingle(), Random.Shared.NextSingle(), 1000 )
+			};
+
+			Lights.Add( light );
+			Renderables.Add( new Renderable( "quad", BillboardMaterialName )
+			{
+				Transform = Matrix4x4.CreateTranslation( light.Position )
+			} );
+		}
 
 		Renderables.Add( new Renderable( "quad", DefaultMeshMaterialName )
 		{

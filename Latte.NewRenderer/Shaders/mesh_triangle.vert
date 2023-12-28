@@ -26,8 +26,7 @@ layout (set = 0, binding = 0) uniform CameraBuffer
 layout (set = 0, binding = 1) uniform sceneData
 {
 	vec4 AmbientLightColor; // W for intensity.
-	vec4 SunPosition; // W is ignored.
-	vec4 SunLightColor; // W for intensity.
+	int LightCount;
 } SceneData;
 
 struct ObjectData
