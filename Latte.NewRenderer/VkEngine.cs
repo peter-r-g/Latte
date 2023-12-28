@@ -145,6 +145,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
 
+	private readonly Dictionary<string, TimeSpan> initializationStageTimes = [];
 	private readonly Dictionary<string, TimeSpan> cpuPerformanceTimes = [];
 	private readonly Dictionary<string, PipelineStatistics> materialPipelineStatistics = [];
 	private QueryPool gpuExecuteQueryPool;
@@ -504,6 +505,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			return;
 
 		ImGuiNET.ImGui.Text( GraphicsDeviceName );
+		ImGuiNET.ImGui.Text( $"Renderables: {Renderables.Count}/{MaxObjects}" );
+		ImGuiNET.ImGui.Text( $"Lights: {Lights.Count}/{MaxLights}" );
 
 		ImGuiNET.ImGui.SeparatorText( "Options" );
 
@@ -518,6 +521,24 @@ internal unsafe sealed class VkEngine : IDisposable
 		var stats = GetStatistics();
 
 		ImGuiNET.ImGui.SeparatorText( "Performance" );
+
+		if ( ImGuiNET.ImGui.CollapsingHeader( "Initialization" ) && ImGuiNET.ImGui.BeginTable( "Initialization Timings", 2, ImGuiTableFlags.Borders ) )
+		{
+			ImGuiNET.ImGui.TableSetupColumn( "Section" );
+			ImGuiNET.ImGui.TableSetupColumn( "Time (ms)" );
+			ImGuiNET.ImGui.TableHeadersRow();
+
+			ImGuiNET.ImGui.TableNextColumn();
+			foreach ( var (timingName, time) in stats.InitializationTimings )
+			{
+				ImGuiNET.ImGui.Text( timingName );
+				ImGuiNET.ImGui.TableNextColumn();
+				ImGuiNET.ImGui.Text( $"{time.TotalMilliseconds:0.##}" );
+				ImGuiNET.ImGui.TableNextColumn();
+			}
+
+			ImGuiNET.ImGui.EndTable();
+		}
 
 		if ( ImGuiNET.ImGui.CollapsingHeader( "CPU" ) && ImGuiNET.ImGui.BeginTable( "CPU Timings", 2, ImGuiTableFlags.Borders ) )
 		{
@@ -606,6 +627,8 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 
+		var initializationProfile = CpuProfile.New( nameof( InitializeVulkan ) );
+
 		var instanceBuilderResult = new VkInstanceBuilder()
 			.WithName( "Example" )
 			.WithView( View )
@@ -681,6 +704,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		DisposalManager.Add( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( instance, debugMessenger, null ) );
 		DisposalManager.Add( () => surfaceExtension.DestroySurface( instance, surface, null ) );
 		DisposalManager.Add( () => Apis.Vk.DestroyDevice( LogicalDevice, null ) );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeSwapchain()
@@ -688,6 +715,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 		ArgumentNullException.ThrowIfNull( AllocationManager, nameof( AllocationManager ) );
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeSwapchain ) );
 
 		var result = new VkSwapchainBuilder( instance, PhysicalDevice, LogicalDevice )
 			.WithSurface( surface, surfaceExtension )
@@ -731,11 +760,17 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		DisposalManager.Add( () => Apis.Vk.DestroyImage( LogicalDevice, depthImage, null ), SwapchainTag );
 		DisposalManager.Add( () => Apis.Vk.DestroyImageView( LogicalDevice, depthImageView, null ), SwapchainTag );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeCommands()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeCommands ) );
 
 		var poolCreateInfo = VkInfo.CommandPool( GraphicsQueueFamily, CommandPoolCreateFlags.ResetCommandBufferBit );
 
@@ -764,11 +799,17 @@ internal unsafe sealed class VkEngine : IDisposable
 		uploadContext.CommandBuffer = uploadCommandBuffer;
 
 		DisposalManager.Add( () => Apis.Vk.DestroyCommandPool( LogicalDevice, uploadCommandPool, null ) );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeDefaultRenderPass()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeDefaultRenderPass ) );
 
 		var colorAttachment = new AttachmentDescription
 		{
@@ -854,12 +895,18 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( renderPass );
 		this.renderPass = renderPass;
 		DisposalManager.Add( () => Apis.Vk.DestroyRenderPass( LogicalDevice, renderPass, null ) );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeFramebuffers()
 	{
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeFramebuffers ) );
 
 		var framebufferBuilder = ImmutableArray.CreateBuilder<Framebuffer>( swapchainImages.Length );
 		Span<ImageView> imageViews = stackalloc ImageView[2];
@@ -877,11 +924,17 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		framebuffers = framebufferBuilder.MoveToImmutable();
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeSynchronizationStructures()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeSynchronizationStructures ) );
 
 		var fenceCreateInfo = VkInfo.Fence( FenceCreateFlags.SignaledBit );
 		var semaphoreCreateInfo = VkInfo.Semaphore();
@@ -910,11 +963,17 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( uploadFence );
 		uploadContext.UploadFence = uploadFence;
 		DisposalManager.Add( () => Apis.Vk.DestroyFence( LogicalDevice, uploadFence, null ) );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeDescriptors()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeDescriptors ) );
 
 		DescriptorAllocator = new DescriptorAllocator( LogicalDevice, 100,
 		[
@@ -974,11 +1033,17 @@ internal unsafe sealed class VkEngine : IDisposable
 				.Update( frameData[i].FrameDescriptor )
 				.Dispose();
 		}
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeShaders()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeShaders ) );
 
 		var meshTriangleShader = CreateShader( "mesh_triangle.vert", LatteShader.FromPath( "/Assets/Shaders/mesh_triangle.vert.spv" ) );
 		var defaultLitShader = CreateShader( "default_lit.frag", LatteShader.FromPath( "/Assets/Shaders/default_lit.frag.spv" ) );
@@ -991,12 +1056,18 @@ internal unsafe sealed class VkEngine : IDisposable
 		DisposalManager.Add( texturedLitShader.Dispose );
 		DisposalManager.Add( billboardVertShader.Dispose );
 		DisposalManager.Add( billboardFragShader.Dispose );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializePipelines()
 	{
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializePipelines ) );
 
 		var meshTriangleShader = GetShader( "mesh_triangle.vert" );
 		var defaultLitShader = GetShader( "default_lit.frag" );
@@ -1099,11 +1170,17 @@ internal unsafe sealed class VkEngine : IDisposable
 		DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( LogicalDevice, texturedPipelineLayout, null ), SwapchainTag, WireframeTag );
 		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, texturedMeshPipeline, null ), SwapchainTag, WireframeTag );
 		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, billboardPipeline, null ), SwapchainTag, WireframeTag );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeSamplers()
 	{
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+
+		var initializationProfile = CpuProfile.New( nameof( InitializeSamplers ) );
 
 		Apis.Vk.CreateSampler( LogicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( linearSampler );
@@ -1115,15 +1192,27 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		DisposalManager.Add( () => Apis.Vk.DestroySampler( LogicalDevice, linearSampler, null ) );
 		DisposalManager.Add( () => Apis.Vk.DestroySampler( LogicalDevice, nearestSampler, null ) );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeImGui( IInputContext input )
 	{
+		var initializationProfile = CpuProfile.New( nameof( InitializeImGui ) );
+
 		ImGuiController = new ImGuiController( this, input );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void LoadImages()
 	{
+		var initializationProfile = CpuProfile.New( nameof( LoadImages ) );
+
 		void LoadTexture( string texturePath )
 		{
 			ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
@@ -1147,10 +1236,16 @@ internal unsafe sealed class VkEngine : IDisposable
 		LoadTexture( "/Assets/Models/Car 05/car5_grey.png" );
 		LoadTexture( "/Assets/Models/Car 05/car5_police.png" );
 		LoadTexture( "/Assets/Models/Car 05/car5_taxi.png" );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void LoadMeshes()
 	{
+		var initializationProfile = CpuProfile.New( nameof( LoadMeshes ) );
+
 		void LoadMesh( string modelPath )
 		{
 			var model = Model.FromPath( modelPath );
@@ -1164,10 +1259,16 @@ internal unsafe sealed class VkEngine : IDisposable
 		LoadMesh( "/Assets/Models/Car 05/Car5_Police.obj" );
 		LoadMesh( "/Assets/Models/Car 05/Car5_Taxi.obj" );
 		LoadMesh( "/Assets/Models/quad.obj" );
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void SetupTextureSets()
 	{
+		var initializationProfile = CpuProfile.New( nameof( SetupTextureSets ) );
+
 		ArgumentNullException.ThrowIfNull( DescriptorAllocator, nameof( DescriptorAllocator ) );
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
 
@@ -1186,10 +1287,16 @@ internal unsafe sealed class VkEngine : IDisposable
 			Materials.Add( textureName, texturedMaterial );
 			DisposalManager.Add( () => RemoveMaterial( textureName ), SwapchainTag, WireframeTag );
 		}
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeQueries()
 	{
+		var initializationProfile = CpuProfile.New( nameof( InitializeQueries ) );
+
 		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
 
 		var gpuExecutePoolInfo = new QueryPoolCreateInfo
@@ -1242,10 +1349,16 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( LogicalDevice, material.PipelineQueryPool, null ), SwapchainTag, WireframeTag );
 		}
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void InitializeScene()
 	{
+		var initializationProfile = CpuProfile.New( nameof( InitializeScene ) );
+
 		sceneParameters.AmbientLightColor = new Vector4( 1, 1, 1, 0.02f );
 
 		for ( var i = 0; i < MaxLights; i++ )
@@ -1285,6 +1398,10 @@ internal unsafe sealed class VkEngine : IDisposable
 				} );
 			}
 		}
+
+		initializationProfile.Dispose();
+		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
+			initializationStageTimes.Add( initializationProfile.Name, initializationProfile.Time );
 	}
 
 	private void OnFramebufferResize( Vector2D<int> newSize )
@@ -1412,7 +1529,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		Marshal.FreeHGlobal( (nint)statsStorage );
-		return new VkStatistics( cpuPerformanceTimes, gpuExecuteTime, materialPipelineStatistics );
+		return new VkStatistics( initializationStageTimes, cpuPerformanceTimes, gpuExecuteTime, materialPipelineStatistics );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
