@@ -2,16 +2,16 @@
 #version 450
 #extension GL_KHR_vulkan_glsl : enable
 
-//shader input
+// Input.
 layout (location = 0) in vec3 inColor;
 layout (location = 1) in vec2 inTexCoord;
 layout (location = 2) in vec3 inPosWorld;
 layout (location = 3) in vec3 inNormalWorld;
 
-//output write
+// Output.
 layout (location = 0) out vec4 outColor;
 
-layout(set = 0, binding = 1) uniform sceneData
+layout (set = 0, binding = 1) uniform sceneData
 {
 	vec4 AmbientLightColor; // W for intensity.
 	vec4 SunPosition; // W is ignored.

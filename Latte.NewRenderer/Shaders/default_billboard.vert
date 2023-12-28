@@ -1,14 +1,16 @@
 #version 450
 #extension GL_KHR_vulkan_glsl : enable
 
+// Input.
 layout (location = 0) in vec3 vPosition;
 layout (location = 1) in vec3 vNormal;
 layout (location = 2) in vec3 vColor;
 layout (location = 3) in vec2 vTexCoord;
 
+// Output.
 layout (location = 0) out vec2 outOffset;
 
-layout(set = 0, binding = 0) uniform CameraBuffer
+layout (set = 0, binding = 0) uniform CameraBuffer
 {
 	mat4 view;
 	mat4 projection;
