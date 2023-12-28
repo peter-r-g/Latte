@@ -64,7 +64,10 @@ internal sealed unsafe class ModelParser
 		{
 			var position = mesh->MVertices[i];
 			var normal = mesh->MNormals[i];
-			var color = default( Vector3 );
+			// FIXME: Look for a better solution.
+			Vector3 color = Vector3.Zero;
+			if ( mesh->MColors[0] is not null )
+				color = new Vector3( mesh->MColors[0][0].X, mesh->MColors[0][0].Y, mesh->MColors[0][0].Z );
 			var textureCoordinates = default( Vector2 );
 
 			if ( mesh->MTextureCoords[0] is not null )
