@@ -422,15 +422,19 @@ internal unsafe sealed class VkEngine : IDisposable
 				if ( lastMaterial?.PipelineQueryPool.IsValid() ?? false )
 					Apis.Vk.CmdEndQuery( cmd, lastMaterial.PipelineQueryPool, 0 );
 
-				Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
 				if ( material.PipelineQueryPool.IsValid() )
 					Apis.Vk.CmdBeginQuery( cmd, material.PipelineQueryPool, 0, QueryControlFlags.None );
 
-				var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
-				Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.FrameDescriptor, 1, &uniformOffset );
+				if ( lastMaterial?.Pipeline.Handle != material.Pipeline.Handle )
+				{
+					Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
 
-				if ( material.TextureSet.IsValid() )
-					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 1, 1, material.TextureSet, 0, null );
+					var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
+					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.FrameDescriptor, 1, &uniformOffset );
+
+					if ( material.TextureSet.IsValid() )
+						Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 1, 1, material.TextureSet, 0, null );
+				}
 
 				lastMaterial = material;
 			}
