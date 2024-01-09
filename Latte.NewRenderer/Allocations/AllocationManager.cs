@@ -47,7 +47,7 @@ internal sealed class AllocationManager : IDisposable
 		Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory, 0 ).Verify();
 
 		memoryAllocations.Add( memory );
-		return new AllocatedBuffer( buffer, new Allocation( memory, 0, requirements.Size ) );
+		return new AllocatedBuffer( buffer, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
 	}
 
 	internal unsafe AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags )
@@ -64,7 +64,7 @@ internal sealed class AllocationManager : IDisposable
 		Apis.Vk.BindImageMemory( logicalDevice, image, memory, 0 );
 
 		memoryAllocations.Add( memory );
-		return new AllocatedImage( image, new Allocation( memory, 0, requirements.Size ) );
+		return new AllocatedImage( image, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
 	}
 
 	internal unsafe void SetMemory<T>( Allocation allocation, ReadOnlySpan<T> data, bool preserveMap = false ) where T : unmanaged
