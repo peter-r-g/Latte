@@ -23,8 +23,8 @@ public sealed class ImGuiController : IDisposable
 	private VkEngine engine = null!;
 	private IInputContext input = null!;
 	private IKeyboard keyboard = null!;
-
 	private RenderPass renderPass;
+
 	private Sampler fontSampler;
 	private DescriptorSetLayout descriptorSetLayout;
 	private DescriptorSet descriptorSet;
@@ -47,7 +47,7 @@ public sealed class ImGuiController : IDisposable
 	/// <param name="swapChainImageCt">The number of images used in the swap chain</param>
 	/// <param name="swapChainFormat">The image format used by the swap chain</param>
 	/// <param name="depthBufferFormat">The image formate used by the depth buffer, or null if no depth buffer is used</param>
-	internal ImGuiController( VkEngine engine, IInputContext input )
+	internal ImGuiController( VkEngine engine, IInputContext input, RenderPass renderPass )
 	{
 		var context = ImGuiNET.ImGui.CreateContext();
 		ImGuiNET.ImGui.SetCurrentContext( context );
@@ -57,7 +57,7 @@ public sealed class ImGuiController : IDisposable
 		io.Fonts.AddFontDefault();
 		io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
 
-		Init( engine, input );
+		Init( engine, input, renderPass );
 
 		SetPerFrameImGuiData( 1f / 60f );
 
@@ -75,7 +75,7 @@ public sealed class ImGuiController : IDisposable
 	/// <param name="swapChainImageCt">The number of images used in the swap chain</param>
 	/// <param name="swapChainFormat">The image format used by the swap chain</param>
 	/// <param name="depthBufferFormat">The image formate used by the depth buffer, or null if no depth buffer is used</param>
-	internal unsafe ImGuiController( VkEngine engine, IInputContext input, ImGuiFontConfig imGuiFontConfig )
+	internal unsafe ImGuiController( VkEngine engine, IInputContext input, RenderPass renderPass, ImGuiFontConfig imGuiFontConfig )
 	{
 		var context = ImGuiNET.ImGui.CreateContext();
 		ImGuiNET.ImGui.SetCurrentContext( context );
@@ -88,23 +88,23 @@ public sealed class ImGuiController : IDisposable
 			throw new Exception( $"Failed to load ImGui font" );
 		}
 
-		Init( engine, input );
+		Init( engine, input, renderPass );
 
 		SetPerFrameImGuiData( 1f / 60f );
 
 		BeginFrame();
 	}
 
-	private unsafe void Init( VkEngine engine, IInputContext input )
+	private unsafe void Init( VkEngine engine, IInputContext input, RenderPass renderPass )
 	{
 		this.engine = engine;
 		this.input = input;
+		this.renderPass = renderPass;
 
 		if ( engine.SwapchainImageCount < 2 )
 			throw new Exception( $"Swap chain image count must be >= 2" );
 
 		InitializeStyle();
-		InitializeRenderPass( engine.SwapchainImageFormat, engine.DepthFormat );
 		InitializeSampler();
 		InitializeDescriptors();
 		InitializePipeline();
@@ -229,94 +229,6 @@ public sealed class ImGuiController : IDisposable
 		colors[(int)ImGuiCol.NavWindowingHighlight] = new Vector4( 0.33f, 0.67f, 0.86f, 1.00f );
 		colors[(int)ImGuiCol.NavWindowingDimBg] = new Vector4( 0.33f, 0.67f, 0.86f, 1.00f );
 		colors[(int)ImGuiCol.ModalWindowDimBg] = new Vector4( 0.33f, 0.67f, 0.86f, 1.00f );
-	}
-
-	private unsafe void InitializeRenderPass( Format swapchainFormat, Format? depthBufferFormat )
-	{
-		ArgumentNullException.ThrowIfNull( engine.DisposalManager, nameof( engine.DisposalManager ) );
-
-		var logicalDevice = engine.LogicalDevice;
-
-		// Create the render pass
-		var colorAttachment = new AttachmentDescription
-		{
-			Format = swapchainFormat,
-			Samples = SampleCountFlags.Count1Bit,
-			LoadOp = AttachmentLoadOp.Load,
-			StoreOp = AttachmentStoreOp.Store,
-			StencilLoadOp = AttachmentLoadOp.DontCare,
-			StencilStoreOp = AttachmentStoreOp.DontCare,
-			InitialLayout = AttachmentLoadOp.Load == AttachmentLoadOp.Clear ? ImageLayout.Undefined : ImageLayout.PresentSrcKhr,
-			FinalLayout = ImageLayout.PresentSrcKhr
-		};
-
-		var colorAttachmentRef = new AttachmentReference
-		{
-			Attachment = 0,
-			Layout = ImageLayout.ColorAttachmentOptimal
-		};
-
-		var subpass = new SubpassDescription
-		{
-			PipelineBindPoint = PipelineBindPoint.Graphics,
-			ColorAttachmentCount = 1,
-			PColorAttachments = (AttachmentReference*)Unsafe.AsPointer( ref colorAttachmentRef )
-		};
-
-		Span<AttachmentDescription> attachments = stackalloc AttachmentDescription[] { colorAttachment };
-		var depthAttachment = new AttachmentDescription();
-		var depthAttachmentRef = new AttachmentReference();
-		if ( depthBufferFormat.HasValue )
-		{
-			depthAttachment.Format = depthBufferFormat.Value;
-			depthAttachment.Samples = SampleCountFlags.Count1Bit;
-			depthAttachment.LoadOp = AttachmentLoadOp.Load;
-			depthAttachment.StoreOp = AttachmentStoreOp.Store;
-			depthAttachment.StencilLoadOp = AttachmentLoadOp.DontCare;
-			depthAttachment.StencilStoreOp = AttachmentStoreOp.DontCare;
-			depthAttachment.InitialLayout = AttachmentLoadOp.Load == AttachmentLoadOp.Clear ? ImageLayout.Undefined : ImageLayout.DepthStencilAttachmentOptimal;
-			depthAttachment.FinalLayout = ImageLayout.DepthStencilAttachmentOptimal;
-
-			depthAttachmentRef.Attachment = 1;
-			depthAttachmentRef.Layout = ImageLayout.DepthStencilAttachmentOptimal;
-
-			subpass.PDepthStencilAttachment = (AttachmentReference*)Unsafe.AsPointer( ref depthAttachmentRef );
-
-			attachments = stackalloc AttachmentDescription[] { colorAttachment, depthAttachment };
-		}
-
-		var colorDependency = new SubpassDependency
-		{
-			SrcSubpass = Vk.SubpassExternal,
-			DstSubpass = 0,
-			SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit,
-			SrcAccessMask = 0,
-			DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit,
-			DstAccessMask = AccessFlags.ColorAttachmentWriteBit
-		};
-
-		var depthDependency = new SubpassDependency
-		{
-			SrcSubpass = Vk.SubpassExternal,
-			DstSubpass = 0,
-			SrcStageMask = PipelineStageFlags.EarlyFragmentTestsBit | PipelineStageFlags.LateFragmentTestsBit,
-			SrcAccessMask = 0,
-			DstStageMask = PipelineStageFlags.EarlyFragmentTestsBit | PipelineStageFlags.LateFragmentTestsBit,
-			DstAccessMask = AccessFlags.DepthStencilAttachmentWriteBit
-		};
-
-		var renderPassInfo = VkInfo.RenderPass(
-			attachments,
-			new ReadOnlySpan<SubpassDescription>( ref subpass ),
-			stackalloc SubpassDependency[]
-			{
-				colorDependency,
-				depthDependency
-			} );
-
-		Apis.Vk.CreateRenderPass( logicalDevice, renderPassInfo, default, out renderPass ).Verify();
-		VkInvalidHandleException.ThrowIfInvalid( renderPass );
-		engine.DisposalManager.Add( () => Apis.Vk.DestroyRenderPass( logicalDevice, renderPass, null ) );
 	}
 
 	private unsafe void InitializeSampler()
@@ -651,19 +563,6 @@ public sealed class ImGuiController : IDisposable
 			return;
 		}
 
-		var renderPassInfo = new RenderPassBeginInfo
-		{
-			SType = StructureType.RenderPassBeginInfo,
-			RenderPass = renderPass,
-			Framebuffer = framebuffer
-		};
-		renderPassInfo.RenderArea.Offset = default;
-		renderPassInfo.RenderArea.Extent = swapchainExtent;
-		renderPassInfo.ClearValueCount = 0;
-		renderPassInfo.PClearValues = default;
-
-		Apis.Vk.CmdBeginRenderPass( commandBuffer, &renderPassInfo, SubpassContents.Inline );
-
 		// Allocate array to store enough vertex/index buffers
 		if ( mainWindowRenderBuffers.FrameRenderBuffers is null )
 		{
@@ -796,8 +695,6 @@ public sealed class ImGuiController : IDisposable
 			indexOffset += cmdList->IdxBuffer.Size;
 			vertexOffset += cmdList->VtxBuffer.Size;
 		}
-
-		Apis.Vk.CmdEndRenderPass( commandBuffer );
 	}
 
 	private unsafe void CreateOrResizeBuffer( ref AllocatedBuffer allocatedBuffer, ulong newSize, BufferUsageFlags usage )

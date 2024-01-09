@@ -304,9 +304,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			DrawObjects( cmd, 0, Renderables.Count );
 
-			Apis.Vk.CmdEndRenderPass( cmd );
-
 			ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
+
+			Apis.Vk.CmdEndRenderPass( cmd );
 
 			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
 
@@ -1206,7 +1206,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		var initializationProfile = CpuProfile.New( nameof( InitializeImGui ) );
 
-		ImGuiController = new ImGuiController( this, input );
+		ImGuiController = new ImGuiController( this, input, renderPass );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
