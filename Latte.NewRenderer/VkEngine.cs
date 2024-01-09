@@ -42,7 +42,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private const string SwapchainTag = "swapchain";
 	private const string WireframeTag = "wireframe";
 
-	[MemberNotNullWhen( true, nameof( AllocationManager ), nameof( DisposalManager ), nameof( DescriptorAllocator ) )]
+	[MemberNotNullWhen( true, nameof( DescriptorAllocator ) )]
 	internal bool IsInitialized { get; private set; }
 
 	internal bool WireframeEnabled
@@ -73,24 +73,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	}
 	private bool vsyncEnabled = true;
 
-	internal string GraphicsDeviceName
-	{
-		get
-		{
-			fixed ( byte* namePtr = physicalDeviceProperties.DeviceName )
-			{
-				var nameStr = SilkMarshal.PtrToString( (nint)namePtr );
-				if ( nameStr is null )
-					throw new VkException( "Failed to get name of physical device" );
-
-				return nameStr;
-			}
-		}
-	}
-
-	internal ImGuiController? ImGuiController { get; private set; }
-
-	internal IView? View { get; private set; }
 	internal bool IsVisible
 	{
 		get
@@ -100,15 +82,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 	}
 
-	private Instance instance;
-	private DebugUtilsMessengerEXT debugMessenger;
-	internal PhysicalDevice PhysicalDevice { get; private set; }
-	private VkQueueFamilyIndices queueFamilyIndices;
-	internal Device LogicalDevice { get; private set; }
+	internal ImGuiController? ImGuiController { get; private set; }
+
+	internal IView? View { get; private set; }
 	private SurfaceKHR surface;
-	internal AllocationManager? AllocationManager { get; private set; }
-	internal DisposalManager? DisposalManager { get; private set; }
-	private PhysicalDeviceProperties physicalDeviceProperties;
 
 	private SwapchainKHR swapchain;
 	internal Format SwapchainImageFormat { get; private set; }
@@ -119,13 +96,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private AllocatedImage depthImage;
 	internal Format DepthFormat { get; private set; }
 	private ImageView depthImageView;
-
-	private Queue graphicsQueue;
-	internal uint GraphicsQueueFamily { get; private set; }
-	private Queue presentQueue;
-	internal uint PresentQueueFamily { get; private set; }
-	private Queue transferQueue;
-	internal uint TransferQueueFamily { get; private set; }
 
 	private ImmutableArray<FrameData> frameData = [];
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
@@ -160,8 +130,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 	private readonly GpuLightData[] lightData = new GpuLightData[MaxLights];
 
-	private ExtDebugUtils? debugUtilsExtension;
-	private KhrSurface? surfaceExtension;
 	private KhrSwapchain? swapchainExtension;
 
 	private bool disposed;
@@ -227,14 +195,14 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var waitForRenderProfile = CpuProfile.New( "Wait for last render" );
 		using ( waitForRenderProfile )
-			Apis.Vk.WaitForFences( LogicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
+			Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
 		cpuPerformanceTimes[waitForRenderProfile.Name] = waitForRenderProfile.Time;
 
 		uint swapchainImageIndex;
 		var acquireSwapchainImageProfile = CpuProfile.New( "Acquire swapchain image" );
 		using ( acquireSwapchainImageProfile )
 		{
-			var acquireResult = swapchainExtension.AcquireNextImage( LogicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
+			var acquireResult = swapchainExtension.AcquireNextImage( VkContext.LogicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
 			switch ( acquireResult )
 			{
 				case Result.ErrorOutOfDateKhr:
@@ -247,7 +215,7 @@ internal unsafe sealed class VkEngine : IDisposable
 					throw new VkException( "Failed to acquire next image in the swap chain" );
 			}
 
-			Apis.Vk.ResetFences( LogicalDevice, 1, renderFence ).Verify();
+			Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, renderFence ).Verify();
 		}
 		cpuPerformanceTimes[acquireSwapchainImageProfile.Name] = acquireSwapchainImageProfile.Time;
 
@@ -331,7 +299,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				PCommandBuffers = &cmd,
 			};
 
-			Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, renderFence ).Verify();
+			Apis.Vk.QueueSubmit( VkContext.GraphicsQueue, 1, submitInfo, renderFence ).Verify();
 		}
 		cpuPerformanceTimes[submitProfile.Name] = submitProfile.Time;
 
@@ -349,7 +317,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				PImageIndices = &swapchainImageIndex
 			};
 
-			var presentResult = swapchainExtension.QueuePresent( presentQueue, presentInfo );
+			var presentResult = swapchainExtension.QueuePresent( VkContext.PresentQueue, presentInfo );
 			switch ( presentResult )
 			{
 				case Result.ErrorOutOfDateKhr:
@@ -371,8 +339,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void DrawObjects( CommandBuffer cmd, int first, int count )
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( this.View, nameof( this.View ) );
-		ArgumentNullException.ThrowIfNull( AllocationManager, nameof( AllocationManager ) );
 
 		var currentFrameData = CurrentFrameData;
 
@@ -388,17 +358,17 @@ internal unsafe sealed class VkEngine : IDisposable
 			Projection = projection,
 			ViewProjection = view * projection
 		};
-		AllocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData, true );
+		VkContext.AllocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData, true );
 
 		var frameIndex = frameNumber % frameData.Length;
 		sceneParameters.LightCount = Lights.Count;
-		AllocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
+		VkContext.AllocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
 
 		var objectData = this.objectData.AsSpan().Slice( first, count );
 		for ( var i = 0; i < count; i++ )
 			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
 
-		AllocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData, true );
+		VkContext.AllocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData, true );
 
 		for ( var i = 0; i < Lights.Count; i++ )
 		{
@@ -406,7 +376,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			lightData[i] = new GpuLightData( light.Position, light.Color );
 		}
 
-		AllocationManager.SetMemory( currentFrameData.LightBuffer.Allocation, (ReadOnlySpan<GpuLightData>)lightData, true );
+		VkContext.AllocationManager.SetMemory( currentFrameData.LightBuffer.Allocation, (ReadOnlySpan<GpuLightData>)lightData, true );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
@@ -483,7 +453,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		ObjectDisposedException.ThrowIf( disposed, this );
 
-		Apis.Vk.DeviceWaitIdle( LogicalDevice ).Verify();
+		Apis.Vk.DeviceWaitIdle( VkContext.LogicalDevice ).Verify();
 	}
 
 	internal void ImGuiShowRendererStatistics()
@@ -508,7 +478,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !ImGuiNET.ImGui.Begin( "Renderer Statistics", overlayFlags ) )
 			return;
 
-		ImGuiNET.ImGui.Text( GraphicsDeviceName );
+		ImGuiNET.ImGui.Text( VkContext.PhysicalDeviceInfo.Name );
 		ImGuiNET.ImGui.Text( $"Renderables: {Renderables.Count}/{MaxObjects}" );
 		ImGuiNET.ImGui.Text( $"Lights: {Lights.Count}/{MaxLights}" );
 
@@ -597,12 +567,14 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void RecreateSwapchain()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 
 		WaitForIdle();
 
-		DisposalManager.Dispose( SwapchainTag );
+		VkContext.DisposalManager.Dispose( SwapchainTag );
 		if ( View.Size.X <= 0 || View.Size.Y <= 0 )
 			return;
 
@@ -615,11 +587,12 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void RecreateWireframe()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		WaitForIdle();
 
-		DisposalManager.Dispose( WireframeTag );
+		VkContext.DisposalManager.Dispose( WireframeTag );
 		InitializePipelines();
 		SetupTextureSets();
 		InitializeQueries();
@@ -633,81 +606,17 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeVulkan ) );
 
-		var instanceBuilderResult = new VkInstanceBuilder()
-			.WithName( "Example" )
-			.WithView( View )
-			.RequireVulkanVersion( 1, 1, 0 )
-			.UseDefaultDebugMessenger()
-			.Build();
-
-		instance = instanceBuilderResult.Instance;
-		debugMessenger = instanceBuilderResult.DebugMessenger;
-		debugUtilsExtension = instanceBuilderResult.DebugUtilsExtension;
-
-		VkInvalidHandleException.ThrowIfInvalid( instance );
-		VkInvalidHandleException.ThrowIfInvalid( debugMessenger );
-
-		if ( !Apis.Vk.TryGetInstanceExtension<KhrSurface>( instance, out var surfaceExtension ) )
-			throw new VkException( "Failed to get KHR_surface extension" );
-
-		this.surfaceExtension = surfaceExtension;
-		surface = View.VkSurface!.Create<AllocationCallbacks>( instance.ToHandle(), null ).ToSurface();
-
-		var physicalDeviceSelectorResult = new VkPhysicalDeviceSelector( instance )
-			.RequireDiscreteDevice( true )
-			.RequireVersion( 1, 1, 0 )
-			.WithSurface( surface, surfaceExtension )
-			.RequireUniqueGraphicsQueue( true )
-			.RequireUniquePresentQueue( true )
-			.RequireUniqueTransferQueue( true )
-			.Select();
-		PhysicalDevice = physicalDeviceSelectorResult.PhysicalDevice;
-		queueFamilyIndices = physicalDeviceSelectorResult.QueueFamilyIndices;
-		VkInvalidHandleException.ThrowIfInvalid( PhysicalDevice );
-
-		var logicalDeviceBuilderResult = new VkLogicalDeviceBuilder( PhysicalDevice )
-			.WithSurface( surface, surfaceExtension )
-			.WithQueueFamilyIndices( queueFamilyIndices )
-			.WithExtensions( KhrSwapchain.ExtensionName )
-			.WithFeatures( new PhysicalDeviceFeatures
-			{
-				FillModeNonSolid = Vk.True,
-				PipelineStatisticsQuery = Vk.True
-			} )
-			.WithPNext( new PhysicalDeviceShaderDrawParametersFeatures
-			{
-				SType = StructureType.PhysicalDeviceShaderDrawParametersFeatures,
-				PNext = null,
-				ShaderDrawParameters = Vk.True
-			} )
-			.Build();
-
-		LogicalDevice = logicalDeviceBuilderResult.LogicalDevice;
-		graphicsQueue = logicalDeviceBuilderResult.GraphicsQueue;
-		GraphicsQueueFamily = logicalDeviceBuilderResult.GraphicsQueueFamily;
-		presentQueue = logicalDeviceBuilderResult.PresentQueue;
-		PresentQueueFamily = logicalDeviceBuilderResult.PresentQueueFamily;
-		transferQueue = logicalDeviceBuilderResult.TransferQueue;
-		TransferQueueFamily = logicalDeviceBuilderResult.TransferQueueFamily;
-
-		VkInvalidHandleException.ThrowIfInvalid( LogicalDevice );
-		VkInvalidHandleException.ThrowIfInvalid( graphicsQueue );
-		VkInvalidHandleException.ThrowIfInvalid( presentQueue );
-		VkInvalidHandleException.ThrowIfInvalid( transferQueue );
-
-		AllocationManager = new AllocationManager( PhysicalDevice, LogicalDevice );
-		DisposalManager = new DisposalManager();
-		physicalDeviceProperties = Apis.Vk.GetPhysicalDeviceProperties( PhysicalDevice );
+		surface = VkContext.Initialize( View );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} failed to initialize" );
 
 		var frameDataBuilder = ImmutableArray.CreateBuilder<FrameData>( MaxFramesInFlight );
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 			frameDataBuilder.Add( new FrameData() );
 		frameData = frameDataBuilder.MoveToImmutable();
 
-		DisposalManager.Add( () => Apis.Vk.DestroyInstance( instance, null ) );
-		DisposalManager.Add( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( instance, debugMessenger, null ) );
-		DisposalManager.Add( () => surfaceExtension.DestroySurface( instance, surface, null ) );
-		DisposalManager.Add( () => Apis.Vk.DestroyDevice( LogicalDevice, null ) );
+		if ( VkContext.SurfaceExtension is not null )
+			VkContext.DisposalManager.Add( () => VkContext.SurfaceExtension.DestroySurface( VkContext.Instance, surface, null ) );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -716,15 +625,16 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeSwapchain()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-		ArgumentNullException.ThrowIfNull( AllocationManager, nameof( AllocationManager ) );
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeSwapchain ) );
 
-		var result = new VkSwapchainBuilder( instance, PhysicalDevice, LogicalDevice )
-			.WithSurface( surface, surfaceExtension )
-			.WithQueueFamilyIndices( queueFamilyIndices )
+		var result = new VkSwapchainBuilder( VkContext.Instance, VkContext.PhysicalDevice, VkContext.LogicalDevice )
+			.WithSurface( surface, VkContext.SurfaceExtension )
+			.WithQueueFamilyIndices( VkContext.QueueFamilyIndices )
 			.UseDefaultFormat()
 			.SetPresentMode( VsyncEnabled ? PresentModeKHR.FifoKhr : PresentModeKHR.MailboxKhr )
 			.SetExtent( (uint)View.Size.X, (uint)View.Size.Y )
@@ -746,24 +656,24 @@ internal unsafe sealed class VkEngine : IDisposable
 		DepthFormat = Format.D32Sfloat;
 
 		var depthImageInfo = VkInfo.Image( DepthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
-		Apis.Vk.CreateImage( LogicalDevice, depthImageInfo, null, out var depthImage ).Verify();
+		Apis.Vk.CreateImage( VkContext.LogicalDevice, depthImageInfo, null, out var depthImage ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( depthImage );
-		this.depthImage = AllocationManager.AllocateImage( depthImage, MemoryPropertyFlags.DeviceLocalBit );
+		this.depthImage = VkContext.AllocationManager.AllocateImage( depthImage, MemoryPropertyFlags.DeviceLocalBit );
 
 		var depthImageViewInfo = VkInfo.ImageView( DepthFormat, depthImage, ImageAspectFlags.DepthBit );
-		Apis.Vk.CreateImageView( LogicalDevice, depthImageViewInfo, null, out var depthImageView ).Verify();
+		Apis.Vk.CreateImageView( VkContext.LogicalDevice, depthImageViewInfo, null, out var depthImageView ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( depthImageView );
 		this.depthImageView = depthImageView;
 
-		DisposalManager.Add( () => swapchainExtension.DestroySwapchain( LogicalDevice, swapchain, null ), SwapchainTag );
+		VkContext.DisposalManager.Add( () => swapchainExtension.DestroySwapchain( VkContext.LogicalDevice, swapchain, null ), SwapchainTag );
 		for ( var i = 0; i < swapchainImageViews.Length; i++ )
 		{
 			var index = i;
-			DisposalManager.Add( () => Apis.Vk.DestroyImageView( LogicalDevice, swapchainImageViews[index], null ), SwapchainTag );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, swapchainImageViews[index], null ), SwapchainTag );
 		}
 
-		DisposalManager.Add( () => Apis.Vk.DestroyImage( LogicalDevice, depthImage, null ), SwapchainTag );
-		DisposalManager.Add( () => Apis.Vk.DestroyImageView( LogicalDevice, depthImageView, null ), SwapchainTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, depthImage, null ), SwapchainTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, depthImageView, null ), SwapchainTag );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -772,17 +682,18 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeCommands()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeCommands ) );
 
-		var poolCreateInfo = VkInfo.CommandPool( GraphicsQueueFamily, CommandPoolCreateFlags.ResetCommandBufferBit );
+		var poolCreateInfo = VkInfo.CommandPool( VkContext.QueueFamilyIndices.GraphicsQueue, CommandPoolCreateFlags.ResetCommandBufferBit );
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			Apis.Vk.CreateCommandPool( LogicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
+			Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
 			var bufferAllocateInfo = VkInfo.AllocateCommandBuffer( commandPool, 1, CommandBufferLevel.Primary );
-			Apis.Vk.AllocateCommandBuffers( LogicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
+			Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
 
 			VkInvalidHandleException.ThrowIfInvalid( commandPool );
 			VkInvalidHandleException.ThrowIfInvalid( commandBuffer );
@@ -790,19 +701,19 @@ internal unsafe sealed class VkEngine : IDisposable
 			frameData[i].CommandPool = commandPool;
 			frameData[i].CommandBuffer = commandBuffer;
 
-			DisposalManager.Add( () => Apis.Vk.DestroyCommandPool( LogicalDevice, commandPool, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, null ) );
 		}
 
-		Apis.Vk.CreateCommandPool( LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).Verify();
+		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( uploadCommandPool );
 		uploadContext.CommandPool = uploadCommandPool;
 
 		var uploadBufferAllocateInfo = VkInfo.AllocateCommandBuffer( uploadCommandPool, 1, CommandBufferLevel.Primary );
-		Apis.Vk.AllocateCommandBuffers( LogicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).Verify();
+		Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( uploadCommandBuffer );
 		uploadContext.CommandBuffer = uploadCommandBuffer;
 
-		DisposalManager.Add( () => Apis.Vk.DestroyCommandPool( LogicalDevice, uploadCommandPool, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, uploadCommandPool, null ) );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -811,7 +722,8 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeDefaultRenderPass()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeDefaultRenderPass ) );
 
@@ -894,11 +806,11 @@ internal unsafe sealed class VkEngine : IDisposable
 				depthDependency
 			} );
 
-		Apis.Vk.CreateRenderPass( LogicalDevice, createInfo, null, out var renderPass ).Verify();
+		Apis.Vk.CreateRenderPass( VkContext.LogicalDevice, createInfo, null, out var renderPass ).Verify();
 
 		VkInvalidHandleException.ThrowIfInvalid( renderPass );
 		this.renderPass = renderPass;
-		DisposalManager.Add( () => Apis.Vk.DestroyRenderPass( LogicalDevice, renderPass, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyRenderPass( VkContext.LogicalDevice, renderPass, null ) );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -907,8 +819,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeFramebuffers()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeFramebuffers ) );
 
@@ -920,11 +834,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		for ( var i = 0; i < swapchainImages.Length; i++ )
 		{
 			imageViews[0] = swapchainImageViews[i];
-			Apis.Vk.CreateFramebuffer( LogicalDevice, createInfo, null, out var framebuffer ).Verify();
+			Apis.Vk.CreateFramebuffer( VkContext.LogicalDevice, createInfo, null, out var framebuffer ).Verify();
 
 			VkInvalidHandleException.ThrowIfInvalid( framebuffer );
 			framebufferBuilder.Add( framebuffer );
-			DisposalManager.Add( () => Apis.Vk.DestroyFramebuffer( LogicalDevice, framebuffer, null ), SwapchainTag );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyFramebuffer( VkContext.LogicalDevice, framebuffer, null ), SwapchainTag );
 		}
 
 		framebuffers = framebufferBuilder.MoveToImmutable();
@@ -936,7 +850,8 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeSynchronizationStructures()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeSynchronizationStructures ) );
 
@@ -945,9 +860,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
-			Apis.Vk.CreateFence( LogicalDevice, fenceCreateInfo, null, out var renderFence ).Verify();
-			Apis.Vk.CreateSemaphore( LogicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).Verify();
-			Apis.Vk.CreateSemaphore( LogicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).Verify();
+			Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var renderFence ).Verify();
+			Apis.Vk.CreateSemaphore( VkContext.LogicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).Verify();
+			Apis.Vk.CreateSemaphore( VkContext.LogicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).Verify();
 
 			VkInvalidHandleException.ThrowIfInvalid( renderFence );
 			VkInvalidHandleException.ThrowIfInvalid( presentSemaphore );
@@ -957,16 +872,16 @@ internal unsafe sealed class VkEngine : IDisposable
 			frameData[i].PresentSemaphore = presentSemaphore;
 			frameData[i].RenderSemaphore = renderSemaphore;
 
-			DisposalManager.Add( () => Apis.Vk.DestroySemaphore( LogicalDevice, renderSemaphore, null ) );
-			DisposalManager.Add( () => Apis.Vk.DestroySemaphore( LogicalDevice, presentSemaphore, null ) );
-			DisposalManager.Add( () => Apis.Vk.DestroyFence( LogicalDevice, renderFence, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroySemaphore( VkContext.LogicalDevice, renderSemaphore, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroySemaphore( VkContext.LogicalDevice, presentSemaphore, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyFence( VkContext.LogicalDevice, renderFence, null ) );
 		}
 
 		fenceCreateInfo.Flags = FenceCreateFlags.None;
-		Apis.Vk.CreateFence( LogicalDevice, fenceCreateInfo, null, out var uploadFence ).Verify();
+		Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var uploadFence ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( uploadFence );
 		uploadContext.UploadFence = uploadFence;
-		DisposalManager.Add( () => Apis.Vk.DestroyFence( LogicalDevice, uploadFence, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyFence( VkContext.LogicalDevice, uploadFence, null ) );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -975,11 +890,12 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeDescriptors()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeDescriptors ) );
 
-		DescriptorAllocator = new DescriptorAllocator( LogicalDevice, 100,
+		DescriptorAllocator = new DescriptorAllocator( VkContext.LogicalDevice, 100,
 		[
 			new( DescriptorType.UniformBuffer, 2 ),
 			new( DescriptorType.UniformBufferDynamic, 1 ),
@@ -987,7 +903,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			new( DescriptorType.CombinedImageSampler, 4 )
 		] );
 
-		var layoutBuilder = new VkDescriptorSetLayoutBuilder( LogicalDevice, 4 );
+		var layoutBuilder = new VkDescriptorSetLayoutBuilder( VkContext.LogicalDevice, 4 );
 
 		frameSetLayout = layoutBuilder
 			.AddBinding( 0, DescriptorType.UniformBuffer, ShaderStageFlags.VertexBit )
@@ -1006,9 +922,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		sceneParameterBuffer = CreateBuffer( sceneParameterBufferSize, BufferUsageFlags.UniformBufferBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
-		DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( LogicalDevice, frameSetLayout, null ) );
-		DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( LogicalDevice, singleTextureSetLayout, null ) );
-		DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, sceneParameterBuffer.Buffer, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, frameSetLayout, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, singleTextureSetLayout, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, sceneParameterBuffer.Buffer, null ) );
 
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
@@ -1025,11 +941,11 @@ internal unsafe sealed class VkEngine : IDisposable
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
 			var index = i;
-			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
-			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
-			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, frameData[index].LightBuffer.Buffer, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].LightBuffer.Buffer, null ) );
 
-			new VkDescriptorUpdater( LogicalDevice, 4 )
+			new VkDescriptorUpdater( VkContext.LogicalDevice, 4 )
 				.WriteBuffer( 0, DescriptorType.UniformBuffer, frameData[i].CameraBuffer.Buffer, 0, (ulong)sizeof( GpuCameraData ) )
 				.WriteBuffer( 1, DescriptorType.UniformBufferDynamic, sceneParameterBuffer.Buffer, 0, (ulong)sizeof( GpuSceneData ) )
 				.WriteBuffer( 2, DescriptorType.StorageBuffer, frameData[i].ObjectBuffer.Buffer, 0, (ulong)sizeof( GpuObjectData ) * MaxObjects )
@@ -1045,7 +961,8 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeShaders()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeShaders ) );
 
@@ -1055,11 +972,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		var billboardVertShader = CreateShader( "default_billboard.vert", LatteShader.FromPath( "/Assets/Shaders/default_billboard.vert.spv" ) );
 		var billboardFragShader = CreateShader( "default_billboard.frag", LatteShader.FromPath( "/Assets/Shaders/default_billboard.frag.spv" ) );
 
-		DisposalManager.Add( meshTriangleShader.Dispose );
-		DisposalManager.Add( defaultLitShader.Dispose );
-		DisposalManager.Add( texturedLitShader.Dispose );
-		DisposalManager.Add( billboardVertShader.Dispose );
-		DisposalManager.Add( billboardFragShader.Dispose );
+		VkContext.DisposalManager.Add( meshTriangleShader.Dispose );
+		VkContext.DisposalManager.Add( defaultLitShader.Dispose );
+		VkContext.DisposalManager.Add( texturedLitShader.Dispose );
+		VkContext.DisposalManager.Add( billboardVertShader.Dispose );
+		VkContext.DisposalManager.Add( billboardFragShader.Dispose );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -1068,8 +985,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializePipelines()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializePipelines ) );
 
@@ -1079,7 +998,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		var billboardVertShader = GetShader( "default_billboard.vert" );
 		var billboardFragShader = GetShader( "default_billboard.frag" );
 
-		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( LogicalDevice, 0, 2 );
+		var pipelineLayoutBuilder = new VkPipelineLayoutBuilder( VkContext.LogicalDevice, 0, 2 );
 		var meshPipelineLayout = pipelineLayoutBuilder
 			.AddDescriptorSetLayout( frameSetLayout )
 			.Build();
@@ -1120,7 +1039,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			}
 		};
 
-		var pipelineBuilder = new VkPipelineBuilder( LogicalDevice, renderPass )
+		var pipelineBuilder = new VkPipelineBuilder( VkContext.LogicalDevice, renderPass )
 			.WithPipelineLayout( meshPipelineLayout )
 			.WithViewport( new Viewport( 0, 0, View.Size.X, View.Size.Y, 0, 1 ) )
 			.WithScissor( new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) ) )
@@ -1165,15 +1084,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		var defaultMeshMaterial = CreateMaterial( DefaultMeshMaterialName, meshPipeline, meshPipelineLayout );
 		var texturedMeshMaterial = CreateMaterial( TexturedMeshMaterialName, texturedMeshPipeline, texturedPipelineLayout );
 		var billboardMaterial = CreateMaterial( BillboardMaterialName, billboardPipeline, meshPipelineLayout );
-		DisposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
-		DisposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
-		DisposalManager.Add( () => RemoveMaterial( BillboardMaterialName ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => RemoveMaterial( DefaultMeshMaterialName ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => RemoveMaterial( TexturedMeshMaterialName ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => RemoveMaterial( BillboardMaterialName ), SwapchainTag, WireframeTag );
 
-		DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( LogicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
-		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
-		DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( LogicalDevice, texturedPipelineLayout, null ), SwapchainTag, WireframeTag );
-		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, texturedMeshPipeline, null ), SwapchainTag, WireframeTag );
-		DisposalManager.Add( () => Apis.Vk.DestroyPipeline( LogicalDevice, billboardPipeline, null ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( VkContext.LogicalDevice, meshPipelineLayout, null ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, meshPipeline, null ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( VkContext.LogicalDevice, texturedPipelineLayout, null ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, texturedMeshPipeline, null ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, billboardPipeline, null ), SwapchainTag, WireframeTag );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -1182,20 +1101,21 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeSamplers()
 	{
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeSamplers ) );
 
-		Apis.Vk.CreateSampler( LogicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
+		Apis.Vk.CreateSampler( VkContext.LogicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( linearSampler );
 		this.linearSampler = linearSampler;
 
-		Apis.Vk.CreateSampler( LogicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).Verify();
+		Apis.Vk.CreateSampler( VkContext.LogicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( nearestSampler );
 		this.nearestSampler = nearestSampler;
 
-		DisposalManager.Add( () => Apis.Vk.DestroySampler( LogicalDevice, linearSampler, null ) );
-		DisposalManager.Add( () => Apis.Vk.DestroySampler( LogicalDevice, nearestSampler, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroySampler( VkContext.LogicalDevice, linearSampler, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroySampler( VkContext.LogicalDevice, nearestSampler, null ) );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -1219,20 +1139,21 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		void LoadTexture( string texturePath )
 		{
-			ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+			if ( !VkContext.IsInitialized )
+				throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 			var latteTexture = LatteTexture.FromPath( texturePath );
 			var texture = new Texture( (uint)latteTexture.Width, (uint)latteTexture.Height, (uint)latteTexture.BytesPerPixel, latteTexture.PixelData );
 			UploadTexture( texture );
 
 			var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Srgb, texture.GpuTexture.Image, ImageAspectFlags.ColorBit );
-			Apis.Vk.CreateImageView( LogicalDevice, imageViewInfo, null, out var imageView ).Verify();
+			Apis.Vk.CreateImageView( VkContext.LogicalDevice, imageViewInfo, null, out var imageView ).Verify();
 			VkInvalidHandleException.ThrowIfInvalid( imageView );
 			texture.TextureView = imageView;
 
 			Textures.Add( Path.GetFileNameWithoutExtension( texturePath ).ToLower(), texture );
 
-			DisposalManager.Add( () => Apis.Vk.DestroyImageView( LogicalDevice, imageView, null ) );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, imageView, null ) );
 		}
 
 		LoadTexture( "/Assets/Models/Car 05/car5.png" );
@@ -1271,10 +1192,12 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void SetupTextureSets()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		var initializationProfile = CpuProfile.New( nameof( SetupTextureSets ) );
 
 		ArgumentNullException.ThrowIfNull( DescriptorAllocator, nameof( DescriptorAllocator ) );
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
 
 		var defaultMaterial = GetMaterial( TexturedMeshMaterialName );
 		foreach ( var (textureName, texture) in Textures )
@@ -1283,13 +1206,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			texturedMaterial.TextureSet = DescriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref singleTextureSetLayout ) );
 			VkInvalidHandleException.ThrowIfInvalid( texturedMaterial.TextureSet );
 
-			new VkDescriptorUpdater( LogicalDevice, 1 )
+			new VkDescriptorUpdater( VkContext.LogicalDevice, 1 )
 				.WriteImage( 0, DescriptorType.CombinedImageSampler, texture.TextureView, nearestSampler, ImageLayout.ShaderReadOnlyOptimal )
 				.Update( texturedMaterial.TextureSet )
 				.Dispose();
 
 			Materials.Add( textureName, texturedMaterial );
-			DisposalManager.Add( () => RemoveMaterial( textureName ), SwapchainTag, WireframeTag );
+			VkContext.DisposalManager.Add( () => RemoveMaterial( textureName ), SwapchainTag, WireframeTag );
 		}
 
 		initializationProfile.Dispose();
@@ -1299,9 +1222,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeQueries()
 	{
-		var initializationProfile = CpuProfile.New( nameof( InitializeQueries ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		var initializationProfile = CpuProfile.New( nameof( InitializeQueries ) );
 
 		var gpuExecutePoolInfo = new QueryPoolCreateInfo
 		{
@@ -1313,7 +1237,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Flags = 0
 		};
 
-		Apis.Vk.CreateQueryPool( LogicalDevice, gpuExecutePoolInfo, null, out var queryPool );
+		Apis.Vk.CreateQueryPool( VkContext.LogicalDevice, gpuExecutePoolInfo, null, out var queryPool );
 		VkInvalidHandleException.ThrowIfInvalid( queryPool );
 		gpuExecuteQueryPool = queryPool;
 
@@ -1322,7 +1246,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 2 );
 		} );
 
-		DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( LogicalDevice, gpuExecuteQueryPool, null ), SwapchainTag, WireframeTag );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( VkContext.LogicalDevice, gpuExecuteQueryPool, null ), SwapchainTag, WireframeTag );
 
 		foreach ( var (_, material) in Materials )
 		{
@@ -1342,7 +1266,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				Flags = 0,
 			};
 
-			Apis.Vk.CreateQueryPool( LogicalDevice, poolInfo, null, out queryPool );
+			Apis.Vk.CreateQueryPool( VkContext.LogicalDevice, poolInfo, null, out queryPool );
 			VkInvalidHandleException.ThrowIfInvalid( queryPool );
 			material.PipelineQueryPool = queryPool;
 
@@ -1351,7 +1275,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 1 );
 			} );
 
-			DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( LogicalDevice, material.PipelineQueryPool, null ), SwapchainTag, WireframeTag );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyQueryPool( VkContext.LogicalDevice, material.PipelineQueryPool, null ), SwapchainTag, WireframeTag );
 		}
 
 		initializationProfile.Dispose();
@@ -1423,10 +1347,10 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.EndCommandBuffer( cmd ).Verify();
 
 		var submitInfo = VkInfo.SubmitInfo( new ReadOnlySpan<CommandBuffer>( ref cmd ) );
-		Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, uploadContext.UploadFence ).Verify();
-		Apis.Vk.WaitForFences( LogicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).Verify();
-		Apis.Vk.ResetFences( LogicalDevice, 1, uploadContext.UploadFence ).Verify();
-		Apis.Vk.ResetCommandPool( LogicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).Verify();
+		Apis.Vk.QueueSubmit( VkContext.GraphicsQueue, 1, submitInfo, uploadContext.UploadFence ).Verify();
+		Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).Verify();
+		Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence ).Verify();
+		Apis.Vk.ResetCommandPool( VkContext.LogicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).Verify();
 	}
 
 	internal Shader CreateShader( string name, LatteShader latteShader )
@@ -1434,7 +1358,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( Shaders.ContainsKey( name ) )
 			throw new ArgumentException( $"A shader with the name \"{name}\" already exists", nameof( name ) );
 
-		var shader = new Shader( LogicalDevice, latteShader.Code, latteShader.EntryPoint );
+		var shader = new Shader( VkContext.LogicalDevice, latteShader.Code, latteShader.EntryPoint );
 		if ( !TryLoadShaderModule( shader.Code.Span, out var shaderModule ) )
 			throw new VkException( $"Failed to load {name} shader" );
 
@@ -1499,20 +1423,20 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		var statsStorage = (ulong*)Marshal.AllocHGlobal( 6 * sizeof( ulong ) );
 
-		var result = Apis.Vk.GetQueryPoolResults( LogicalDevice, gpuExecuteQueryPool, 0, 2,
+		var result = Apis.Vk.GetQueryPoolResults( VkContext.LogicalDevice, gpuExecuteQueryPool, 0, 2,
 			2 * sizeof( ulong ),
 			statsStorage,
 			sizeof( ulong ),
 			QueryResultFlags.Result64Bit );
 
 		if ( result == Result.Success )
-			gpuExecuteTime = TimeSpan.FromMicroseconds( (statsStorage[1] - statsStorage[0]) * physicalDeviceProperties.Limits.TimestampPeriod / 1000 );
+			gpuExecuteTime = TimeSpan.FromMicroseconds( (statsStorage[1] - statsStorage[0]) * VkContext.PhysicalDeviceInfo.Properties.Limits.TimestampPeriod / 1000 );
 		else if ( result != Result.NotReady )
 			result.Verify();
 
 		foreach ( var (materialName, material) in Materials )
 		{
-			result = Apis.Vk.GetQueryPoolResults( LogicalDevice, material.PipelineQueryPool, 0, 1,
+			result = Apis.Vk.GetQueryPoolResults( VkContext.LogicalDevice, material.PipelineQueryPool, 0, 1,
 				6 * sizeof( ulong ),
 				statsStorage,
 				6 * sizeof( ulong ),
@@ -1538,15 +1462,15 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
 	{
-		ArgumentNullException.ThrowIfNull( AllocationManager, nameof( AllocationManager ) );
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		// Vertex buffer
 		{
 			var bufferSize = (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>());
 
 			var stagingBuffer = CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
-			AllocationManager.SetMemory( stagingBuffer.Allocation, mesh.Vertices.AsSpan() );
+			VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, mesh.Vertices.AsSpan() );
 			var vertexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
@@ -1564,8 +1488,8 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			mesh.VertexBuffer = vertexBuffer;
 
-			Apis.Vk.DestroyBuffer( LogicalDevice, stagingBuffer.Buffer, null );
-			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, vertexBuffer.Buffer, null ) );
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, vertexBuffer.Buffer, null ) );
 		}
 
 		// Index buffer
@@ -1576,7 +1500,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var bufferSize = sizeof( uint ) * (ulong)mesh.Indices.Length;
 
 			var stagingBuffer = CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
-			AllocationManager.SetMemory( stagingBuffer.Allocation, mesh.Indices.AsSpan() );
+			VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, mesh.Indices.AsSpan() );
 			var indexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
@@ -1594,27 +1518,27 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			mesh.IndexBuffer = indexBuffer;
 
-			Apis.Vk.DestroyBuffer( LogicalDevice, stagingBuffer.Buffer, null );
-			DisposalManager.Add( () => Apis.Vk.DestroyBuffer( LogicalDevice, indexBuffer.Buffer, null ) );
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
+			VkContext.DisposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, indexBuffer.Buffer, null ) );
 		}
 	}
 
 	private void UploadTexture( Texture texture )
 	{
-		ArgumentNullException.ThrowIfNull( AllocationManager, nameof( AllocationManager ) );
-		ArgumentNullException.ThrowIfNull( DisposalManager, nameof( DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var imageSize = texture.Width * texture.Height * texture.BytesPerPixel;
 		var imageFormat = Format.R8G8B8A8Srgb;
 
 		var stagingBuffer = CreateBuffer( imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
-		AllocationManager.SetMemory( stagingBuffer.Allocation, texture.PixelData.Span );
+		VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, texture.PixelData.Span );
 
 		var imageExtent = new Extent3D( texture.Width, texture.Height, 1 );
 		var imageInfo = VkInfo.Image( imageFormat, ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit, imageExtent );
-		Apis.Vk.CreateImage( LogicalDevice, imageInfo, null, out var textureImage );
+		Apis.Vk.CreateImage( VkContext.LogicalDevice, imageInfo, null, out var textureImage );
 
-		var allocatedTextureImage = AllocationManager.AllocateImage( textureImage, MemoryPropertyFlags.DeviceLocalBit );
+		var allocatedTextureImage = VkContext.AllocationManager.AllocateImage( textureImage, MemoryPropertyFlags.DeviceLocalBit );
 		ImmediateSubmit( cmd =>
 		{
 			var range = new ImageSubresourceRange
@@ -1676,19 +1600,20 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		texture.GpuTexture = allocatedTextureImage;
 
-		Apis.Vk.DestroyBuffer( LogicalDevice, stagingBuffer.Buffer, null );
-		DisposalManager.Add( () => Apis.Vk.DestroyImage( LogicalDevice, textureImage, null ) );
+		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, textureImage, null ) );
 	}
 
 	private AllocatedBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
 		SharingMode sharingMode = SharingMode.Exclusive )
 	{
-		ArgumentNullException.ThrowIfNull( AllocationManager, nameof( AllocationManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var createInfo = VkInfo.Buffer( size, usageFlags, sharingMode );
-		Apis.Vk.CreateBuffer( LogicalDevice, createInfo, null, out var buffer );
+		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, createInfo, null, out var buffer );
 
-		return AllocationManager.AllocateBuffer( buffer, memoryFlags );
+		return VkContext.AllocationManager.AllocateBuffer( buffer, memoryFlags );
 	}
 
 	private bool TryLoadShaderModule( ReadOnlySpan<byte> shaderBytes, out ShaderModule shaderModule )
@@ -1696,15 +1621,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		fixed ( byte* shaderBytesPtr = shaderBytes )
 		{
 			var createInfo = VkInfo.ShaderModule( (nuint)shaderBytes.Length, shaderBytesPtr, ShaderModuleCreateFlags.None );
-			var result = Apis.Vk.CreateShaderModule( LogicalDevice, createInfo, null, out shaderModule );
+			var result = Apis.Vk.CreateShaderModule( VkContext.LogicalDevice, createInfo, null, out shaderModule );
 
 			return result == Result.Success;
 		}
 	}
 
-	private ulong PadUniformBufferSize( ulong currentSize )
+	private static ulong PadUniformBufferSize( ulong currentSize )
 	{
-		var minimumAlignment = physicalDeviceProperties.Limits.MinUniformBufferOffsetAlignment;
+		var minimumAlignment = VkContext.PhysicalDeviceInfo.Properties.Limits.MinUniformBufferOffsetAlignment;
 
 		if ( minimumAlignment > 0 )
 			return (currentSize + minimumAlignment - 1) & ~(minimumAlignment - 1);
@@ -1724,13 +1649,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		{
 		}
 
-		AllocationManager?.Dispose();
+		VkContext.AllocationManager?.Dispose();
 		DescriptorAllocator?.Dispose();
 		ImGuiController?.Dispose();
-		DisposalManager?.Dispose();
+		VkContext.DisposalManager?.Dispose();
 		swapchainExtension?.Dispose();
-		debugUtilsExtension?.Dispose();
-		surfaceExtension?.Dispose();
+		VkContext.DebugUtilsExtension?.Dispose();
+		VkContext.SurfaceExtension?.Dispose();
 
 		disposed = true;
 	}

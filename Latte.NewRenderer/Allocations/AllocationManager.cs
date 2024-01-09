@@ -11,20 +11,13 @@ namespace Latte.NewRenderer.Allocations;
 
 internal sealed class AllocationManager : IDisposable
 {
-	private readonly PhysicalDevice physicalDevice;
-	private readonly Device logicalDevice;
-
 	private readonly List<DeviceMemory> memoryAllocations;
 	private readonly Dictionary<Allocation, nint> preservedMaps = [];
 	private bool disposed;
 
-	internal AllocationManager( PhysicalDevice physicalDevice, Device logicalDevice )
+	internal AllocationManager()
 	{
-		this.physicalDevice = physicalDevice;
-		this.logicalDevice = logicalDevice;
-
-		var properties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );
-		memoryAllocations = new List<DeviceMemory>( (int)properties.Limits.MaxMemoryAllocationCount );
+		memoryAllocations = new List<DeviceMemory>( (int)VkContext.PhysicalDeviceInfo.Properties.Limits.MaxMemoryAllocationCount );
 	}
 
 	~AllocationManager()
@@ -39,12 +32,12 @@ internal sealed class AllocationManager : IDisposable
 		if ( memoryAllocations.Count >= memoryAllocations.Capacity )
 			throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
 
-		var requirements = Apis.Vk.GetBufferMemoryRequirements( logicalDevice, buffer );
+		var requirements = Apis.Vk.GetBufferMemoryRequirements( VkContext.LogicalDevice, buffer );
 		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 
-		Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
+		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( memory );
-		Apis.Vk.BindBufferMemory( logicalDevice, buffer, memory, 0 ).Verify();
+		Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).Verify();
 
 		memoryAllocations.Add( memory );
 		return new AllocatedBuffer( buffer, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
@@ -57,11 +50,11 @@ internal sealed class AllocationManager : IDisposable
 		if ( memoryAllocations.Count >= memoryAllocations.Capacity )
 			throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
 
-		var requirements = Apis.Vk.GetImageMemoryRequirements( logicalDevice, image );
+		var requirements = Apis.Vk.GetImageMemoryRequirements( VkContext.LogicalDevice, image );
 		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 
-		Apis.Vk.AllocateMemory( logicalDevice, allocateInfo, null, out var memory ).Verify();
-		Apis.Vk.BindImageMemory( logicalDevice, image, memory, 0 );
+		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).Verify();
+		Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
 
 		memoryAllocations.Add( memory );
 		return new AllocatedImage( image, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
@@ -96,9 +89,9 @@ internal sealed class AllocationManager : IDisposable
 	{
 		void* dataPtr;
 
-		Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).Verify();
+		Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).Verify();
 		Marshal.StructureToPtr( data, (nint)dataPtr + (nint)(dataSize * (ulong)index), false );
-		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+		Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
 	}
 
 	private unsafe void* RetrieveDataPointer( Allocation allocation, ulong dataSize, bool preserveMap )
@@ -108,7 +101,7 @@ internal sealed class AllocationManager : IDisposable
 		if ( preserveMap && preservedMaps.TryGetValue( allocation, out var mappedDataPtr ) )
 			dataPtr = (void*)mappedDataPtr;
 		else
-			Apis.Vk.MapMemory( logicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
+			Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
 
 		return dataPtr;
 	}
@@ -124,12 +117,12 @@ internal sealed class AllocationManager : IDisposable
 		}
 
 		preservedMaps.Remove( allocation );
-		Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+		Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
 	}
 
-	private uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
+	private static uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
 	{
-		var memoryProperties = Apis.Vk.GetPhysicalDeviceMemoryProperties( physicalDevice );
+		var memoryProperties = VkContext.PhysicalDeviceInfo.MemoryProperties;
 		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
 		{
 			if ( (typeFilter & 1 << i) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
@@ -148,10 +141,10 @@ internal sealed class AllocationManager : IDisposable
 			}
 
 			foreach ( var (allocation, _) in preservedMaps )
-				Apis.Vk.UnmapMemory( logicalDevice, allocation.Memory );
+				Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
 
 			foreach ( var allocatedMemory in memoryAllocations )
-				Apis.Vk.FreeMemory( logicalDevice, allocatedMemory, null );
+				Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocatedMemory, null );
 
 			disposed = true;
 		}

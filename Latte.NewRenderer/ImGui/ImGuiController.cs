@@ -108,7 +108,7 @@ public sealed class ImGuiController : IDisposable
 		InitializeSampler();
 		InitializeDescriptors();
 		InitializePipeline();
-		UploadDefaultFontAtlas( engine.GraphicsQueueFamily );
+		UploadDefaultFontAtlas( VkContext.QueueFamilyIndices.GraphicsQueue );
 	}
 
 	/// <summary>
@@ -233,9 +233,8 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void InitializeSampler()
 	{
-		ArgumentNullException.ThrowIfNull( engine.DisposalManager, nameof( engine.DisposalManager ) );
-
-		var logicalDevice = engine.LogicalDevice;
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var info = new SamplerCreateInfo
 		{
@@ -251,17 +250,17 @@ public sealed class ImGuiController : IDisposable
 			MaxAnisotropy = 1.0f
 		};
 
-		Apis.Vk.CreateSampler( logicalDevice, info, default, out fontSampler ).Verify();
+		Apis.Vk.CreateSampler( VkContext.LogicalDevice, info, default, out fontSampler ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( fontSampler );
-		engine.DisposalManager.Add( () => Apis.Vk.DestroySampler( logicalDevice, fontSampler, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroySampler( VkContext.LogicalDevice, fontSampler, null ) );
 	}
 
 	private unsafe void InitializeDescriptors()
 	{
-		ArgumentNullException.ThrowIfNull( engine.DescriptorAllocator, nameof( engine.DescriptorAllocator ) );
-		ArgumentNullException.ThrowIfNull( engine.DisposalManager, nameof( engine.DisposalManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		var logicalDevice = engine.LogicalDevice;
+		ArgumentNullException.ThrowIfNull( engine.DescriptorAllocator, nameof( engine.DescriptorAllocator ) );
 
 		var binding = new DescriptorSetLayoutBinding
 		{
@@ -278,23 +277,23 @@ public sealed class ImGuiController : IDisposable
 			PBindings = (DescriptorSetLayoutBinding*)Unsafe.AsPointer( ref binding )
 		};
 
-		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, descriptorInfo, default, out descriptorSetLayout ).Verify();
+		Apis.Vk.CreateDescriptorSetLayout( VkContext.LogicalDevice, descriptorInfo, default, out descriptorSetLayout ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( descriptorSetLayout );
 
 		descriptorSet = engine.DescriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref descriptorSetLayout ) );
 		VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
 
-		engine.DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( logicalDevice, descriptorSetLayout, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, descriptorSetLayout, null ) );
 	}
 
 	private unsafe void InitializePipeline()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( engine.View, nameof( engine.View ) );
-		ArgumentNullException.ThrowIfNull( engine.DisposalManager, nameof( engine.DisposalManager ) );
 
-		var logicalDevice = engine.LogicalDevice;
-
-		pipelineLayout = new VkPipelineLayoutBuilder( logicalDevice, 1, 1 )
+		pipelineLayout = new VkPipelineLayoutBuilder( VkContext.LogicalDevice, 1, 1 )
 			.AddPushConstantRange( new PushConstantRange
 			{
 				StageFlags = ShaderStageFlags.VertexBit,
@@ -308,7 +307,7 @@ public sealed class ImGuiController : IDisposable
 		var imguiVert = engine.CreateShader( "imgui.vert", LatteShader.FromPath( "/Assets/Shaders/imgui.vert.spv" ) );
 		var imguiFrag = engine.CreateShader( "imgui.frag", LatteShader.FromPath( "/Assets/Shaders/imgui.frag.spv" ) );
 
-		pipeline = new VkPipelineBuilder( logicalDevice, renderPass )
+		pipeline = new VkPipelineBuilder( VkContext.LogicalDevice, renderPass )
 			.WithPipelineLayout( pipelineLayout )
 			.AddDynamicState( DynamicState.Viewport )
 			.AddDynamicState( DynamicState.Scissor )
@@ -342,18 +341,16 @@ public sealed class ImGuiController : IDisposable
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( pipeline );
 
-		engine.DisposalManager.Add( imguiVert.Dispose );
-		engine.DisposalManager.Add( imguiFrag.Dispose );
-		engine.DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( logicalDevice, pipelineLayout, null ) );
-		engine.DisposalManager.Add( () => Apis.Vk.DestroyPipeline( logicalDevice, pipeline, null ) );
+		VkContext.DisposalManager.Add( imguiVert.Dispose );
+		VkContext.DisposalManager.Add( imguiFrag.Dispose );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( VkContext.LogicalDevice, pipelineLayout, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, pipeline, null ) );
 	}
 
 	private unsafe void UploadDefaultFontAtlas( uint graphicsFamilyIndex )
 	{
-		ArgumentNullException.ThrowIfNull( engine.AllocationManager, nameof( engine.AllocationManager ) );
-		ArgumentNullException.ThrowIfNull( engine.DisposalManager, nameof( engine.DisposalManager ) );
-
-		var logicalDevice = engine.LogicalDevice;
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		// Initialise ImGui Vulkan adapter
 		var io = ImGuiNET.ImGui.GetIO();
@@ -363,11 +360,11 @@ public sealed class ImGuiController : IDisposable
 
 		// Submit one-time command to create the fonts texture
 		var poolInfo = VkInfo.CommandPool( graphicsFamilyIndex );
-		Apis.Vk.CreateCommandPool( logicalDevice, poolInfo, null, out var commandPool ).Verify();
+		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolInfo, null, out var commandPool ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( commandPool );
 
 		var allocInfo = VkInfo.AllocateCommandBuffer( commandPool, 1 );
-		Apis.Vk.AllocateCommandBuffers( logicalDevice, allocInfo, out var commandBuffer ).Verify();
+		Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, allocInfo, out var commandBuffer ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( commandBuffer );
 
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
@@ -385,29 +382,29 @@ public sealed class ImGuiController : IDisposable
 		imageInfo.SharingMode = SharingMode.Exclusive;
 		imageInfo.InitialLayout = ImageLayout.Undefined;
 
-		Apis.Vk.CreateImage( logicalDevice, imageInfo, default, out var unallocatedFontImage ).Verify();
+		Apis.Vk.CreateImage( VkContext.LogicalDevice, imageInfo, default, out var unallocatedFontImage ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( unallocatedFontImage );
-		fontImage = engine.AllocationManager.AllocateImage( unallocatedFontImage, MemoryPropertyFlags.DeviceLocalBit );
+		fontImage = VkContext.AllocationManager.AllocateImage( unallocatedFontImage, MemoryPropertyFlags.DeviceLocalBit );
 
 		var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Unorm, fontImage.Image, ImageAspectFlags.ColorBit );
 		// FIXME: Add this option to VkInfo method.
 		imageViewInfo.ViewType = ImageViewType.Type2D;
 
-		Apis.Vk.CreateImageView( logicalDevice, &imageViewInfo, default, out fontView ).Verify();
+		Apis.Vk.CreateImageView( VkContext.LogicalDevice, &imageViewInfo, default, out fontView ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( fontView );
 
-		new VkDescriptorUpdater( logicalDevice, 1 )
+		new VkDescriptorUpdater( VkContext.LogicalDevice, 1 )
 			.WriteImage( 0, DescriptorType.CombinedImageSampler, fontView, fontSampler, ImageLayout.ShaderReadOnlyOptimal )
 			.Update( descriptorSet )
 			.Dispose();
 
 		// Create the Upload Buffer:
 		var bufferInfo = VkInfo.Buffer( uploadSize, BufferUsageFlags.TransferSrcBit, SharingMode.Exclusive );
-		Apis.Vk.CreateBuffer( logicalDevice, bufferInfo, default, out var unallocatedStagingBuffer ).Verify();
+		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, bufferInfo, default, out var unallocatedStagingBuffer ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( unallocatedStagingBuffer );
 
-		var stagingBuffer = engine.AllocationManager.AllocateBuffer( unallocatedStagingBuffer, MemoryPropertyFlags.HostVisibleBit );
-		engine.AllocationManager.SetMemory( stagingBuffer.Allocation, pixels, uploadSize );
+		var stagingBuffer = VkContext.AllocationManager.AllocateBuffer( unallocatedStagingBuffer, MemoryPropertyFlags.HostVisibleBit );
+		VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, pixels, uploadSize );
 
 		const uint VK_QUEUE_FAMILY_IGNORED = ~0U;
 
@@ -473,17 +470,17 @@ public sealed class ImGuiController : IDisposable
 		io.Fonts.SetTexID( (IntPtr)fontImage.Image.Handle );
 
 		Apis.Vk.EndCommandBuffer( commandBuffer ).Verify();
-		Apis.Vk.GetDeviceQueue( logicalDevice, graphicsFamilyIndex, 0, out var graphicsQueue );
+		Apis.Vk.GetDeviceQueue( VkContext.LogicalDevice, graphicsFamilyIndex, 0, out var graphicsQueue );
 
 		var submitInfo = VkInfo.SubmitInfo( new ReadOnlySpan<CommandBuffer>( ref commandBuffer ) );
 		Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, default ).Verify();
 		Apis.Vk.QueueWaitIdle( graphicsQueue ).Verify();
 
-		Apis.Vk.DestroyBuffer( logicalDevice, unallocatedStagingBuffer, default );
-		Apis.Vk.DestroyCommandPool( logicalDevice, commandPool, default );
+		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, unallocatedStagingBuffer, default );
+		Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, default );
 
-		engine.DisposalManager.Add( () => Apis.Vk.DestroyImage( logicalDevice, fontImage.Image, null ) );
-		engine.DisposalManager.Add( () => Apis.Vk.DestroyImageView( logicalDevice, fontView, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, fontImage.Image, null ) );
+		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, fontView, null ) );
 	}
 
 	private void BeginFrame()
@@ -550,9 +547,9 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void RenderImDrawData( in ImDrawDataPtr drawDataPtr, in CommandBuffer commandBuffer, in Framebuffer framebuffer, in Extent2D swapchainExtent )
 	{
-		ArgumentNullException.ThrowIfNull( engine.AllocationManager, nameof( engine.AllocationManager ) );
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		var logicalDevice = engine.LogicalDevice;
 		var drawData = *drawDataPtr.NativePtr;
 
 		// Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
@@ -601,13 +598,14 @@ public sealed class ImGuiController : IDisposable
 				var vertexByteSize = (uint)cmdList->VtxBuffer.Size * (uint)sizeof( ImDrawVert );
 				var indexByteSize = (uint)cmdList->IdxBuffer.Size * (uint)sizeof( ushort );
 
-				engine.AllocationManager.SetMemory(
+				VkContext.AllocationManager.SetMemory(
 					frameRenderBuffer.VertexBuffer.Allocation,
 					cmdList->VtxBuffer.Data,
 					vertexByteSize,
 					( nint)vtxOffset );
 
-				engine.AllocationManager.SetMemory( frameRenderBuffer.IndexBuffer.Allocation,
+				VkContext.AllocationManager.SetMemory(
+					frameRenderBuffer.IndexBuffer.Allocation,
 					cmdList->IdxBuffer.Data,
 					indexByteSize,
 					(nint)idxOffset );
@@ -699,18 +697,17 @@ public sealed class ImGuiController : IDisposable
 
 	private unsafe void CreateOrResizeBuffer( ref AllocatedBuffer allocatedBuffer, ulong newSize, BufferUsageFlags usage )
 	{
-		ArgumentNullException.ThrowIfNull( engine.AllocationManager, nameof( engine.AllocationManager ) );
-
-		var logicalDevice = engine.LogicalDevice;
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		if ( allocatedBuffer.Buffer.Handle != default )
-			Apis.Vk.DestroyBuffer( logicalDevice, allocatedBuffer.Buffer, default );
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, allocatedBuffer.Buffer, default );
 
 		var bufferInfo = VkInfo.Buffer( newSize, usage, SharingMode.Exclusive );
-		Apis.Vk.CreateBuffer( logicalDevice, bufferInfo, default, out var newBuffer ).Verify();
+		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, bufferInfo, default, out var newBuffer ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( newBuffer );
 
-		allocatedBuffer = engine.AllocationManager.AllocateBuffer( newBuffer, MemoryPropertyFlags.HostVisibleBit );
+		allocatedBuffer = VkContext.AllocationManager.AllocateBuffer( newBuffer, MemoryPropertyFlags.HostVisibleBit );
 	}
 
 	private void OnKeyChar( IKeyboard keyboard, char key )
@@ -727,8 +724,8 @@ public sealed class ImGuiController : IDisposable
 
 		for ( var i = 0; i < mainWindowRenderBuffers.Count; i++ )
 		{
-			Apis.Vk.DestroyBuffer( engine.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].VertexBuffer.Buffer, null );
-			Apis.Vk.DestroyBuffer( engine.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].IndexBuffer.Buffer, null );
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].VertexBuffer.Buffer, null );
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].IndexBuffer.Buffer, null );
 		}
 
 		ImGuiNET.ImGui.DestroyContext();
