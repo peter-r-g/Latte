@@ -6,7 +6,6 @@ using Latte.NewRenderer.Extensions;
 using Latte.NewRenderer.Temp;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
@@ -24,9 +23,7 @@ using Shader = Latte.NewRenderer.Temp.Shader;
 using Texture = Latte.NewRenderer.Temp.Texture;
 using Silk.NET.Input;
 using Latte.NewRenderer.ImGui;
-using Silk.NET.Core.Native;
 using System.Runtime.InteropServices;
-using System.Diagnostics;
 using ImGuiNET;
 
 namespace Latte.NewRenderer;
@@ -615,8 +612,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			frameDataBuilder.Add( new FrameData() );
 		frameData = frameDataBuilder.MoveToImmutable();
 
-		if ( VkContext.SurfaceExtension is not null )
-			VkContext.DisposalManager.Add( () => VkContext.SurfaceExtension.DestroySurface( VkContext.Instance, surface, null ) );
+		if ( VkContext.Extensions.TryGetExtension<KhrSurface>( out var surfaceExtension ) )
+			VkContext.DisposalManager.Add( () => surfaceExtension.DestroySurface( VkContext.Instance, surface, null ) );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -628,12 +625,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
+		if ( !VkContext.Extensions.TryGetExtension<KhrSurface>( out var surfaceExtension ) )
+			throw new VkException( $"Attempted to initialize swapchain while the {KhrSurface.ExtensionName} extension is disabled" );
+
 		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeSwapchain ) );
 
 		var result = new VkSwapchainBuilder( VkContext.Instance, VkContext.PhysicalDevice, VkContext.LogicalDevice )
-			.WithSurface( surface, VkContext.SurfaceExtension )
+			.WithSurface( surface, surfaceExtension )
 			.WithQueueFamilyIndices( VkContext.QueueFamilyIndices )
 			.UseDefaultFormat()
 			.SetPresentMode( VsyncEnabled ? PresentModeKHR.FifoKhr : PresentModeKHR.MailboxKhr )

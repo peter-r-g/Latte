@@ -13,7 +13,7 @@ namespace Latte.NewRenderer;
 
 internal static unsafe class VkContext
 {
-	[MemberNotNullWhen( true, nameof( AllocationManager ), nameof( DisposalManager ) )]
+	[MemberNotNullWhen( true, nameof( AllocationManager ), nameof( DisposalManager ), nameof( Extensions ) )]
 	internal static bool IsInitialized { get; private set; }
 
 	internal static Instance Instance { get; private set; }
@@ -30,14 +30,13 @@ internal static unsafe class VkContext
 
 	internal static AllocationManager? AllocationManager { get; private set; }
 	internal static DisposalManager? DisposalManager { get; private set; }
+	internal static ExtensionContainer? Extensions { get; private set; }
 
-	internal static KhrSurface? SurfaceExtension { get; private set; }
 	private static readonly string[] DefaultInstanceExtensions = [
 		ExtDebugUtils.ExtensionName,
 		KhrSurface.ExtensionName
 	];
 
-	internal static ExtDebugUtils? DebugUtilsExtension { get; private set; }
 	private static readonly string[] DefaultDeviceExtensions = [
 		KhrSwapchain.ExtensionName
 	];
@@ -60,7 +59,7 @@ internal static unsafe class VkContext
 
 		Instance = instanceBuilderResult.Instance;
 		DebugMessenger = instanceBuilderResult.DebugMessenger;
-		DebugUtilsExtension = instanceBuilderResult.DebugUtilsExtension;
+		var debugUtilsExtension = instanceBuilderResult.DebugUtilsExtension;
 
 		VkInvalidHandleException.ThrowIfInvalid( Instance );
 
@@ -68,7 +67,6 @@ internal static unsafe class VkContext
 			throw new VkException( $"Failed to get the {KhrSurface.ExtensionName} extension" );
 
 		var surface = view.VkSurface!.Create<AllocationCallbacks>( Instance.ToHandle(), null ).ToSurface();
-		SurfaceExtension = surfaceExtension;
 
 		var physicalDeviceSelectorResult = new VkPhysicalDeviceSelector( Instance )
 			.RequireDiscreteDevice( true )
@@ -114,10 +112,11 @@ internal static unsafe class VkContext
 
 		AllocationManager = new AllocationManager();
 		DisposalManager = new DisposalManager();
+		Extensions = new ExtensionContainer( instanceExtensions, deviceExtensions );
 
 		DisposalManager.Add( () => Apis.Vk.DestroyInstance( Instance, null ) );
 		if ( DebugMessenger.IsValid() )
-			DisposalManager.Add( () => DebugUtilsExtension?.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null ) );
+			DisposalManager.Add( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null ) );
 		DisposalManager.Add( () => Apis.Vk.DestroyDevice( LogicalDevice, null ) );
 
 		IsInitialized = true;
