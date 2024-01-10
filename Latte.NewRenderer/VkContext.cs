@@ -29,9 +29,9 @@ internal static unsafe class VkContext
 	internal static DebugUtilsMessengerEXT DebugMessenger { get; private set; }
 
 	internal static AllocationManager? AllocationManager { get; private set; }
-	internal static DisposalManager? DisposalManager { get; private set; }
 	internal static ExtensionContainer? Extensions { get; private set; }
 
+	private static DisposalManager? disposalManager;
 	private static readonly string[] DefaultInstanceExtensions = [
 		ExtDebugUtils.ExtensionName,
 		KhrSurface.ExtensionName
@@ -124,7 +124,7 @@ internal static unsafe class VkContext
 		return surface;
 	}
 
-	internal static void Cleanup()
+	private static void Cleanup()
 	{
 		if ( !IsInitialized )
 			return;
@@ -132,7 +132,7 @@ internal static unsafe class VkContext
 		AppDomain.CurrentDomain.ProcessExit -= Cleanup;
 
 		AllocationManager.Dispose();
-		DisposalManager.Dispose();
+		disposalManager.Dispose();
 		Extensions.Dispose();
 
 		IsInitialized = false;

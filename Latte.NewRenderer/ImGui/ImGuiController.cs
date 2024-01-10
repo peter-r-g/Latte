@@ -23,6 +23,7 @@ public sealed class ImGuiController : IDisposable
 	private VkEngine engine = null!;
 	private IInputContext input = null!;
 	private IKeyboard keyboard = null!;
+	private DisposalManager? disposalManager = null!;
 	private RenderPass renderPass;
 
 	private Sampler fontSampler;
@@ -99,6 +100,7 @@ public sealed class ImGuiController : IDisposable
 	{
 		this.engine = engine;
 		this.input = input;
+		disposalManager = new DisposalManager();
 		this.renderPass = renderPass;
 
 		if ( engine.SwapchainImageCount < 2 )
@@ -252,7 +254,7 @@ public sealed class ImGuiController : IDisposable
 
 		Apis.Vk.CreateSampler( VkContext.LogicalDevice, info, default, out fontSampler ).Verify();
 		VkInvalidHandleException.ThrowIfInvalid( fontSampler );
-		VkContext.DisposalManager.Add( () => Apis.Vk.DestroySampler( VkContext.LogicalDevice, fontSampler, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroySampler( VkContext.LogicalDevice, fontSampler, null ) );
 	}
 
 	private unsafe void InitializeDescriptors()
@@ -283,7 +285,7 @@ public sealed class ImGuiController : IDisposable
 		descriptorSet = engine.DescriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref descriptorSetLayout ) );
 		VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
 
-		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, descriptorSetLayout, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, descriptorSetLayout, null ) );
 	}
 
 	private unsafe void InitializePipeline()
@@ -341,10 +343,10 @@ public sealed class ImGuiController : IDisposable
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( pipeline );
 
-		VkContext.DisposalManager.Add( imguiVert.Dispose );
-		VkContext.DisposalManager.Add( imguiFrag.Dispose );
-		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( VkContext.LogicalDevice, pipelineLayout, null ) );
-		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, pipeline, null ) );
+		disposalManager.Add( imguiVert.Dispose );
+		disposalManager.Add( imguiFrag.Dispose );
+		disposalManager.Add( () => Apis.Vk.DestroyPipelineLayout( VkContext.LogicalDevice, pipelineLayout, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, pipeline, null ) );
 	}
 
 	private unsafe void UploadDefaultFontAtlas( uint graphicsFamilyIndex )
@@ -479,8 +481,8 @@ public sealed class ImGuiController : IDisposable
 		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, unallocatedStagingBuffer, default );
 		Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, default );
 
-		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, fontImage.Image, null ) );
-		VkContext.DisposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, fontView, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, fontImage.Image, null ) );
+		disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, fontView, null ) );
 	}
 
 	private void BeginFrame()
@@ -727,6 +729,8 @@ public sealed class ImGuiController : IDisposable
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].VertexBuffer.Buffer, null );
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].IndexBuffer.Buffer, null );
 		}
+
+		disposalManager?.Dispose();
 
 		ImGuiNET.ImGui.DestroyContext();
 		GC.SuppressFinalize( this );
