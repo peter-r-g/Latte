@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Threading;
 
 namespace Latte.NewRenderer;
 
@@ -16,6 +17,8 @@ internal sealed class ExtensionContainer : IDisposable
 
 	private readonly HashSet<string> instanceExtensions;
 	private readonly HashSet<string> deviceExtensions;
+
+	private readonly object tryGetLock = new();
 
 	private bool disposed;
 
@@ -36,41 +39,49 @@ internal sealed class ExtensionContainer : IDisposable
 
 	internal bool TryGetExtension<T>( [NotNullWhen( true )] out T? extension ) where T : NativeExtension<Vk>
 	{
-		ObjectDisposedException.ThrowIf( disposed, this );
-
-		var tType = typeof( T );
-		if ( extensionTypeMap.TryGetValue( tType, out var extensionKey ) )
+		Monitor.Enter( tryGetLock );
+		try
 		{
-			extension = (T)extensions[extensionKey];
-			return true;
+			ObjectDisposedException.ThrowIf( disposed, this );
+
+			var tType = typeof( T );
+			if ( extensionTypeMap.TryGetValue( tType, out var extensionKey ) )
+			{
+				extension = (T)extensions[extensionKey];
+				return true;
+			}
+
+			var extensionNameField = tType.GetField( nameof( ExtDebugUtils.ExtensionName ) );
+			if ( extensionNameField is null )
+				throw new VkException( $"Failed to get {nameof( ExtDebugUtils.ExtensionName )} field from {tType}" );
+
+			var extensionNameObj = extensionNameField.GetValue( null );
+			if ( extensionNameObj is not string extensionName )
+				throw new VkException( $"Failed to get extension name from {nameof( ExtDebugUtils.ExtensionName )} field on {tType}" );
+
+			var foundExtension = Apis.Vk.TryGetInstanceExtension( VkContext.Instance, out extension );
+			if ( foundExtension && extension is not null )
+			{
+				extensionTypeMap.Add( tType, extensionName );
+				extensions.Add( extensionName, extension );
+				return true;
+			}
+
+			foundExtension = Apis.Vk.TryGetDeviceExtension( VkContext.Instance, VkContext.LogicalDevice, out extension );
+			if ( foundExtension && extension is not null )
+			{
+				extensionTypeMap.Add( tType, extensionName );
+				extensions.Add( extensionName, extension );
+				return true;
+			}
+
+			extension = default;
+			return false;
 		}
-
-		var extensionNameField = tType.GetField( nameof( ExtDebugUtils.ExtensionName ) );
-		if ( extensionNameField is null )
-			throw new VkException( $"Failed to get {nameof( ExtDebugUtils.ExtensionName )} field from {tType}" );
-
-		var extensionNameObj = extensionNameField.GetValue( null );
-		if ( extensionNameObj is not string extensionName )
-			throw new VkException( $"Failed to get extension name from {nameof( ExtDebugUtils.ExtensionName )} field on {tType}" );
-
-		var foundExtension = Apis.Vk.TryGetInstanceExtension( VkContext.Instance, out extension );
-		if ( foundExtension && extension is not null )
+		finally
 		{
-			extensionTypeMap.Add( tType, extensionName );
-			extensions.Add( extensionName, extension );
-			return true;
+			Monitor.Exit( tryGetLock );
 		}
-
-		foundExtension = Apis.Vk.TryGetDeviceExtension( VkContext.Instance, VkContext.LogicalDevice, out extension );
-		if ( foundExtension && extension is not null )
-		{
-			extensionTypeMap.Add( tType, extensionName );
-			extensions.Add( extensionName, extension );
-			return true;
-		}
-
-		extension = default;
-		return false;
 	}
 
 	private void Dispose( bool disposing )
