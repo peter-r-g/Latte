@@ -42,12 +42,12 @@ layout (std140, set = 0, binding = 2) readonly buffer objectBuffer
 
 void main()
 {
-	mat4 modelMatrix = ObjectBuffer.objects[gl_InstanceIndex].model;
-	vec4 positionWorld = modelMatrix * vec4(vPosition, 1.0);
+	ObjectData object = ObjectBuffer.objects[gl_InstanceIndex];
+	vec4 positionWorld = object.model * vec4(vPosition, 1);
 	gl_Position = CameraData.viewproj * positionWorld;
 
 	outColor = vColor;
 	outTexCoord = vTexCoord;
 	outPosWorld = positionWorld.xyz;
-	outNormalWorld = normalize(mat3(modelMatrix) * vNormal);
+	outNormalWorld = (mat3(object.model) * vNormal) + positionWorld.xyz;
 }
