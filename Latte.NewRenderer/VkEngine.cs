@@ -600,7 +600,6 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		WaitForIdle();
 
-		VkContext.DisposalManager.Dispose( WireframeTag );
 		disposalManager.Dispose( WireframeTag );
 		InitializePipelines();
 		SetupTextureSets();
