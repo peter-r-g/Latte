@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace Latte.NewRenderer.Allocations;
 
@@ -8,6 +9,9 @@ internal sealed class DisposalManager : IDisposable
 	private readonly List<Action> disposals = [];
 	private readonly Dictionary<string, List<WeakReference<Action>>> taggedDisposals = [];
 	private readonly Dictionary<WeakReference<Action>, string[]> disposalTags = [];
+
+	private readonly object addLock = new();
+	private readonly object disposeLock = new();
 
 	private bool disposed;
 
@@ -18,6 +22,7 @@ internal sealed class DisposalManager : IDisposable
 
 	internal void Add( Action cb, params string[] tags )
 	{
+		Monitor.Enter( addLock );
 		disposals.Add( cb );
 
 		var weakCb = new WeakReference<Action>( cb );
@@ -28,9 +33,10 @@ internal sealed class DisposalManager : IDisposable
 			if ( !taggedDisposals.ContainsKey( tag ) )
 				taggedDisposals.Add( tag, [] );
 
-
 			taggedDisposals[tag].Add( weakCb );
 		}
+
+		Monitor.Exit( addLock );
 	}
 
 	internal void Dispose( string tag )
@@ -38,21 +44,29 @@ internal sealed class DisposalManager : IDisposable
 		if ( !taggedDisposals.TryGetValue( tag, out var disposals ) || disposals.Count == 0 )
 			return;
 
-		for ( var i = disposals.Count - 1; i >= 0; i-- )
+		Monitor.Enter( disposeLock );
+		try
 		{
-			var weakCb = disposals[i];
-
-			if ( !weakCb.TryGetTarget( out var cb ) )
+			for ( var i = disposals.Count - 1; i >= 0; i-- )
 			{
+				var weakCb = disposals[i];
+
+				if ( !weakCb.TryGetTarget( out var cb ) )
+				{
+					RemoveAssociatedReferences( weakCb );
+					continue;
+				}
+
 				RemoveAssociatedReferences( weakCb );
-				continue;
+				cb();
 			}
 
-			RemoveAssociatedReferences( weakCb );
-			cb();
+			disposals.Clear();
 		}
-
-		disposals.Clear();
+		finally
+		{
+			Monitor.Exit( disposeLock );
+		}
 	}
 
 	private void RemoveAssociatedReferences( WeakReference<Action> weakCb )
@@ -74,16 +88,24 @@ internal sealed class DisposalManager : IDisposable
 		if ( disposed )
 			return;
 
-		if ( disposing )
+		Monitor.Enter( disposeLock );
+		try
 		{
+			if ( disposing )
+			{
+			}
+
+			for ( var i = disposals.Count - 1; i >= 0; i-- )
+				disposals[i]();
+
+			disposals.Clear();
+			taggedDisposals.Clear();
+			disposed = true;
 		}
-
-		for ( var i = disposals.Count - 1; i >= 0; i-- )
-			disposals[i]();
-
-		disposals.Clear();
-		taggedDisposals.Clear();
-		disposed = true;
+		finally
+		{
+			Monitor.Exit( disposeLock );
+		}
 	}
 
 	public void Dispose()
