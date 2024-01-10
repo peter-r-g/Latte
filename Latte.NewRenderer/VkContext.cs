@@ -1,13 +1,13 @@
 ﻿using Latte.NewRenderer.Allocations;
 using Latte.NewRenderer.Builders;
 using Latte.NewRenderer.Exceptions;
-using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Vulkan;
-using Silk.NET.Windowing;
-using Silk.NET.Vulkan.Extensions.EXT;
 using Latte.NewRenderer.Extensions;
+using Silk.NET.Vulkan;
+using Silk.NET.Vulkan.Extensions.EXT;
+using Silk.NET.Vulkan.Extensions.KHR;
+using Silk.NET.Windowing;
+using System;
 using System.Diagnostics.CodeAnalysis;
-using Silk.NET.Core.Native;
 
 namespace Latte.NewRenderer;
 
@@ -26,16 +26,26 @@ internal static unsafe class VkContext
 	internal static Queue PresentQueue { get; private set; }
 	internal static Queue TransferQueue { get; private set; }
 
+	internal static DebugUtilsMessengerEXT DebugMessenger { get; private set; }
+
 	internal static AllocationManager? AllocationManager { get; private set; }
 	internal static DisposalManager? DisposalManager { get; private set; }
 
 	internal static KhrSurface? SurfaceExtension { get; private set; }
+	private static readonly string[] DefaultInstanceExtensions = [
+		ExtDebugUtils.ExtensionName,
+		KhrSurface.ExtensionName
+	];
 
-	internal static DebugUtilsMessengerEXT DebugMessenger { get; private set; }
 	internal static ExtDebugUtils? DebugUtilsExtension { get; private set; }
+	private static readonly string[] DefaultDeviceExtensions = [
+		KhrSwapchain.ExtensionName
+	];
 
 	// FIXME: Is there a way to initialize global state without a view?
-	internal static unsafe SurfaceKHR Initialize( IView view )
+	internal static unsafe SurfaceKHR Initialize( IView view ) => Initialize( view, DefaultInstanceExtensions, DefaultDeviceExtensions );
+
+	internal static unsafe SurfaceKHR Initialize( IView view, string[] instanceExtensions, string[] deviceExtensions )
 	{
 		if ( IsInitialized )
 			return view.VkSurface!.Create<AllocationCallbacks>( Instance.ToHandle(), null ).ToSurface();
@@ -43,6 +53,7 @@ internal static unsafe class VkContext
 		var instanceBuilderResult = new VkInstanceBuilder()
 			.WithName( "Latte" )
 			.WithView( view )
+			.WithExtensions( instanceExtensions )
 			.RequireVulkanVersion( 1, 1, 0 )
 			.UseDefaultDebugMessenger()
 			.Build();
@@ -77,7 +88,7 @@ internal static unsafe class VkContext
 		var logicalDeviceBuilderResult = new VkLogicalDeviceBuilder( PhysicalDevice )
 			.WithSurface( surface, surfaceExtension )
 			.WithQueueFamilyIndices( QueueFamilyIndices )
-			.WithExtensions( KhrSwapchain.ExtensionName )
+			.WithExtensions( deviceExtensions )
 			.WithFeatures( new PhysicalDeviceFeatures
 			{
 				FillModeNonSolid = Vk.True,
