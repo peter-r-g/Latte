@@ -130,6 +130,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private KhrSwapchain? swapchainExtension;
 
+	private bool waitingForIdle;
 	private bool disposed;
 
 	~VkEngine()
@@ -174,9 +175,12 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !IsInitialized )
 			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
 
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		var drawProfile = CpuProfile.New( "Total" );
 
-		if ( !IsVisible )
+		if ( !IsVisible || waitingForIdle )
 			return;
 
 		ObjectDisposedException.ThrowIf( disposed, this );
@@ -451,7 +455,13 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		ObjectDisposedException.ThrowIf( disposed, this );
 
-		Apis.Vk.DeviceWaitIdle( VkContext.LogicalDevice ).Verify();
+		waitingForIdle = true;
+		Span<Fence> waitFences = stackalloc Fence[frameData.Length];
+		for ( var i = 0; i < frameData.Length; i++ )
+			waitFences[i] = frameData[i].RenderFence;
+
+		Apis.Vk.WaitForFences( VkContext.LogicalDevice, waitFences, Vk.True, ulong.MaxValue ).Verify();
+		waitingForIdle = false;
 	}
 
 	internal void ImGuiShowRendererStatistics()
