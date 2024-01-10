@@ -119,6 +119,7 @@ internal static unsafe class VkContext
 			DisposalManager.Add( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null ) );
 		DisposalManager.Add( () => Apis.Vk.DestroyDevice( LogicalDevice, null ) );
 
+		AppDomain.CurrentDomain.ProcessExit += Cleanup;
 		IsInitialized = true;
 		return surface;
 	}
@@ -128,6 +129,14 @@ internal static unsafe class VkContext
 		if ( !IsInitialized )
 			return;
 
+		AppDomain.CurrentDomain.ProcessExit -= Cleanup;
+
+		AllocationManager.Dispose();
+		DisposalManager.Dispose();
+		Extensions.Dispose();
+
 		IsInitialized = false;
 	}
+
+	private static void Cleanup( object? sender, EventArgs e ) => Cleanup();
 }

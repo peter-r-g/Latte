@@ -1649,13 +1649,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		{
 		}
 
-		VkContext.AllocationManager?.Dispose();
-		DescriptorAllocator?.Dispose();
 		ImGuiController?.Dispose();
-		VkContext.DisposalManager?.Dispose();
-		swapchainExtension?.Dispose();
-		VkContext.DebugUtilsExtension?.Dispose();
-		VkContext.SurfaceExtension?.Dispose();
+		DescriptorAllocator?.Dispose();
 
 		disposed = true;
 	}
