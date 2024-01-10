@@ -301,7 +301,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				PCommandBuffers = &cmd,
 			};
 
-			Apis.Vk.QueueSubmit( VkContext.GraphicsQueue, 1, submitInfo, renderFence ).Verify();
+			VkContext.GraphicsQueue.SubmitAndWait( submitInfo, renderFence );
 		}
 		cpuPerformanceTimes[submitProfile.Name] = submitProfile.Time;
 
@@ -319,18 +319,8 @@ internal unsafe sealed class VkEngine : IDisposable
 				PImageIndices = &swapchainImageIndex
 			};
 
-			var presentResult = swapchainExtension.QueuePresent( VkContext.PresentQueue, presentInfo );
-			switch ( presentResult )
-			{
-				case Result.ErrorOutOfDateKhr:
-				case Result.SuboptimalKhr:
-					RecreateSwapchain();
-					break;
-				case Result.Success:
-					break;
-				default:
-					throw new VkException( "Failed to present queue" );
-			}
+			// FIXME: How the fuck does this work.
+			VkContext.PresentQueue.SubmitPresentAndWait( presentInfo );
 		}
 		cpuPerformanceTimes[presentProfile.Name] = presentProfile.Time;
 
@@ -1352,6 +1342,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void ImmediateSubmit( Action<CommandBuffer> cb )
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		var cmd = uploadContext.CommandBuffer;
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 
@@ -1360,7 +1353,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.EndCommandBuffer( cmd ).Verify();
 
 		var submitInfo = VkInfo.SubmitInfo( new ReadOnlySpan<CommandBuffer>( ref cmd ) );
-		Apis.Vk.QueueSubmit( VkContext.GraphicsQueue, 1, submitInfo, uploadContext.UploadFence ).Verify();
+		VkContext.GraphicsQueue.SubmitAndWait( submitInfo, uploadContext.UploadFence );
 		Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).Verify();
 		Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence ).Verify();
 		Apis.Vk.ResetCommandPool( VkContext.LogicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).Verify();
