@@ -1,151 +1,36 @@
-﻿using Latte.NewRenderer.Input;
-using Silk.NET.Maths;
-using Silk.NET.Windowing;
-using Silk.NET.Windowing.Glfw;
-using System;
-using System.Numerics;
+﻿using System;
 using System.Threading;
-using Window = Silk.NET.Windowing.Window;
 
 namespace Latte.NewRenderer;
 
 internal static class Program
 {
-	private static IWindow window = null!;
-	private static VkEngine engine = null!;
-	private static InputManager input = null!;
-	private static Vector2 lastMousePosition;
+	private const int WindowsToOpen = 1;
 
-	private static bool isWindowActive;
-	private static bool showImguiDemo;
+	private static readonly Window[] windows = new Window[WindowsToOpen];
+	private static readonly Thread[] windowThreads = new Thread[WindowsToOpen];
 
 	private static unsafe void Main()
 	{
-		var windowThread = new Thread( WindowMain );
-		windowThread.Start();
-		isWindowActive = true;
+		for ( var i = 0; i < WindowsToOpen; i++ )
+		{
+			windows[i] = new Window();
+			windowThreads[i] = new Thread( windows[i].Main );
+			windowThreads[i].Start();
+		}
 
-		string line;
+		var line = string.Empty;
 		do
 		{
 			line = ReadLine();
 			HandleCommand( line );
-		} while ( line != "quit" && isWindowActive );
+		} while ( line != "quit" && AreWindowsActive() );
 
-		window.Close();
-		windowThread.Join();
-	}
-
-	private static unsafe void WindowMain()
-	{
-		GlfwWindowing.Use();
-		var options = WindowOptions.DefaultVulkan with
-		{
-			Size = new Vector2D<int>( 1700, 900 )
-		};
-		window = Window.Create( options );
-		window.Initialize();
-
-		input = new InputManager( window );
-		input.Initialize();
-
-		engine = new VkEngine();
-		engine.Initialize( window, input.InputContext );
-		window.Update += Update;
-		window.Render += Render;
-
-		input.SetCursorMode( CursorMode.Trapped );
-
-		window.Run( () =>
-		{
-			window.DoEvents();
-			if ( !window.IsClosing )
-				window.DoUpdate();
-
-			if ( !window.IsClosing && window.IsVisible )
-				window.DoRender();
-
-			input.Update();
-		} );
-
-		engine.WaitForIdle();
-		engine.Dispose();
-		input.Cleanup();
-		window.Dispose();
-		isWindowActive = false;
-	}
-
-	private static void Update( double dt )
-	{
-		ArgumentNullException.ThrowIfNull( engine.ImGuiController, nameof( engine.ImGuiController ) );
-		engine.ImGuiController.Update( (float)dt );
-
-		window.Title = $"Latte.NewRenderer ({(int)(1 / dt)} FPS)";
-
-		UpdateCamera( dt );
-
-		if ( input.Pressed( InputButton.KeyboardEscape ) )
+		foreach ( var window in windows )
 			window.Close();
 
-		if ( input.Pressed( InputButton.KeyboardTab ) )
-			input.SetCursorMode( input.GetCursorMode() == CursorMode.Visible ? CursorMode.Trapped : CursorMode.Visible );
-
-		if ( input.Pressed( InputButton.KeyboardF1 ) )
-			showImguiDemo = !showImguiDemo;
-
-		engine.ImGuiShowRendererStatistics();
-		if ( showImguiDemo )
-			ImGuiNET.ImGui.ShowDemoWindow();
-	}
-
-	private static void Render( double dt )
-	{
-		engine.Draw();
-	}
-
-	private static void UpdateCamera( double dt )
-	{
-		var moveSpeed = (input.Down( InputButton.KeyboardLeftShift ) ? 10 : 2.5f) * (float)dt;
-
-		//Move forwards
-		if ( input.Down( InputButton.KeyboardW ) )
-			Camera.Main.Position += moveSpeed * Camera.Main.Front;
-		//Move backwards
-		if ( input.Down( InputButton.KeyboardS ) )
-			Camera.Main.Position -= moveSpeed * Camera.Main.Front;
-		//Move left
-		if ( input.Down( InputButton.KeyboardA ) )
-			Camera.Main.Position -= Vector3.Normalize( Vector3.Cross( Camera.Main.Front, Camera.Main.Up ) ) * moveSpeed;
-		//Move right
-		if ( input.Down( InputButton.KeyboardD ) )
-			Camera.Main.Position += Vector3.Normalize( Vector3.Cross( Camera.Main.Front, Camera.Main.Up ) ) * moveSpeed;
-
-		var position = input.GetMouseDelta();
-		if ( position == Vector2.Zero )
-			return;
-
-		if ( input.GetCursorMode() == CursorMode.Visible || lastMousePosition == default )
-		{
-			lastMousePosition = position;
-			return;
-		}
-
-		var lookSensitivity = 0.1f;
-		var xOffset = (position.X - lastMousePosition.X) * lookSensitivity;
-		var yOffset = (position.Y - lastMousePosition.Y) * lookSensitivity;
-		lastMousePosition = position;
-
-		Camera.Main.Yaw += xOffset;
-		Camera.Main.Pitch -= yOffset;
-
-		//We don't want to be able to look behind us by going over our head or under our feet so make sure it stays within these bounds
-		Camera.Main.Pitch = Math.Clamp( Camera.Main.Pitch, -89.0f, 89.0f );
-
-		Camera.Main.Direction = new Vector3(
-			MathF.Cos( Scalar.DegreesToRadians( Camera.Main.Yaw ) ) * MathF.Cos( Scalar.DegreesToRadians( Camera.Main.Pitch ) ),
-			MathF.Sin( Scalar.DegreesToRadians( Camera.Main.Pitch ) ),
-			MathF.Sin( Scalar.DegreesToRadians( Camera.Main.Yaw ) ) * MathF.Cos( Scalar.DegreesToRadians( Camera.Main.Pitch ) )
-		);
+		foreach ( var windowThread in windowThreads )
+			windowThread.Join();
 	}
 
 	private static string ReadLine()
@@ -170,7 +55,7 @@ internal static class Program
 				Console.WriteLine();
 				Console.Write( line );
 			}
-		} while ( key.Key != ConsoleKey.Enter && isWindowActive );
+		} while ( key.Key != ConsoleKey.Enter && AreWindowsActive() );
 		Console.WriteLine();
 
 		return line;
@@ -178,5 +63,18 @@ internal static class Program
 
 	private static void HandleCommand( string cmd )
 	{
+	}
+
+	private static bool AreWindowsActive()
+	{
+		foreach ( var windowThread in windowThreads )
+		{
+			if ( !windowThread.IsAlive )
+				continue;
+
+			return true;
+		}
+
+		return false;
 	}
 }
