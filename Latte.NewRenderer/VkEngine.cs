@@ -398,10 +398,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 					var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
 					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.FrameDescriptor, 1, &uniformOffset );
-
-					if ( material.TextureSet.IsValid() )
-						Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 1, 1, material.TextureSet, 0, null );
 				}
+
+				if ( material.TextureSet.IsValid() && lastMaterial?.TextureSet.Handle != material.TextureSet.Handle )
+					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 1, 1, material.TextureSet, 0, null );
 
 				lastMaterial = material;
 			}
