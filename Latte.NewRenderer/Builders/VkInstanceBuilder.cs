@@ -177,7 +177,7 @@ internal sealed class VkInstanceBuilder
 			extensionsSupported = false;
 			unsupportedExtensionsBuilder.Add( extensions[i] );
 		}
-		
+
 		unsupportedExtensions = unsupportedExtensionsBuilder;
 		return extensionsSupported;
 	}

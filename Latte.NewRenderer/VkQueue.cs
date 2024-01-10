@@ -40,7 +40,7 @@ internal sealed class VkQueue : IDisposable
 		ObjectDisposedException.ThrowIf( disposed, this );
 
 		int submissionId;
-		lock( queueLock )
+		lock ( queueLock )
 		{
 			submissionId = currentSubmissionId++;
 			queueSubmissions.Enqueue( new VkQueueSubmission
@@ -60,7 +60,7 @@ internal sealed class VkQueue : IDisposable
 		ObjectDisposedException.ThrowIf( disposed, this );
 
 		int submissionId;
-		lock( queueLock )
+		lock ( queueLock )
 		{
 			submissionId = currentSubmissionId++;
 			queueSubmissions.Enqueue( new VkPresentQueueSubmission
@@ -138,7 +138,7 @@ internal sealed class VkQueue : IDisposable
 				else
 					throw new VkException( $"Failed to process queue submission: {submissionObj}" );
 
-				lock( queueLock )
+				lock ( queueLock )
 					completedSubmissions.Add( completedSubmissionId );
 
 				submissionCompletedEvent.Set();

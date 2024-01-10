@@ -330,14 +330,14 @@ public sealed class ImGuiController : IDisposable
 			// FIXME: Add these options to VkInfo method.
 			.WithColorBlendAttachmentState( new PipelineColorBlendAttachmentState
 			{
-				 BlendEnable = Vk.True,
-				 SrcColorBlendFactor = BlendFactor.SrcAlpha,
-				 DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
-				 ColorBlendOp = BlendOp.Add,
-				 SrcAlphaBlendFactor = BlendFactor.One,
-				 DstAlphaBlendFactor = BlendFactor.OneMinusSrcAlpha,
-				 AlphaBlendOp = BlendOp.Add,
-				 ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit
+				BlendEnable = Vk.True,
+				SrcColorBlendFactor = BlendFactor.SrcAlpha,
+				DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
+				ColorBlendOp = BlendOp.Add,
+				SrcAlphaBlendFactor = BlendFactor.One,
+				DstAlphaBlendFactor = BlendFactor.OneMinusSrcAlpha,
+				AlphaBlendOp = BlendOp.Add,
+				ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit
 			} )
 			.WithDepthStencilState( VkInfo.PipelineDepthStencilState( false, false, CompareOp.Never ) )
 			.Build();
@@ -604,7 +604,7 @@ public sealed class ImGuiController : IDisposable
 					frameRenderBuffer.VertexBuffer.Allocation,
 					cmdList->VtxBuffer.Data,
 					vertexByteSize,
-					( nint)vtxOffset );
+					(nint)vtxOffset );
 
 				VkContext.AllocationManager.SetMemory(
 					frameRenderBuffer.IndexBuffer.Allocation,
