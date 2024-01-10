@@ -1,4 +1,5 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.NewRenderer.Exceptions;
+using Latte.NewRenderer.Extensions;
 using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
@@ -6,12 +7,6 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Windowing;
 using System;
 using System.Runtime.InteropServices;
-using Latte.NewRenderer.Exceptions;
-
-
-#if DEBUG
-using System.Diagnostics;
-#endif
 
 namespace Latte.NewRenderer.Builders;
 
@@ -21,7 +16,10 @@ internal sealed class VkInstanceBuilder
 	private Version32 version = new Version( 1, 0, 0 );
 	private IView? view;
 	private Version32 requiredVersion = new( 1, 0, 0 );
-	private bool useDefaultDebugMessenger;
+	private bool useDebugMessenger;
+	private DebugUtilsMessageSeverityFlagsEXT messageSeverityFlags;
+	private DebugUtilsMessageTypeFlagsEXT messageTypeFlags;
+	private DebugUtilsMessengerCallbackFunctionEXT? debugMessengerCallback;
 
 	public VkInstanceBuilder WithName( string name )
 	{
@@ -47,9 +45,28 @@ internal sealed class VkInstanceBuilder
 		return this;
 	}
 
-	public VkInstanceBuilder UseDefaultDebugMessenger()
+	public unsafe VkInstanceBuilder UseDefaultDebugMessenger()
 	{
-		useDefaultDebugMessenger = true;
+		useDebugMessenger = true;
+		messageSeverityFlags = DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt |
+			DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt |
+			DebugUtilsMessageSeverityFlagsEXT.WarningBitExt |
+			DebugUtilsMessageSeverityFlagsEXT.InfoBitExt;
+		messageTypeFlags = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt |
+			DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt |
+			DebugUtilsMessageTypeFlagsEXT.ValidationBitExt;
+		debugMessengerCallback = DefaultDebugMessengerCallback;
+		return this;
+	}
+
+	public VkInstanceBuilder WithDebugMessenger( DebugUtilsMessageSeverityFlagsEXT messageSeverityFlags,
+		DebugUtilsMessageTypeFlagsEXT messageTypeFlags,
+		DebugUtilsMessengerCallbackFunctionEXT debugMessengerCallback )
+	{
+		useDebugMessenger = true;
+		this.messageSeverityFlags = messageSeverityFlags;
+		this.messageTypeFlags = messageTypeFlags;
+		this.debugMessengerCallback = debugMessengerCallback;
 		return this;
 	}
 
@@ -77,7 +94,7 @@ internal sealed class VkInstanceBuilder
 		createInfo.EnabledExtensionCount = (uint)extensions.Length;
 		createInfo.PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions );
 
-		if ( useDefaultDebugMessenger )
+		if ( useDebugMessenger )
 		{
 			var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
 			PopulateDebugMessengerCreateInfo( ref debugCreateInfo );
@@ -88,7 +105,7 @@ internal sealed class VkInstanceBuilder
 		ExtDebugUtils? debugUtilsExtension = null;
 		DebugUtilsMessengerEXT debugMessenger = default;
 
-		if ( useDefaultDebugMessenger )
+		if ( useDebugMessenger )
 		{
 			if ( !Apis.Vk.TryGetInstanceExtension<ExtDebugUtils>( instance, out debugUtilsExtension ) )
 				throw new VkException( $"Failed to get the {nameof( ExtDebugUtils )} extension" );
@@ -105,17 +122,12 @@ internal sealed class VkInstanceBuilder
 		return new VkInstanceBuilderResult( instance, debugUtilsExtension, debugMessenger );
 	}
 
-	private static unsafe void PopulateDebugMessengerCreateInfo( ref DebugUtilsMessengerCreateInfoEXT debugCreateInfo )
+	private unsafe void PopulateDebugMessengerCreateInfo( ref DebugUtilsMessengerCreateInfoEXT debugCreateInfo )
 	{
 		debugCreateInfo.SType = StructureType.DebugUtilsMessengerCreateInfoExt;
-		debugCreateInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt
-			| DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt
-			| DebugUtilsMessageSeverityFlagsEXT.WarningBitExt
-			| DebugUtilsMessageSeverityFlagsEXT.InfoBitExt;
-		debugCreateInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt |
-			DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt |
-			DebugUtilsMessageTypeFlagsEXT.ValidationBitExt;
-		debugCreateInfo.PfnUserCallback = (PfnDebugUtilsMessengerCallbackEXT)DebugCallback;
+		debugCreateInfo.MessageSeverity = messageSeverityFlags;
+		debugCreateInfo.MessageType = messageTypeFlags;
+		debugCreateInfo.PfnUserCallback = (PfnDebugUtilsMessengerCallbackEXT)debugMessengerCallback;
 	}
 
 	private static unsafe string[] GetRequiredExtensions( IView view )
@@ -137,7 +149,7 @@ internal sealed class VkInstanceBuilder
 		return finalExtensions;
 	}
 
-	private static unsafe uint DebugCallback( DebugUtilsMessageSeverityFlagsEXT messageSeverity,
+	private static unsafe uint DefaultDebugMessengerCallback( DebugUtilsMessageSeverityFlagsEXT messageSeverity,
 		DebugUtilsMessageTypeFlagsEXT messageTypes,
 		DebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData )
@@ -165,7 +177,7 @@ internal sealed class VkInstanceBuilder
 				Console.ForegroundColor = ConsoleColor.DarkRed;
 				Console.WriteLine( message );
 #if DEBUG
-				Debugger.Break();
+				System.Diagnostics.Debugger.Break();
 #endif
 				break;
 		}
