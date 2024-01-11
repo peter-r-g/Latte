@@ -18,13 +18,16 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	private readonly List<DeviceMemory> memoryAllocations;
 	private readonly Dictionary<Allocation, nint> preservedMaps = [];
-	private readonly Dictionary<uint, int> memoryTypeAllocationCounts = [];
-	private readonly Dictionary<uint, ulong> memoryTypeAllocationSizes = [];
+	private readonly int[] memoryTypeAllocationCounts;
+	private readonly ulong[] memoryTypeAllocationSizes;
 	private readonly object useLock = new();
 
 	internal PassthroughAllocator()
 	{
 		memoryAllocations = new List<DeviceMemory>( (int)VkContext.PhysicalDeviceInfo.Properties.Limits.MaxMemoryAllocationCount );
+		var memoryTypeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
+		memoryTypeAllocationCounts = new int[memoryTypeCount];
+		memoryTypeAllocationSizes = new ulong[memoryTypeCount];
 	}
 
 	~PassthroughAllocator()
@@ -34,18 +37,18 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	public int GetAllocationCount( uint memoryType )
 	{
-		if ( memoryTypeAllocationCounts.TryGetValue( memoryType, out var count ) )
-			return count;
+		if ( memoryType >= memoryTypeAllocationCounts.Length )
+			throw new ArgumentOutOfRangeException( nameof( memoryType ) );
 
-		return 0;
+		return memoryTypeAllocationCounts[memoryType];
 	}
 
 	public ulong GetAllocationSize( uint memoryType )
 	{
-		if ( memoryTypeAllocationSizes.TryGetValue( memoryType, out var size ) )
-			return size;
+		if ( memoryType >= memoryTypeAllocationSizes.Length )
+			throw new ArgumentOutOfRangeException( nameof( memoryType ) );
 
-		return 0;
+		return memoryTypeAllocationSizes[memoryType];
 	}
 
 	public unsafe AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags )
@@ -67,11 +70,8 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).AssertSuccess();
 
 			memoryAllocations.Add( memory );
-			if ( !memoryTypeAllocationCounts.TryAdd( memoryType, 1 ) )
-				memoryTypeAllocationCounts[memoryType]++;
-
-			if ( !memoryTypeAllocationSizes.TryAdd( memoryType, requirements.Size ) )
-				memoryTypeAllocationSizes[memoryType] += requirements.Size;
+			memoryTypeAllocationCounts[memoryType]++;
+			memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
 			return new AllocatedBuffer( buffer, new Allocation( memory, memoryType, 0, requirements.Size ) );
 		}
@@ -99,11 +99,8 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
 
 			memoryAllocations.Add( memory );
-			if ( !memoryTypeAllocationCounts.TryAdd( memoryType, 1 ) )
-				memoryTypeAllocationCounts[memoryType]++;
-
-			if ( !memoryTypeAllocationSizes.TryAdd( memoryType, requirements.Size ) )
-				memoryTypeAllocationSizes[memoryType] += requirements.Size;
+			memoryTypeAllocationCounts[memoryType]++;
+			memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
 			return new AllocatedImage( image, new Allocation( memory, memoryType, 0, requirements.Size ) );
 		}
