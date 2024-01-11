@@ -560,13 +560,21 @@ internal unsafe sealed class VkEngine : IDisposable
 
 				ImGuiNET.ImGui.TableNextColumn();
 
+				var totalSize = 0ul;
 				for ( var i = 0; i < stats.MemoryTypeAllocationSizes.Length; i++ )
 				{
 					ImGuiNET.ImGui.Text( i.ToString() );
 					ImGuiNET.ImGui.TableNextColumn();
 					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationSizes[i].ToDataSize( 2 ) );
 					ImGuiNET.ImGui.TableNextColumn();
+
+					totalSize += stats.MemoryTypeAllocationSizes[i];
 				}
+
+				ImGuiNET.ImGui.Text( "Total" );
+				ImGuiNET.ImGui.TableNextColumn();
+				ImGuiNET.ImGui.Text( totalSize.ToDataSize( 2 ) );
+				ImGuiNET.ImGui.TableNextColumn();
 
 				ImGuiNET.ImGui.EndTable();
 			}
