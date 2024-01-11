@@ -1579,7 +1579,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, textureImage, null ) );
 	}
 
-	private AllocatedBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
+	private static AllocatedBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
 		SharingMode sharingMode = SharingMode.Exclusive )
 	{
 		if ( !VkContext.IsInitialized )
@@ -1591,7 +1591,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		return VkContext.AllocationManager.AllocateBuffer( buffer, memoryFlags );
 	}
 
-	private bool TryLoadShaderModule( ReadOnlySpan<byte> shaderBytes, out ShaderModule shaderModule )
+	private static bool TryLoadShaderModule( ReadOnlySpan<byte> shaderBytes, out ShaderModule shaderModule )
 	{
 		fixed ( byte* shaderBytesPtr = shaderBytes )
 		{
