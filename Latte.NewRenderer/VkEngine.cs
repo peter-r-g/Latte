@@ -1,9 +1,12 @@
-﻿using Latte.Assets;
+﻿using ImGuiNET;
+using Latte.Assets;
 using Latte.NewRenderer.Allocations;
 using Latte.NewRenderer.Builders;
 using Latte.NewRenderer.Exceptions;
 using Latte.NewRenderer.Extensions;
+using Latte.NewRenderer.ImGui;
 using Latte.NewRenderer.Temp;
+using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
@@ -16,15 +19,12 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using Mesh = Latte.NewRenderer.Temp.Mesh;
+using System.Runtime.InteropServices;
 using LatteShader = Latte.Assets.Shader;
 using LatteTexture = Latte.Assets.Texture;
+using Mesh = Latte.NewRenderer.Temp.Mesh;
 using Shader = Latte.NewRenderer.Temp.Shader;
 using Texture = Latte.NewRenderer.Temp.Texture;
-using Silk.NET.Input;
-using Latte.NewRenderer.ImGui;
-using System.Runtime.InteropServices;
-using ImGuiNET;
 
 namespace Latte.NewRenderer;
 
@@ -118,8 +118,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 	private readonly GpuLightData[] lightData = new GpuLightData[MaxLights];
 
-	private KhrSwapchain? swapchainExtension;
-
 	private bool waitingForIdle;
 	private bool disposed;
 
@@ -170,8 +168,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !IsVisible || waitingForIdle )
 			return;
 
-		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
-
 		var swapchain = this.swapchain;
 		var currentFrameData = CurrentFrameData;
 		var renderFence = currentFrameData.RenderFence;
@@ -188,6 +184,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		var acquireSwapchainImageProfile = CpuProfile.New( "Acquire swapchain image" );
 		using ( acquireSwapchainImageProfile )
 		{
+			if ( !VkContext.Extensions.TryGetExtension<KhrSwapchain>( out var swapchainExtension ) )
+				throw new VkException( $"Failed to get {KhrSwapchain.ExtensionName} extension" );
+
 			var acquireResult = swapchainExtension.AcquireNextImage( VkContext.LogicalDevice, swapchain, 1_000_000_000, presentSemaphore, default, &swapchainImageIndex );
 			switch ( acquireResult )
 			{
@@ -619,7 +618,6 @@ internal unsafe sealed class VkEngine : IDisposable
 			.Build();
 
 		swapchain = result.Swapchain;
-		swapchainExtension = result.SwapchainExtension;
 		swapchainImages = result.SwapchainImages;
 		swapchainImageViews = result.SwapchainImageViews;
 		SwapchainImageFormat = result.SwapchainImageFormat;
@@ -643,7 +641,9 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( depthImageView );
 		this.depthImageView = depthImageView;
 
-		disposalManager.Add( () => swapchainExtension.DestroySwapchain( VkContext.LogicalDevice, swapchain, null ), SwapchainTag );
+		if ( VkContext.Extensions.TryGetExtension<KhrSwapchain>( out var swapchainExtension ) )
+			disposalManager.Add( () => swapchainExtension.DestroySwapchain( VkContext.LogicalDevice, swapchain, null ), SwapchainTag );
+
 		for ( var i = 0; i < swapchainImageViews.Length; i++ )
 		{
 			var index = i;

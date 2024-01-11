@@ -77,6 +77,9 @@ internal sealed class VkSwapchainBuilder
 
 	internal unsafe VkSwapchainBuilderResult Build()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		ArgumentNullException.ThrowIfNull( surfaceExtension, nameof( surfaceExtension ) );
 
 		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( physicalDevice, surface, out var capabilities ).Verify();
@@ -162,8 +165,8 @@ internal sealed class VkSwapchainBuilder
 		createInfo.PresentMode = presentMode;
 		createInfo.Clipped = Vk.True;
 
-		if ( !Apis.Vk.TryGetDeviceExtension<KhrSwapchain>( instance, logicalDevice, out var swapchainExtension ) )
-			throw new VkException( "Failed to get KHR_swapchain extension" );
+		if ( !VkContext.Extensions.TryGetExtension<KhrSwapchain>( out var swapchainExtension ) )
+			throw new VkException( $"Failed to get {KhrSwapchain.ExtensionName} extension" );
 
 		swapchainExtension.CreateSwapchain( logicalDevice, createInfo, null, out var swapchain ).Verify();
 		swapchainExtension.GetSwapchainImages( logicalDevice, swapchain, &imageCount, null ).Verify();
@@ -175,8 +178,10 @@ internal sealed class VkSwapchainBuilder
 		for ( var i = 0; i < imageCount; i++ )
 			swapchainImageViews[i] = CreateImageView( swapchainImages[i], surfaceImageFormat, ImageAspectFlags.ColorBit, 1 );
 
-		return new VkSwapchainBuilderResult( swapchain, swapchainExtension,
-			swapchainImages.ToImmutableArray(), swapchainImageViews.ToImmutableArray(), surfaceImageFormat );
+		return new VkSwapchainBuilderResult( swapchain,
+			swapchainImages.ToImmutableArray(),
+			swapchainImageViews.ToImmutableArray(),
+			surfaceImageFormat );
 	}
 
 	private unsafe ImageView CreateImageView( Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels )

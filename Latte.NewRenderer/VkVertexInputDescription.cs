@@ -7,10 +7,10 @@ using System.Runtime.InteropServices;
 namespace Latte.NewRenderer;
 
 [method: SetsRequiredMembers]
-internal struct VkVertexInputDescription( VertexInputAttributeDescription[] attributes, VertexInputBindingDescription[] bindings )
+internal readonly struct VkVertexInputDescription( VertexInputAttributeDescription[] attributes, VertexInputBindingDescription[] bindings )
 {
-	internal required VertexInputAttributeDescription[] Attributes = attributes;
-	internal required VertexInputBindingDescription[] Bindings = bindings;
+	internal required VertexInputAttributeDescription[] Attributes { get; init; } = attributes;
+	internal required VertexInputBindingDescription[] Bindings { get; init; } = bindings;
 
 	internal static VkVertexInputDescription Empty()
 	{

@@ -5,9 +5,12 @@ using System.Diagnostics.CodeAnalysis;
 namespace Latte.NewRenderer.Builders;
 
 [method: SetsRequiredMembers]
-internal struct VkInstanceBuilderResult( Instance instance, ExtDebugUtils? debugUtilsExtension, DebugUtilsMessengerEXT debugMessenger )
+internal readonly struct VkInstanceBuilderResult(
+	Instance instance,
+	ExtDebugUtils? debugUtilsExtension,
+	DebugUtilsMessengerEXT debugMessenger )
 {
-	internal required Instance Instance = instance;
-	internal required ExtDebugUtils? DebugUtilsExtension = debugUtilsExtension;
-	internal required DebugUtilsMessengerEXT DebugMessenger = debugMessenger;
+	internal required Instance Instance { get; init; } = instance;
+	internal required ExtDebugUtils? DebugUtilsExtension { get; init; } = debugUtilsExtension;
+	internal required DebugUtilsMessengerEXT DebugMessenger { get; init; } = debugMessenger;
 }
