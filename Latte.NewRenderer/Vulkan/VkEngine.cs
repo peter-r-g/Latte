@@ -525,6 +525,31 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			ImGuiNET.ImGui.EndTable();
 		}
+		
+		if ( ImGuiNET.ImGui.CollapsingHeader( "Memory" ) )
+		{
+			ImGuiNET.ImGui.Text( $"{stats.AllocationCount} allocations" );
+
+			if ( ImGuiNET.ImGui.BeginTable( "Memory Usages", 2, ImGuiTableFlags.Borders ) )
+			{
+				ImGuiNET.ImGui.TableSetupColumn( "Memory Type Index" );
+				ImGuiNET.ImGui.TableSetupColumn( "Allocated Size" );
+				ImGuiNET.ImGui.TableHeadersRow();
+
+				ImGuiNET.ImGui.TableNextColumn();
+
+				for ( var i = 0; i < stats.MemoryTypeAllocationSizes.Length; i++ )
+				{
+					ImGuiNET.ImGui.Text( i.ToString() );
+					ImGuiNET.ImGui.TableNextColumn();
+					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationSizes[i].ToDataSize( 2 ) );
+					ImGuiNET.ImGui.TableNextColumn();
+				}
+
+				ImGuiNET.ImGui.EndTable();
+			}
+		}
+
 		ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
 		foreach ( var (materialName, materialStats) in stats.MaterialStatistics )
 		{
@@ -1401,6 +1426,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private VkStatistics GetStatistics()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		var statsStorage = (ulong*)Marshal.AllocHGlobal( 6 * sizeof( ulong ) );
 
 		var result = Apis.Vk.GetQueryPoolResults( VkContext.LogicalDevice, gpuExecuteQueryPool, 0, 2,
@@ -1436,8 +1464,18 @@ internal unsafe sealed class VkEngine : IDisposable
 				statsStorage[5] );
 		}
 
+		var typeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
+		var memoryAllocationBuilder = ImmutableArray.CreateBuilder<ulong>( (int)typeCount );
+		for ( uint i = 0; i < typeCount; i++ )
+			memoryAllocationBuilder.Add( VkContext.AllocationManager.GetAllocationSize( i ) );
+
 		Marshal.FreeHGlobal( (nint)statsStorage );
-		return new VkStatistics( initializationStageTimes, cpuPerformanceTimes, gpuExecuteTime, materialPipelineStatistics );
+		return new VkStatistics( initializationStageTimes,
+			cpuPerformanceTimes,
+			gpuExecuteTime,
+			materialPipelineStatistics,
+			VkContext.AllocationManager.AllocationCount,
+			memoryAllocationBuilder.MoveToImmutable() );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
