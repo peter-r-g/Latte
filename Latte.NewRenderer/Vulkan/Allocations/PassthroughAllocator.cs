@@ -14,6 +14,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 {
 	public int TotalAllocationCount => memoryAllocations.Count;
 
+	private int currentAllocationId;
 	private bool disposed;
 
 	private readonly List<DeviceMemory> memoryAllocations;
@@ -73,7 +74,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			memoryTypeAllocationCounts[memoryType]++;
 			memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
-			return new AllocatedBuffer( buffer, new Allocation( memory, memoryType, 0, requirements.Size ) );
+			return new AllocatedBuffer( buffer, new Allocation( currentAllocationId++, memory, memoryType, 0, requirements.Size ) );
 		}
 		finally
 		{
@@ -102,7 +103,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			memoryTypeAllocationCounts[memoryType]++;
 			memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
-			return new AllocatedImage( image, new Allocation( memory, memoryType, 0, requirements.Size ) );
+			return new AllocatedImage( image, new Allocation( currentAllocationId++, memory, memoryType, 0, requirements.Size ) );
 		}
 		finally
 		{
@@ -200,19 +201,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 		}
 	}
 
-	private static uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
-	{
-		var memoryProperties = VkContext.PhysicalDeviceInfo.MemoryProperties;
-		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
-		{
-			if ( (typeFilter & 1 << i) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
-				return (uint)i;
-		}
-
-		throw new VkException( "Failed to find suitable memory type" );
-	}
-
-	private unsafe void Dispose( bool disposing )
+	private void Dispose( bool disposing )
 	{
 		if ( disposed )
 			return;
@@ -228,5 +217,17 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 	{
 		Dispose( disposing: true );
 		GC.SuppressFinalize( this );
+	}
+
+	private static uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
+	{
+		var memoryProperties = VkContext.PhysicalDeviceInfo.MemoryProperties;
+		for ( var i = 0; i < memoryProperties.MemoryTypeCount; i++ )
+		{
+			if ( (typeFilter & 1 << i) != 0 && (memoryProperties.MemoryTypes[i].PropertyFlags & properties) == properties )
+				return (uint)i;
+		}
+
+		throw new VkException( "Failed to find suitable memory type" );
 	}
 }
