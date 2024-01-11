@@ -126,6 +126,7 @@ internal static unsafe class VkContext
 			disposalManager.Add( () => Apis.Vk.DestroyInstance( Instance, null ) );
 			if ( DebugMessenger.IsValid() )
 				disposalManager.Add( () => debugUtilsExtension?.DestroyDebugUtilsMessenger( Instance, DebugMessenger, null ) );
+			// FIXME: Sometimes the program gets stuck destroying the device.
 			disposalManager.Add( () => Apis.Vk.DestroyDevice( LogicalDevice, null ) );
 
 			AppDomain.CurrentDomain.ProcessExit += Cleanup;
