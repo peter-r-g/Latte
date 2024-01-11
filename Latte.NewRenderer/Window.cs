@@ -32,8 +32,7 @@ public class Window
 		input = new InputManager( window );
 		input.Initialize();
 
-		engine = new VkEngine();
-		engine.Initialize( window, input.InputContext );
+		engine = new VkEngine( window, input.InputContext );
 		window.Update += Update;
 		window.Render += Render;
 
@@ -62,7 +61,6 @@ public class Window
 
 	private void Update( double dt )
 	{
-		ArgumentNullException.ThrowIfNull( engine.ImGuiController, nameof( engine.ImGuiController ) );
 		engine.ImGuiController.Update( (float)dt );
 
 		window.Title = $"Latte.NewRenderer ({(int)(1 / dt)} FPS)";

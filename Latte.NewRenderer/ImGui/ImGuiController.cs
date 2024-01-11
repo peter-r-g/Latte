@@ -23,7 +23,7 @@ public sealed class ImGuiController : IDisposable
 	private VkEngine engine = null!;
 	private IInputContext input = null!;
 	private IKeyboard keyboard = null!;
-	private DisposalManager? disposalManager = null!;
+	private DisposalManager disposalManager = null!;
 	private RenderPass renderPass;
 
 	private Sampler fontSampler;
@@ -262,8 +262,6 @@ public sealed class ImGuiController : IDisposable
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		ArgumentNullException.ThrowIfNull( engine.DescriptorAllocator, nameof( engine.DescriptorAllocator ) );
-
 		var binding = new DescriptorSetLayoutBinding
 		{
 			DescriptorType = DescriptorType.CombinedImageSampler,
@@ -292,8 +290,6 @@ public sealed class ImGuiController : IDisposable
 	{
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
-
-		ArgumentNullException.ThrowIfNull( engine.View, nameof( engine.View ) );
 
 		pipelineLayout = new VkPipelineLayoutBuilder( VkContext.LogicalDevice, 1, 1 )
 			.AddPushConstantRange( new PushConstantRange

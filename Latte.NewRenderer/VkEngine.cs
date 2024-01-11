@@ -39,9 +39,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private const string SwapchainTag = "swapchain";
 	private const string WireframeTag = "wireframe";
 
-	[MemberNotNullWhen( true, nameof( View ), nameof( disposalManager ), nameof( DescriptorAllocator ) )]
-	internal bool IsInitialized { get; private set; }
-
 	internal bool WireframeEnabled
 	{
 		get => wireframeEnabled;
@@ -70,20 +67,13 @@ internal unsafe sealed class VkEngine : IDisposable
 	}
 	private bool vsyncEnabled = true;
 
-	internal bool IsVisible
-	{
-		get
-		{
-			ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-			return View.Size.X != 0 && View.Size.Y != 0;
-		}
-	}
+	internal bool IsVisible => View.Size.X != 0 && View.Size.Y != 0;
 
-	internal ImGuiController? ImGuiController { get; private set; }
+	internal ImGuiController ImGuiController { get; private set; } = null!;
 
-	internal IView? View { get; private set; }
+	internal IView View { get; private set; } = null!;
 	private SurfaceKHR surface;
-	private DisposalManager? disposalManager;
+	private DisposalManager disposalManager = null!;
 
 	private SwapchainKHR swapchain;
 	internal Format SwapchainImageFormat { get; private set; }
@@ -98,7 +88,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private ImmutableArray<FrameData> frameData = [];
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
 
-	internal DescriptorAllocator? DescriptorAllocator { get; private set; }
+	internal DescriptorAllocator DescriptorAllocator { get; private set; } = null!;
 	private DescriptorSetLayout frameSetLayout;
 	private DescriptorSetLayout singleTextureSetLayout;
 
@@ -133,19 +123,19 @@ internal unsafe sealed class VkEngine : IDisposable
 	private bool waitingForIdle;
 	private bool disposed;
 
+	internal VkEngine( IView view, IInputContext input )
+	{
+		Initialize( view, input );
+	}
+
 	~VkEngine()
 	{
 		Dispose( disposing: false );
 	}
 
-	internal void Initialize( IView view, IInputContext input )
+	private void Initialize( IView view, IInputContext input )
 	{
-		if ( IsInitialized )
-			throw new VkException( $"This {nameof( VkEngine )} has already been initialized" );
-
-		ObjectDisposedException.ThrowIf( disposed, this );
-
-		this.View = view;
+		View = view;
 		view.FramebufferResize += OnFramebufferResize;
 
 		InitializeVulkan();
@@ -166,14 +156,11 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeQueries();
 
 		InitializeScene();
-
-		IsInitialized = true;
 	}
 
 	internal void Draw()
 	{
-		if ( !IsInitialized )
-			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
+		ObjectDisposedException.ThrowIf( disposed, this );
 
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
@@ -183,10 +170,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !IsVisible || waitingForIdle )
 			return;
 
-		ObjectDisposedException.ThrowIf( disposed, this );
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 		ArgumentNullException.ThrowIfNull( swapchainExtension, nameof( swapchainExtension ) );
-		ArgumentNullException.ThrowIfNull( ImGuiController, nameof( ImGuiController ) );
 
 		var swapchain = this.swapchain;
 		var currentFrameData = CurrentFrameData;
@@ -334,8 +318,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		ArgumentNullException.ThrowIfNull( this.View, nameof( this.View ) );
-
 		var currentFrameData = CurrentFrameData;
 
 		var view = Matrix4x4.Identity * Matrix4x4.CreateLookAt( Camera.Main.Position, Camera.Main.Position + Camera.Main.Front, Camera.Main.Up );
@@ -440,9 +422,6 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void WaitForIdle()
 	{
-		if ( !IsInitialized )
-			throw new VkException( $"This {nameof( VkEngine )} has not been initialized" );
-
 		ObjectDisposedException.ThrowIf( disposed, this );
 
 		waitingForIdle = true;
@@ -456,6 +435,8 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	internal void ImGuiShowRendererStatistics()
 	{
+		ObjectDisposedException.ThrowIf( disposed, this );
+
 		if ( !IsVisible )
 			return;
 
@@ -568,8 +549,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-
 		WaitForIdle();
 
 		disposalManager.Dispose( SwapchainTag );
@@ -600,8 +579,6 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void InitializeVulkan()
 	{
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-
 		var initializationProfile = CpuProfile.New( nameof( InitializeVulkan ) );
 
 		surface = VkContext.Initialize( View );
@@ -630,8 +607,6 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		if ( !VkContext.Extensions.TryGetExtension<KhrSurface>( out var surfaceExtension ) )
 			throw new VkException( $"Attempted to initialize swapchain while the {KhrSurface.ExtensionName} extension is disabled" );
-
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeSwapchain ) );
 
@@ -825,8 +800,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
-
 		var initializationProfile = CpuProfile.New( nameof( InitializeFramebuffers ) );
 
 		var framebufferBuilder = ImmutableArray.CreateBuilder<Framebuffer>( swapchainImages.Length );
@@ -990,8 +963,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
-
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 
 		var initializationProfile = CpuProfile.New( nameof( InitializePipelines ) );
 
@@ -1199,8 +1170,6 @@ internal unsafe sealed class VkEngine : IDisposable
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var initializationProfile = CpuProfile.New( nameof( SetupTextureSets ) );
-
-		ArgumentNullException.ThrowIfNull( DescriptorAllocator, nameof( DescriptorAllocator ) );
 
 		var defaultMaterial = GetMaterial( TexturedMeshMaterialName );
 		foreach ( var (textureName, texture) in Textures )
@@ -1645,10 +1614,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private void Dispose( bool disposing )
 	{
-		if ( disposed || !IsInitialized )
+		if ( disposed )
 			return;
 
-		ArgumentNullException.ThrowIfNull( View, nameof( View ) );
 		View.FramebufferResize -= OnFramebufferResize;
 
 		if ( disposing )
