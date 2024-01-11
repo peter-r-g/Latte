@@ -4,6 +4,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 
 namespace Latte.NewRenderer;
@@ -166,16 +167,18 @@ internal sealed class VkQueue : IDisposable
 		GC.SuppressFinalize( this );
 	}
 
-	private struct VkQueueSubmission
+	[method: SetsRequiredMembers]
+	private readonly struct VkQueueSubmission( int submissionId, ReadOnlyMemory<SubmitInfo> submitInfos, Fence fence )
 	{
-		internal int SubmissionId;
-		internal ReadOnlyMemory<SubmitInfo> SubmitInfos;
-		internal Fence Fence;
+		internal required int SubmissionId { get; init; } = submissionId;
+		internal required ReadOnlyMemory<SubmitInfo> SubmitInfos { get; init; } = submitInfos;
+		internal required Fence Fence { get; init; } = fence;
 	}
 
-	private struct VkPresentQueueSubmission
+	[method: SetsRequiredMembers]
+	private readonly struct VkPresentQueueSubmission( int submissionId, PresentInfoKHR presentInfo )
 	{
-		internal int SubmissionId;
-		internal PresentInfoKHR PresentInfo;
+		internal required int SubmissionId { get; init; } = submissionId;
+		internal required PresentInfoKHR PresentInfo { get; init; } = presentInfo;
 	}
 }

@@ -115,7 +115,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 	private readonly Dictionary<string, TimeSpan> initializationStageTimes = [];
 	private readonly Dictionary<string, TimeSpan> cpuPerformanceTimes = [];
-	private readonly Dictionary<string, PipelineStatistics> materialPipelineStatistics = [];
+	private readonly Dictionary<string, VkPipelineStatistics> materialPipelineStatistics = [];
 	private QueryPool gpuExecuteQueryPool;
 	private TimeSpan gpuExecuteTime;
 
@@ -1050,7 +1050,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				(byte*)meshTriangleShader.EntryPointPtr, shaderSpecializationInfo ) )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, defaultLitShader.Module,
 				(byte*)defaultLitShader.EntryPointPtr, shaderSpecializationInfo ) )
-			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetLatteVertexDescription() ) )
+			.WithVertexInputState( VkInfo.PipelineVertexInputState( VkVertexInputDescription.GetLatteVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
 			.WithRasterizerState( VkInfo.PipelineRasterizationState( WireframeEnabled ? PolygonMode.Line : PolygonMode.Fill ) )
 			.WithMultisamplingState( VkInfo.PipelineMultisamplingState() )
@@ -1453,7 +1453,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			else
 				result.Verify();
 
-			materialPipelineStatistics[materialName] = new PipelineStatistics(
+			materialPipelineStatistics[materialName] = new VkPipelineStatistics(
 				statsStorage[0],
 				statsStorage[1],
 				statsStorage[2],
@@ -1666,5 +1666,12 @@ internal unsafe sealed class VkEngine : IDisposable
 	{
 		Dispose( disposing: true );
 		GC.SuppressFinalize( this );
+	}
+
+	private struct UploadContext
+	{
+		internal Fence UploadFence;
+		internal CommandPool CommandPool;
+		internal CommandBuffer CommandBuffer;
 	}
 }

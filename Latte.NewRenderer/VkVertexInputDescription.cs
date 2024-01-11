@@ -7,17 +7,17 @@ using System.Runtime.InteropServices;
 namespace Latte.NewRenderer;
 
 [method: SetsRequiredMembers]
-internal struct VertexInputDescription( VertexInputAttributeDescription[] attributes, VertexInputBindingDescription[] bindings )
+internal struct VkVertexInputDescription( VertexInputAttributeDescription[] attributes, VertexInputBindingDescription[] bindings )
 {
 	internal required VertexInputAttributeDescription[] Attributes = attributes;
 	internal required VertexInputBindingDescription[] Bindings = bindings;
 
-	internal static VertexInputDescription Empty()
+	internal static VkVertexInputDescription Empty()
 	{
-		return new VertexInputDescription( [], [] );
+		return new VkVertexInputDescription( [], [] );
 	}
 
-	internal static VertexInputDescription GetLatteVertexDescription()
+	internal static VkVertexInputDescription GetLatteVertexDescription()
 	{
 		var mainBinding = new VertexInputBindingDescription
 		{
@@ -58,10 +58,10 @@ internal struct VertexInputDescription( VertexInputAttributeDescription[] attrib
 			Offset = (uint)Marshal.OffsetOf<Vertex>( nameof( Vertex.TextureCoordinates ) )
 		};
 
-		return new VertexInputDescription( [positionAttribute, normalAttribute, colorAttribute, textureCoordinatesAttribute], [mainBinding] );
+		return new VkVertexInputDescription( [positionAttribute, normalAttribute, colorAttribute, textureCoordinatesAttribute], [mainBinding] );
 	}
 
-	internal static VertexInputDescription GetImGuiVertexDescription()
+	internal static VkVertexInputDescription GetImGuiVertexDescription()
 	{
 		var mainBinding = new VertexInputBindingDescription
 		{
@@ -94,6 +94,6 @@ internal struct VertexInputDescription( VertexInputAttributeDescription[] attrib
 			Offset = (uint)Marshal.OffsetOf<ImDrawVert>( nameof( ImDrawVert.col ) )
 		};
 
-		return new VertexInputDescription( [positionAttribute, textureCoordinatesAttribute, colorAttribute], [mainBinding] );
+		return new VkVertexInputDescription( [positionAttribute, textureCoordinatesAttribute, colorAttribute], [mainBinding] );
 	}
 }

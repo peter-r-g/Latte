@@ -20,7 +20,7 @@ internal static unsafe class VkContext
 
 	internal static Instance Instance { get; private set; }
 	internal static PhysicalDevice PhysicalDevice { get; private set; }
-	internal static PhysicalDeviceInfo PhysicalDeviceInfo { get; private set; }
+	internal static VkPhysicalDeviceInfo PhysicalDeviceInfo { get; private set; }
 	internal static Device LogicalDevice { get; private set; }
 	internal static VkQueueFamilyIndices QueueFamilyIndices { get; private set; }
 
@@ -31,7 +31,7 @@ internal static unsafe class VkContext
 	internal static DebugUtilsMessengerEXT DebugMessenger { get; private set; }
 
 	internal static AllocationManager? AllocationManager { get; private set; }
-	internal static ExtensionContainer? Extensions { get; private set; }
+	internal static VkExtensionContainer? Extensions { get; private set; }
 
 	private static DisposalManager? disposalManager;
 	private static readonly object initializeLock = new();
@@ -85,7 +85,7 @@ internal static unsafe class VkContext
 				.Select();
 
 			PhysicalDevice = physicalDeviceSelectorResult.PhysicalDevice;
-			PhysicalDeviceInfo = new PhysicalDeviceInfo( PhysicalDevice );
+			PhysicalDeviceInfo = new VkPhysicalDeviceInfo( PhysicalDevice );
 			QueueFamilyIndices = physicalDeviceSelectorResult.QueueFamilyIndices;
 
 			VkInvalidHandleException.ThrowIfInvalid( PhysicalDevice );
@@ -120,7 +120,7 @@ internal static unsafe class VkContext
 
 			AllocationManager = new AllocationManager();
 			disposalManager = new DisposalManager();
-			Extensions = new ExtensionContainer( instanceExtensions, deviceExtensions );
+			Extensions = new VkExtensionContainer( instanceExtensions, deviceExtensions );
 
 			disposalManager.Add( () => Apis.Vk.DestroyInstance( Instance, null ) );
 			if ( DebugMessenger.IsValid() )

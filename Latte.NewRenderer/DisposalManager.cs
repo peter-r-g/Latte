@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Latte.NewRenderer.Allocations;
+namespace Latte.NewRenderer;
 
 internal sealed class DisposalManager : IDisposable
 {

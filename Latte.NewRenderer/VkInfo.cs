@@ -78,7 +78,7 @@ internal unsafe static class VkInfo
 		};
 	}
 
-	internal static PipelineVertexInputStateCreateInfo PipelineVertexInputState( VertexInputDescription inputDescription )
+	internal static PipelineVertexInputStateCreateInfo PipelineVertexInputState( VkVertexInputDescription inputDescription )
 	{
 		fixed ( VertexInputAttributeDescription* attributesPtr = inputDescription.Attributes )
 		fixed ( VertexInputBindingDescription* bindingsPtr = inputDescription.Bindings )

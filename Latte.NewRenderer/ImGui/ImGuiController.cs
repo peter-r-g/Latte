@@ -315,7 +315,7 @@ public sealed class ImGuiController : IDisposable
 			.AddDynamicState( DynamicState.Scissor )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.VertexBit, imguiVert.Module, (byte*)imguiVert.EntryPointPtr ) )
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, imguiFrag.Module, (byte*)imguiFrag.EntryPointPtr ) )
-			.WithVertexInputState( VkInfo.PipelineVertexInputState( VertexInputDescription.GetImGuiVertexDescription() ) )
+			.WithVertexInputState( VkInfo.PipelineVertexInputState( VkVertexInputDescription.GetImGuiVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
 			// FIXME: Add these options to VkInfo method.
 			.WithRasterizerState( new PipelineRasterizationStateCreateInfo

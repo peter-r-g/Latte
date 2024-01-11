@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Latte.NewRenderer;
 
-internal readonly struct PhysicalDeviceInfo
+internal readonly struct VkPhysicalDeviceInfo
 {
 	internal required string Name { get; init; }
 	internal required PhysicalDeviceFeatures Features { get; init; }
@@ -13,7 +13,7 @@ internal readonly struct PhysicalDeviceInfo
 	internal required PhysicalDeviceMemoryProperties MemoryProperties { get; init; }
 
 	[SetsRequiredMembers]
-	internal unsafe PhysicalDeviceInfo( PhysicalDevice physicalDevice )
+	internal unsafe VkPhysicalDeviceInfo( PhysicalDevice physicalDevice )
 	{
 		Features = Apis.Vk.GetPhysicalDeviceFeatures( physicalDevice );
 		var properties = Apis.Vk.GetPhysicalDeviceProperties( physicalDevice );

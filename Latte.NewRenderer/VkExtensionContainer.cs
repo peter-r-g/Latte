@@ -10,7 +10,7 @@ using System.Threading;
 
 namespace Latte.NewRenderer;
 
-internal sealed class ExtensionContainer : IDisposable
+internal sealed class VkExtensionContainer : IDisposable
 {
 	private readonly Dictionary<string, NativeExtension<Vk>> extensions = [];
 	private readonly Dictionary<Type, string> extensionTypeMap = [];
@@ -22,13 +22,13 @@ internal sealed class ExtensionContainer : IDisposable
 
 	private bool disposed;
 
-	internal ExtensionContainer( string[] instanceExtensions, string[] deviceExtensions )
+	internal VkExtensionContainer( string[] instanceExtensions, string[] deviceExtensions )
 	{
 		this.instanceExtensions = instanceExtensions.ToHashSet();
 		this.deviceExtensions = deviceExtensions.ToHashSet();
 	}
 
-	~ExtensionContainer()
+	~VkExtensionContainer()
 	{
 		Dispose( disposing: false );
 	}
