@@ -9,23 +9,23 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Latte.NewRenderer.Vulkan.Allocations;
 
-internal sealed class AllocationManager : IDisposable
+internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 {
 	private readonly List<DeviceMemory> memoryAllocations;
 	private readonly Dictionary<Allocation, nint> preservedMaps = [];
 	private bool disposed;
 
-	internal AllocationManager()
+	internal PassthroughAllocator()
 	{
 		memoryAllocations = new List<DeviceMemory>( (int)VkContext.PhysicalDeviceInfo.Properties.Limits.MaxMemoryAllocationCount );
 	}
 
-	~AllocationManager()
+	~PassthroughAllocator()
 	{
 		Dispose( disposing: false );
 	}
 
-	internal unsafe AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags )
+	public unsafe AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags )
 	{
 		VkInvalidHandleException.ThrowIfInvalid( buffer );
 
@@ -43,7 +43,7 @@ internal sealed class AllocationManager : IDisposable
 		return new AllocatedBuffer( buffer, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
 	}
 
-	internal unsafe AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags )
+	public unsafe AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags )
 	{
 		VkInvalidHandleException.ThrowIfInvalid( image );
 
@@ -60,16 +60,7 @@ internal sealed class AllocationManager : IDisposable
 		return new AllocatedImage( image, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
 	}
 
-	internal unsafe void SetMemory<T>( Allocation allocation, ReadOnlySpan<T> data, bool preserveMap = false ) where T : unmanaged
-	{
-		var dataSize = (ulong)(sizeof( T ) * data.Length);
-
-		void* dataPtr = RetrieveDataPointer( allocation, dataSize, preserveMap );
-		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
-		ReturnDataPointer( allocation, dataPtr, preserveMap );
-	}
-
-	internal unsafe void SetMemory<T>( Allocation allocation, T data, bool preserveMap = false ) where T : unmanaged
+	public unsafe void SetMemory<T>( Allocation allocation, T data, bool preserveMap = false ) where T : unmanaged
 	{
 		var dataSize = (ulong)sizeof( T );
 
@@ -78,20 +69,34 @@ internal sealed class AllocationManager : IDisposable
 		ReturnDataPointer( allocation, dataPtr, preserveMap );
 	}
 
-	internal unsafe void SetMemory( Allocation allocation, nint srcDataPtr, ulong count, nint offset = 0, bool preserveMap = false )
+	public unsafe void SetMemory<T>( Allocation allocation, ReadOnlySpan<T> data, bool preserveMap = false ) where T : unmanaged
 	{
-		var dataPtr = RetrieveDataPointer( allocation, count, preserveMap );
-		Unsafe.CopyBlock( (void*)((nint)dataPtr + offset), (void*)srcDataPtr, (uint)count );
+		var dataSize = (ulong)(sizeof( T ) * data.Length);
+
+		void* dataPtr = RetrieveDataPointer( allocation, dataSize, preserveMap );
+		data.CopyTo( new Span<T>( dataPtr, data.Length ) );
 		ReturnDataPointer( allocation, dataPtr, preserveMap );
 	}
 
-	internal unsafe void SetMemory<T>( Allocation allocation, T data, ulong dataSize, int index ) where T : unmanaged
+	public unsafe void SetMemory<T>( Allocation allocation, T data, ulong dataSize, int index ) where T : unmanaged
 	{
 		void* dataPtr;
 
 		Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).Verify();
 		Marshal.StructureToPtr( data, (nint)dataPtr + (nint)(dataSize * (ulong)index), false );
 		Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
+	}
+
+	public unsafe void SetMemory( Allocation allocation, nint srcDataPtr, ulong count, nint offset = 0, bool preserveMap = false )
+	{
+		var dataPtr = RetrieveDataPointer( allocation, count, preserveMap );
+		Unsafe.CopyBlock( (void*)((nint)dataPtr + offset), (void*)srcDataPtr, (uint)count );
+		ReturnDataPointer( allocation, dataPtr, preserveMap );
+	}
+
+	public unsafe void Free( Allocation allocation )
+	{
+		Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocation.Memory, null );
 	}
 
 	private unsafe void* RetrieveDataPointer( Allocation allocation, ulong dataSize, bool preserveMap )

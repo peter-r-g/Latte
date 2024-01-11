@@ -30,7 +30,7 @@ internal static unsafe class VkContext
 
 	internal static DebugUtilsMessengerEXT DebugMessenger { get; private set; }
 
-	internal static AllocationManager? AllocationManager { get; private set; }
+	internal static IDeviceMemoryAllocator? AllocationManager { get; private set; }
 	internal static VkExtensionContainer? Extensions { get; private set; }
 
 	private static DisposalManager? disposalManager;
@@ -118,7 +118,7 @@ internal static unsafe class VkContext
 			VkInvalidHandleException.ThrowIfInvalid( PresentQueue.Queue );
 			VkInvalidHandleException.ThrowIfInvalid( TransferQueue.Queue );
 
-			AllocationManager = new AllocationManager();
+			AllocationManager = new PassthroughAllocator();
 			disposalManager = new DisposalManager();
 			Extensions = new VkExtensionContainer( instanceExtensions, deviceExtensions );
 
