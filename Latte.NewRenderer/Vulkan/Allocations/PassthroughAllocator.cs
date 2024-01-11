@@ -5,15 +5,18 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Latte.NewRenderer.Vulkan.Allocations;
 
 internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 {
+	private bool disposed;
+
 	private readonly List<DeviceMemory> memoryAllocations;
 	private readonly Dictionary<Allocation, nint> preservedMaps = [];
-	private bool disposed;
+	private readonly object useLock = new();
 
 	internal PassthroughAllocator()
 	{
@@ -27,37 +30,56 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	public unsafe AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags )
 	{
-		VkInvalidHandleException.ThrowIfInvalid( buffer );
+		Monitor.Enter( useLock );
+		try
+		{
+			VkInvalidHandleException.ThrowIfInvalid( buffer );
 
-		if ( memoryAllocations.Count >= memoryAllocations.Capacity )
-			throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
+			if ( memoryAllocations.Count >= memoryAllocations.Capacity )
+				throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
 
-		var requirements = Apis.Vk.GetBufferMemoryRequirements( VkContext.LogicalDevice, buffer );
-		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
+			var requirements = Apis.Vk.GetBufferMemoryRequirements( VkContext.LogicalDevice, buffer );
+			var memoryType = FindMemoryType( requirements.MemoryTypeBits, memoryFlags );
+			var allocateInfo = VkInfo.AllocateMemory( requirements.Size, memoryType );
 
-		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).AssertSuccess();
-		VkInvalidHandleException.ThrowIfInvalid( memory );
-		Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).AssertSuccess();
+			Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).AssertSuccess();
+			VkInvalidHandleException.ThrowIfInvalid( memory );
+			Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).AssertSuccess();
 
-		memoryAllocations.Add( memory );
-		return new AllocatedBuffer( buffer, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
+			memoryAllocations.Add( memory );
+
+			return new AllocatedBuffer( buffer, new Allocation( memory, memoryType, 0, requirements.Size ) );
+		}
+		finally
+		{
+			Monitor.Exit( useLock );
+		}
 	}
 
 	public unsafe AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags )
 	{
-		VkInvalidHandleException.ThrowIfInvalid( image );
+		Monitor.Enter( useLock );
+		try
+		{
+			VkInvalidHandleException.ThrowIfInvalid( image );
 
-		if ( memoryAllocations.Count >= memoryAllocations.Capacity )
-			throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
+			if ( memoryAllocations.Count >= memoryAllocations.Capacity )
+				throw new OutOfMemoryException( $"No more Vulkan allocations can be made (Maximum is {memoryAllocations.Capacity})" );
 
-		var requirements = Apis.Vk.GetImageMemoryRequirements( VkContext.LogicalDevice, image );
-		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
+			var requirements = Apis.Vk.GetImageMemoryRequirements( VkContext.LogicalDevice, image );
+			var memoryType = FindMemoryType( requirements.MemoryTypeBits, memoryFlags );
+			var allocateInfo = VkInfo.AllocateMemory( requirements.Size, memoryType );
 
-		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).AssertSuccess();
-		Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
+			Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).AssertSuccess();
+			Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
 
-		memoryAllocations.Add( memory );
-		return new AllocatedImage( image, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
+			memoryAllocations.Add( memory );
+			return new AllocatedImage( image, new Allocation( memory, memoryType, 0, requirements.Size ) );
+		}
+		finally
+		{
+			Monitor.Exit( useLock );
+		}
 	}
 
 	public unsafe void SetMemory<T>( Allocation allocation, T data, bool preserveMap = false ) where T : unmanaged
@@ -96,14 +118,22 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	public unsafe void Free( Allocation allocation )
 	{
-		if ( preservedMaps.ContainsKey( allocation ) )
+		Monitor.Enter( useLock );
+		try
 		{
-			Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
-			preservedMaps.Remove( allocation );
-		}
+			if ( preservedMaps.ContainsKey( allocation ) )
+			{
+				Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
+				preservedMaps.Remove( allocation );
+			}
 
-		Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocation.Memory, null );
-		memoryAllocations.Remove( allocation.Memory );
+			Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocation.Memory, null );
+			memoryAllocations.Remove( allocation.Memory );
+		}
+		finally
+		{
+			Monitor.Exit( useLock );
+		}
 	}
 
 	private unsafe void* RetrieveDataPointer( Allocation allocation, ulong dataSize, bool preserveMap )
@@ -120,16 +150,24 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	private unsafe void ReturnDataPointer( Allocation allocation, void* dataPtr, bool preserveMap )
 	{
-		if ( preserveMap )
+		Monitor.Enter( useLock );
+		try
 		{
-			if ( !preservedMaps.ContainsKey( allocation ) )
-				preservedMaps.Add( allocation, (nint)dataPtr );
+			if ( preserveMap )
+			{
+				if ( !preservedMaps.ContainsKey( allocation ) )
+					preservedMaps.Add( allocation, (nint)dataPtr );
 
-			return;
+				return;
+			}
+
+			preservedMaps.Remove( allocation );
+			Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
 		}
-
-		preservedMaps.Remove( allocation );
-		Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
+		finally
+		{
+			Monitor.Exit( useLock );
+		}
 	}
 
 	private static uint FindMemoryType( uint typeFilter, MemoryPropertyFlags properties )
