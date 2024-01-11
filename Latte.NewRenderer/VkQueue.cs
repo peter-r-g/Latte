@@ -17,7 +17,8 @@ internal sealed class VkQueue : IDisposable
 	private bool disposed;
 
 	private readonly Thread workerThread;
-	private readonly Queue<object> queueSubmissions = new();
+	private readonly Queue<VkQueueSubmission> queueSubmissions = new();
+	private readonly Queue<VkPresentQueueSubmission> presentQueueSubmissions = new();
 	private readonly HashSet<int> completedSubmissions = [];
 	private readonly object queueLock = new();
 	private readonly AutoResetEvent submissionAvailableEvent = new( false );
@@ -63,7 +64,7 @@ internal sealed class VkQueue : IDisposable
 		lock ( queueLock )
 		{
 			submissionId = currentSubmissionId++;
-			queueSubmissions.Enqueue( new VkPresentQueueSubmission
+			presentQueueSubmissions.Enqueue( new VkPresentQueueSubmission
 			{
 				SubmissionId = submissionId,
 				PresentInfo = presentInfo
@@ -119,27 +120,31 @@ internal sealed class VkQueue : IDisposable
 
 			while ( queueSubmissions.Count > 0 )
 			{
-				object submissionObj;
+				VkQueueSubmission submission;
 				lock ( queueLock )
-					submissionObj = queueSubmissions.Dequeue();
+					submission = queueSubmissions.Dequeue();
 
-				int completedSubmissionId;
-				if ( submissionObj is VkQueueSubmission submission )
-				{
-					Apis.Vk.QueueSubmit( Queue, submission.SubmitInfos.Span, submission.Fence );
-					completedSubmissionId = submission.SubmissionId;
-				}
-				else if ( submissionObj is VkPresentQueueSubmission presentSubmission &&
-					VkContext.Extensions.TryGetExtension<KhrSwapchain>( out var swapchainExtension ) )
-				{
-					swapchainExtension.QueuePresent( Queue, presentSubmission.PresentInfo );
-					completedSubmissionId = presentSubmission.SubmissionId;
-				}
-				else
-					throw new VkException( $"Failed to process queue submission: {submissionObj}" );
+				Apis.Vk.QueueSubmit( Queue, submission.SubmitInfos.Span, submission.Fence );
 
 				lock ( queueLock )
-					completedSubmissions.Add( completedSubmissionId );
+					completedSubmissions.Add( submission.SubmissionId );
+
+				submissionCompletedEvent.Set();
+			}
+
+			while ( presentQueueSubmissions.Count > 0 )
+			{
+				VkPresentQueueSubmission submission;
+				lock ( queueLock )
+					submission = presentQueueSubmissions.Dequeue();
+
+				if ( !VkContext.Extensions.TryGetExtension<KhrSwapchain>( out var swapchainExtension ) )
+					throw new VkException( $"Failed to get {KhrSwapchain.ExtensionName} extension" );
+
+				swapchainExtension.QueuePresent( Queue, submission.PresentInfo );
+
+				lock ( queueLock )
+					completedSubmissions.Add( submission.SubmissionId );
 
 				submissionCompletedEvent.Set();
 			}
