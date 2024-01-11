@@ -128,19 +128,20 @@ internal sealed class VkSwapchainBuilder
 		if ( !hasPresentMode )
 			throw new VkException( $"The chosen physical device does not support the present mode \"{presentMode}\"" );
 
-		var imageCount = capabilities.MinImageCount;
-
 		var createInfo = new SwapchainCreateInfoKHR
 		{
 			SType = StructureType.SwapchainCreateInfoKhr,
 			Surface = surface,
-			MinImageCount = imageCount,
+			// 3 for triple buffering.
+			MinImageCount = Math.Min( Math.Max( 3, capabilities.MinImageCount ), capabilities.MaxImageCount ),
 			ImageFormat = surfaceImageFormat,
 			ImageColorSpace = surfaceFormat.ColorSpace,
 			ImageExtent = extent,
 			ImageArrayLayers = 1,
 			ImageUsage = ImageUsageFlags.ColorAttachmentBit
 		};
+
+		var imageCount = createInfo.MinImageCount;
 
 		var indicesArray = stackalloc uint[]
 		{
