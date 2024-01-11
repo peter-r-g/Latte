@@ -5,7 +5,7 @@ namespace Latte.NewRenderer.Vulkan.Extensions;
 
 internal static class ResultExtensions
 {
-	internal static void Verify( this Result result )
+	internal static void AssertSuccess( this Result result )
 	{
 #if DEBUG
 		if ( result == Result.Success )

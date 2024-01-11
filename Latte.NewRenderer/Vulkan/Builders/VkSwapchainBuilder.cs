@@ -82,7 +82,7 @@ internal sealed class VkSwapchainBuilder
 
 		ArgumentNullException.ThrowIfNull( surfaceExtension, nameof( surfaceExtension ) );
 
-		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( physicalDevice, surface, out var capabilities ).Verify();
+		surfaceExtension.GetPhysicalDeviceSurfaceCapabilities( physicalDevice, surface, out var capabilities ).AssertSuccess();
 		if ( extent.Width < capabilities.MinImageExtent.Width || extent.Height < capabilities.MinImageExtent.Height )
 			throw new VkException( $"The chosen physical device does not support the extent \"{extent}\"" );
 
@@ -90,9 +90,9 @@ internal sealed class VkSwapchainBuilder
 			throw new VkException( $"The chosen physical device does not support the extent \"{extent}\"" );
 
 		uint formatCount;
-		surfaceExtension.GetPhysicalDeviceSurfaceFormats( physicalDevice, surface, &formatCount, null ).Verify();
+		surfaceExtension.GetPhysicalDeviceSurfaceFormats( physicalDevice, surface, &formatCount, null ).AssertSuccess();
 		var formats = stackalloc SurfaceFormatKHR[(int)formatCount];
-		surfaceExtension.GetPhysicalDeviceSurfaceFormats( physicalDevice, surface, &formatCount, formats ).Verify();
+		surfaceExtension.GetPhysicalDeviceSurfaceFormats( physicalDevice, surface, &formatCount, formats ).AssertSuccess();
 
 		var hasFormat = false;
 		SurfaceFormatKHR surfaceFormat = default;
@@ -111,9 +111,9 @@ internal sealed class VkSwapchainBuilder
 		var surfaceImageFormat = surfaceFormat.Format;
 
 		uint presentModeCount;
-		surfaceExtension.GetPhysicalDeviceSurfacePresentModes( physicalDevice, surface, &presentModeCount, null ).Verify();
+		surfaceExtension.GetPhysicalDeviceSurfacePresentModes( physicalDevice, surface, &presentModeCount, null ).AssertSuccess();
 		var presentModes = stackalloc PresentModeKHR[(int)presentModeCount];
-		surfaceExtension.GetPhysicalDeviceSurfacePresentModes( physicalDevice, surface, &presentModeCount, presentModes ).Verify();
+		surfaceExtension.GetPhysicalDeviceSurfacePresentModes( physicalDevice, surface, &presentModeCount, presentModes ).AssertSuccess();
 
 		var hasPresentMode = false;
 		for ( var i = 0; i < presentModeCount; i++ )
@@ -168,11 +168,11 @@ internal sealed class VkSwapchainBuilder
 		if ( !VkContext.Extensions.TryGetExtension<KhrSwapchain>( out var swapchainExtension ) )
 			throw new VkException( $"Failed to get {KhrSwapchain.ExtensionName} extension" );
 
-		swapchainExtension.CreateSwapchain( logicalDevice, createInfo, null, out var swapchain ).Verify();
-		swapchainExtension.GetSwapchainImages( logicalDevice, swapchain, &imageCount, null ).Verify();
+		swapchainExtension.CreateSwapchain( logicalDevice, createInfo, null, out var swapchain ).AssertSuccess();
+		swapchainExtension.GetSwapchainImages( logicalDevice, swapchain, &imageCount, null ).AssertSuccess();
 
 		Span<Image> swapchainImages = stackalloc Image[(int)imageCount];
-		swapchainExtension.GetSwapchainImages( logicalDevice, swapchain, &imageCount, swapchainImages ).Verify();
+		swapchainExtension.GetSwapchainImages( logicalDevice, swapchain, &imageCount, swapchainImages ).AssertSuccess();
 
 		Span<ImageView> swapchainImageViews = stackalloc ImageView[(int)imageCount];
 		for ( var i = 0; i < imageCount; i++ )
@@ -202,7 +202,7 @@ internal sealed class VkSwapchainBuilder
 				}
 		};
 
-		Apis.Vk.CreateImageView( logicalDevice, viewInfo, null, out var imageView ).Verify();
+		Apis.Vk.CreateImageView( logicalDevice, viewInfo, null, out var imageView ).AssertSuccess();
 		return imageView;
 	}
 }

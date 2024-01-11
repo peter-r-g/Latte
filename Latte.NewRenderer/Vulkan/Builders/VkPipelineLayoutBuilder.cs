@@ -66,7 +66,7 @@ internal sealed class VkPipelineLayoutBuilder
 		var descriptorSetLayoutsSpan = descriptorSetLayouts.AsSpan()[..currentDescriptorSetLayouts];
 		var layoutInfo = VkInfo.PipelineLayout( pushConstantRangesSpan, descriptorSetLayoutsSpan );
 
-		Apis.Vk.CreatePipelineLayout( logicalDevice, layoutInfo, null, out var pipelineLayout ).Verify();
+		Apis.Vk.CreatePipelineLayout( logicalDevice, layoutInfo, null, out var pipelineLayout ).AssertSuccess();
 		return pipelineLayout;
 	}
 }

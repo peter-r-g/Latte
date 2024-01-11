@@ -60,7 +60,7 @@ internal sealed class DescriptorAllocator : IDisposable
 			pool = GetPool();
 			allocateInfo.DescriptorPool = pool;
 
-			Apis.Vk.AllocateDescriptorSets( logicalDevice, allocateInfo, out descriptorSet ).Verify();
+			Apis.Vk.AllocateDescriptorSets( logicalDevice, allocateInfo, out descriptorSet ).AssertSuccess();
 		}
 
 		readyPools.Add( pool );

@@ -35,9 +35,9 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 		var requirements = Apis.Vk.GetBufferMemoryRequirements( VkContext.LogicalDevice, buffer );
 		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 
-		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).Verify();
+		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( memory );
-		Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).Verify();
+		Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).AssertSuccess();
 
 		memoryAllocations.Add( memory );
 		return new AllocatedBuffer( buffer, new Allocation( memory, requirements.MemoryTypeBits, 0, requirements.Size ) );
@@ -53,7 +53,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 		var requirements = Apis.Vk.GetImageMemoryRequirements( VkContext.LogicalDevice, image );
 		var allocateInfo = VkInfo.AllocateMemory( requirements.Size, FindMemoryType( requirements.MemoryTypeBits, memoryFlags ) );
 
-		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).Verify();
+		Apis.Vk.AllocateMemory( VkContext.LogicalDevice, allocateInfo, null, out var memory ).AssertSuccess();
 		Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
 
 		memoryAllocations.Add( memory );
@@ -82,7 +82,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 	{
 		void* dataPtr;
 
-		Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).Verify();
+		Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize + dataSize * (ulong)index, 0, &dataPtr ).AssertSuccess();
 		Marshal.StructureToPtr( data, (nint)dataPtr + (nint)(dataSize * (ulong)index), false );
 		Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
 	}
@@ -106,7 +106,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 		if ( preserveMap && preservedMaps.TryGetValue( allocation, out var mappedDataPtr ) )
 			dataPtr = (void*)mappedDataPtr;
 		else
-			Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).Verify();
+			Apis.Vk.MapMemory( VkContext.LogicalDevice, allocation.Memory, allocation.Offset, dataSize, 0, &dataPtr ).AssertSuccess();
 
 		return dataPtr;
 	}

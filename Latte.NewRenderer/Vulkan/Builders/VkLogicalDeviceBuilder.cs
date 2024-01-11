@@ -96,7 +96,7 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 				PNext = (void*)pNextPtr
 			};
 
-			Apis.Vk.CreateDevice( physicalDevice, createInfo, null, out var logicalDevice ).Verify();
+			Apis.Vk.CreateDevice( physicalDevice, createInfo, null, out var logicalDevice ).AssertSuccess();
 			SilkMarshal.Free( (nint)createInfo.PpEnabledExtensionNames );
 
 			var graphicsQueue = Apis.Vk.GetDeviceQueue( logicalDevice, queueFamilyIndices.GraphicsQueue, 0 );

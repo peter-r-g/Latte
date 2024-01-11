@@ -40,7 +40,7 @@ internal sealed class VkDescriptorSetLayoutBuilder
 		var bindingsSpan = bindings.AsSpan()[..currentBindings];
 		var layoutInfo = VkInfo.DescriptorSetLayout( bindingsSpan );
 
-		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, layoutInfo, null, out var layout ).Verify();
+		Apis.Vk.CreateDescriptorSetLayout( logicalDevice, layoutInfo, null, out var layout ).AssertSuccess();
 		return layout;
 	}
 }

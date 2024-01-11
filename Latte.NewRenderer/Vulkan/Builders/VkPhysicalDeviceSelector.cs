@@ -93,7 +93,7 @@ internal sealed class VkPhysicalDeviceSelector
 	internal unsafe ImmutableArray<VkPhysicalDeviceSelectorResult> SelectMany()
 	{
 		var physicalDeviceCount = 0u;
-		Apis.Vk.EnumeratePhysicalDevices( instance, ref physicalDeviceCount, null ).Verify();
+		Apis.Vk.EnumeratePhysicalDevices( instance, ref physicalDeviceCount, null ).AssertSuccess();
 
 		PhysicalDevice* physicalDevices = stackalloc PhysicalDevice[(int)physicalDeviceCount];
 		Apis.Vk.EnumeratePhysicalDevices( instance, ref physicalDeviceCount, physicalDevices );

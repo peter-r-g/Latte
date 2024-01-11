@@ -116,7 +116,7 @@ internal sealed class VkInstanceBuilder
 			createInfo.PNext = &debugCreateInfo;
 		}
 
-		Apis.Vk.CreateInstance( createInfo, null, out var instance ).Verify();
+		Apis.Vk.CreateInstance( createInfo, null, out var instance ).AssertSuccess();
 		ExtDebugUtils? debugUtilsExtension = null;
 		DebugUtilsMessengerEXT debugMessenger = default;
 
@@ -127,7 +127,7 @@ internal sealed class VkInstanceBuilder
 
 			var debugCreateInfo = new DebugUtilsMessengerCreateInfoEXT();
 			PopulateDebugMessengerCreateInfo( ref debugCreateInfo );
-			debugUtilsExtension.CreateDebugUtilsMessenger( instance, &debugCreateInfo, null, out debugMessenger ).Verify();
+			debugUtilsExtension.CreateDebugUtilsMessenger( instance, &debugCreateInfo, null, out debugMessenger ).AssertSuccess();
 		}
 
 		Marshal.FreeHGlobal( (nint)appInfo.PApplicationName );

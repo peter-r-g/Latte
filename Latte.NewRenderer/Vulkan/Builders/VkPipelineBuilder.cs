@@ -182,7 +182,7 @@ internal sealed class VkPipelineBuilder
 				BasePipelineHandle = default
 			};
 
-			Apis.Vk.CreateGraphicsPipelines( logicalDevice, default, 1, pipelineCreateInfo, null, out var pipeline ).Verify();
+			Apis.Vk.CreateGraphicsPipelines( logicalDevice, default, 1, pipelineCreateInfo, null, out var pipeline ).AssertSuccess();
 			return pipeline;
 		}
 	}

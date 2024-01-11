@@ -177,7 +177,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var waitForRenderProfile = CpuProfile.New( "Wait for last render" );
 		using ( waitForRenderProfile )
-			Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, renderFence, true, 1_000_000_000 ).Verify();
+			Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, renderFence, true, 1_000_000_000 ).AssertSuccess();
 		cpuPerformanceTimes[waitForRenderProfile.Name] = waitForRenderProfile.Time;
 
 		uint swapchainImageIndex;
@@ -200,17 +200,17 @@ internal unsafe sealed class VkEngine : IDisposable
 					throw new VkException( "Failed to acquire next image in the swap chain" );
 			}
 
-			Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, renderFence ).Verify();
+			Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, renderFence ).AssertSuccess();
 		}
 		cpuPerformanceTimes[acquireSwapchainImageProfile.Name] = acquireSwapchainImageProfile.Time;
 
 		var recordProfile = CpuProfile.New( "Record command buffer" );
 		using ( recordProfile )
 		{
-			Apis.Vk.ResetCommandBuffer( cmd, CommandBufferResetFlags.None ).Verify();
+			Apis.Vk.ResetCommandBuffer( cmd, CommandBufferResetFlags.None ).AssertSuccess();
 
 			var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
-			Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
+			Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).AssertSuccess();
 
 			Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
 
@@ -263,7 +263,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
 
-			Apis.Vk.EndCommandBuffer( cmd ).Verify();
+			Apis.Vk.EndCommandBuffer( cmd ).AssertSuccess();
 		}
 		cpuPerformanceTimes[recordProfile.Name] = recordProfile.Time;
 
@@ -428,7 +428,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		for ( var i = 0; i < frameData.Length; i++ )
 			waitFences[i] = frameData[i].RenderFence;
 
-		Apis.Vk.WaitForFences( VkContext.LogicalDevice, waitFences, Vk.True, ulong.MaxValue ).Verify();
+		Apis.Vk.WaitForFences( VkContext.LogicalDevice, waitFences, Vk.True, ulong.MaxValue ).AssertSuccess();
 		waitingForIdle = false;
 	}
 
@@ -632,12 +632,12 @@ internal unsafe sealed class VkEngine : IDisposable
 		DepthFormat = Format.D32Sfloat;
 
 		var depthImageInfo = VkInfo.Image( DepthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
-		Apis.Vk.CreateImage( VkContext.LogicalDevice, depthImageInfo, null, out var depthImage ).Verify();
+		Apis.Vk.CreateImage( VkContext.LogicalDevice, depthImageInfo, null, out var depthImage ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( depthImage );
 		this.depthImage = VkContext.AllocationManager.AllocateImage( depthImage, MemoryPropertyFlags.DeviceLocalBit );
 
 		var depthImageViewInfo = VkInfo.ImageView( DepthFormat, depthImage, ImageAspectFlags.DepthBit );
-		Apis.Vk.CreateImageView( VkContext.LogicalDevice, depthImageViewInfo, null, out var depthImageView ).Verify();
+		Apis.Vk.CreateImageView( VkContext.LogicalDevice, depthImageViewInfo, null, out var depthImageView ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( depthImageView );
 		this.depthImageView = depthImageView;
 
@@ -669,9 +669,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		for ( var i = 0; i < MaxFramesInFlight; i++ )
 		{
-			Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var commandPool ).Verify();
+			Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var commandPool ).AssertSuccess();
 			var bufferAllocateInfo = VkInfo.AllocateCommandBuffer( commandPool, 1, CommandBufferLevel.Primary );
-			Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, bufferAllocateInfo, out var commandBuffer ).Verify();
+			Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, bufferAllocateInfo, out var commandBuffer ).AssertSuccess();
 
 			VkInvalidHandleException.ThrowIfInvalid( commandPool );
 			VkInvalidHandleException.ThrowIfInvalid( commandBuffer );
@@ -682,12 +682,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, null ) );
 		}
 
-		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).Verify();
+		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( uploadCommandPool );
 		uploadContext.CommandPool = uploadCommandPool;
 
 		var uploadBufferAllocateInfo = VkInfo.AllocateCommandBuffer( uploadCommandPool, 1, CommandBufferLevel.Primary );
-		Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).Verify();
+		Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( uploadCommandBuffer );
 		uploadContext.CommandBuffer = uploadCommandBuffer;
 
@@ -784,7 +784,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				depthDependency
 			} );
 
-		Apis.Vk.CreateRenderPass( VkContext.LogicalDevice, createInfo, null, out var renderPass ).Verify();
+		Apis.Vk.CreateRenderPass( VkContext.LogicalDevice, createInfo, null, out var renderPass ).AssertSuccess();
 
 		VkInvalidHandleException.ThrowIfInvalid( renderPass );
 		this.renderPass = renderPass;
@@ -810,7 +810,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		for ( var i = 0; i < swapchainImages.Length; i++ )
 		{
 			imageViews[0] = swapchainImageViews[i];
-			Apis.Vk.CreateFramebuffer( VkContext.LogicalDevice, createInfo, null, out var framebuffer ).Verify();
+			Apis.Vk.CreateFramebuffer( VkContext.LogicalDevice, createInfo, null, out var framebuffer ).AssertSuccess();
 
 			VkInvalidHandleException.ThrowIfInvalid( framebuffer );
 			framebufferBuilder.Add( framebuffer );
@@ -836,9 +836,9 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		for ( var i = 0; i < frameData.Length; i++ )
 		{
-			Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var renderFence ).Verify();
-			Apis.Vk.CreateSemaphore( VkContext.LogicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).Verify();
-			Apis.Vk.CreateSemaphore( VkContext.LogicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).Verify();
+			Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var renderFence ).AssertSuccess();
+			Apis.Vk.CreateSemaphore( VkContext.LogicalDevice, semaphoreCreateInfo, null, out var presentSemaphore ).AssertSuccess();
+			Apis.Vk.CreateSemaphore( VkContext.LogicalDevice, semaphoreCreateInfo, null, out var renderSemaphore ).AssertSuccess();
 
 			VkInvalidHandleException.ThrowIfInvalid( renderFence );
 			VkInvalidHandleException.ThrowIfInvalid( presentSemaphore );
@@ -854,7 +854,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		fenceCreateInfo.Flags = FenceCreateFlags.None;
-		Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var uploadFence ).Verify();
+		Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var uploadFence ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( uploadFence );
 		uploadContext.UploadFence = uploadFence;
 		disposalManager.Add( () => Apis.Vk.DestroyFence( VkContext.LogicalDevice, uploadFence, null ) );
@@ -1080,11 +1080,11 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var initializationProfile = CpuProfile.New( nameof( InitializeSamplers ) );
 
-		Apis.Vk.CreateSampler( VkContext.LogicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).Verify();
+		Apis.Vk.CreateSampler( VkContext.LogicalDevice, VkInfo.Sampler( Filter.Linear ), null, out var linearSampler ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( linearSampler );
 		this.linearSampler = linearSampler;
 
-		Apis.Vk.CreateSampler( VkContext.LogicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).Verify();
+		Apis.Vk.CreateSampler( VkContext.LogicalDevice, VkInfo.Sampler( Filter.Nearest ), null, out var nearestSampler ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( nearestSampler );
 		this.nearestSampler = nearestSampler;
 
@@ -1121,7 +1121,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			UploadTexture( texture );
 
 			var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Srgb, texture.GpuTexture.Image, ImageAspectFlags.ColorBit );
-			Apis.Vk.CreateImageView( VkContext.LogicalDevice, imageViewInfo, null, out var imageView ).Verify();
+			Apis.Vk.CreateImageView( VkContext.LogicalDevice, imageViewInfo, null, out var imageView ).AssertSuccess();
 			VkInvalidHandleException.ThrowIfInvalid( imageView );
 			texture.TextureView = imageView;
 
@@ -1317,15 +1317,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		var cmd = uploadContext.CommandBuffer;
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 
-		Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).Verify();
+		Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).AssertSuccess();
 		cb( cmd );
-		Apis.Vk.EndCommandBuffer( cmd ).Verify();
+		Apis.Vk.EndCommandBuffer( cmd ).AssertSuccess();
 
 		var submitInfo = VkInfo.SubmitInfo( new ReadOnlySpan<CommandBuffer>( ref cmd ) );
 		VkContext.GraphicsQueue.SubmitAndWait( submitInfo, uploadContext.UploadFence );
-		Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).Verify();
-		Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence ).Verify();
-		Apis.Vk.ResetCommandPool( VkContext.LogicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).Verify();
+		Apis.Vk.WaitForFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence, Vk.True, 999_999_999_999 ).AssertSuccess();
+		Apis.Vk.ResetFences( VkContext.LogicalDevice, 1, uploadContext.UploadFence ).AssertSuccess();
+		Apis.Vk.ResetCommandPool( VkContext.LogicalDevice, uploadContext.CommandPool, CommandPoolResetFlags.None ).AssertSuccess();
 	}
 
 	internal Shader CreateShader( string name, LatteShader latteShader )
@@ -1407,7 +1407,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		if ( result == Result.Success )
 			gpuExecuteTime = TimeSpan.FromMicroseconds( (statsStorage[1] - statsStorage[0]) * VkContext.PhysicalDeviceInfo.Properties.Limits.TimestampPeriod / 1000 );
 		else if ( result != Result.NotReady )
-			result.Verify();
+			result.AssertSuccess();
 
 		foreach ( var (materialName, material) in Materials )
 		{
@@ -1420,7 +1420,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			if ( result == Result.NotReady )
 				continue;
 			else
-				result.Verify();
+				result.AssertSuccess();
 
 			materialPipelineStatistics[materialName] = new VkPipelineStatistics(
 				statsStorage[0],

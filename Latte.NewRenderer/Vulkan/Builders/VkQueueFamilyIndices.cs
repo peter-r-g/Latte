@@ -64,7 +64,7 @@ internal readonly struct VkQueueFamilyIndices
 			if ( (requireUniqueGraphicsQueue || requireUniquePresentQueue) && graphicsQueueIndex == i )
 				continue;
 
-			surfaceExtension.GetPhysicalDeviceSurfaceSupport( physicalDevice, i, surface, out var presentSupported ).Verify();
+			surfaceExtension.GetPhysicalDeviceSurfaceSupport( physicalDevice, i, surface, out var presentSupported ).AssertSuccess();
 			if ( !presentSupported )
 				continue;
 
