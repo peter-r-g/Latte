@@ -7,6 +7,7 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Monitor = System.Threading.Monitor;
 
@@ -135,6 +136,16 @@ internal static unsafe class VkContext
 		{
 			Monitor.Exit( initializeLock );
 		}
+	}
+
+	internal static IEnumerable<VkQueue> GetAllQueues()
+	{
+		if ( !IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		yield return GraphicsQueue;
+		yield return PresentQueue;
+		yield return TransferQueue;
 	}
 
 	private static void Cleanup()

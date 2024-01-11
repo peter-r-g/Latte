@@ -98,7 +98,6 @@ internal unsafe sealed class VkEngine : IDisposable
 	private Sampler linearSampler;
 	private Sampler nearestSampler;
 
-	private UploadContext uploadContext;
 	private GpuSceneData sceneParameters;
 	private AllocatedBuffer sceneParameterBuffer;
 	private int frameNumber;
@@ -115,6 +114,7 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly Dictionary<string, Mesh> Meshes = [];
 	private readonly Dictionary<string, Shader> Shaders = [];
 	private readonly Dictionary<string, Texture> Textures = [];
+	private readonly Dictionary<VkQueue, UploadContext> uploadContexts = [];
 	private readonly GpuObjectData[] objectData = new GpuObjectData[MaxObjects];
 	private readonly GpuLightData[] lightData = new GpuLightData[MaxLights];
 
@@ -616,6 +616,9 @@ internal unsafe sealed class VkEngine : IDisposable
 			frameDataBuilder.Add( new FrameData() );
 		frameData = frameDataBuilder.MoveToImmutable();
 
+		foreach ( var queue in VkContext.GetAllQueues() )
+			uploadContexts.Add( queue, new UploadContext() );
+
 		if ( VkContext.Extensions.TryGetExtension<KhrSurface>( out var surfaceExtension ) )
 			disposalManager.Add( () => surfaceExtension.DestroySurface( VkContext.Instance, surface, null ) );
 
@@ -708,16 +711,19 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, null ) );
 		}
 
-		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).AssertSuccess();
-		VkInvalidHandleException.ThrowIfInvalid( uploadCommandPool );
-		uploadContext.CommandPool = uploadCommandPool;
+		foreach ( var queue in VkContext.GetAllQueues() )
+		{
+			Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).AssertSuccess();
+			VkInvalidHandleException.ThrowIfInvalid( uploadCommandPool );
+			uploadContexts[queue].CommandPool = uploadCommandPool;
 
-		var uploadBufferAllocateInfo = VkInfo.AllocateCommandBuffer( uploadCommandPool, 1, CommandBufferLevel.Primary );
-		Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).AssertSuccess();
-		VkInvalidHandleException.ThrowIfInvalid( uploadCommandBuffer );
-		uploadContext.CommandBuffer = uploadCommandBuffer;
+			var uploadBufferAllocateInfo = VkInfo.AllocateCommandBuffer( uploadCommandPool, 1, CommandBufferLevel.Primary );
+			Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, uploadBufferAllocateInfo, out var uploadCommandBuffer ).AssertSuccess();
+			VkInvalidHandleException.ThrowIfInvalid( uploadCommandBuffer );
+			uploadContexts[queue].CommandBuffer = uploadCommandBuffer;
 
-		disposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, uploadCommandPool, null ) );
+			disposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, uploadCommandPool, null ) );
+		}
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -880,10 +886,14 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		fenceCreateInfo.Flags = FenceCreateFlags.None;
-		Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var uploadFence ).AssertSuccess();
-		VkInvalidHandleException.ThrowIfInvalid( uploadFence );
-		uploadContext.UploadFence = uploadFence;
-		disposalManager.Add( () => Apis.Vk.DestroyFence( VkContext.LogicalDevice, uploadFence, null ) );
+		foreach ( var queue in VkContext.GetAllQueues() )
+		{
+			Apis.Vk.CreateFence( VkContext.LogicalDevice, fenceCreateInfo, null, out var uploadFence ).AssertSuccess();
+			VkInvalidHandleException.ThrowIfInvalid( uploadFence );
+			uploadContexts[queue].UploadFence = uploadFence;
+
+			disposalManager.Add( () => Apis.Vk.DestroyFence( VkContext.LogicalDevice, uploadFence, null ) );
+		}
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -1243,7 +1253,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		VkInvalidHandleException.ThrowIfInvalid( queryPool );
 		gpuExecuteQueryPool = queryPool;
 
-		ImmediateSubmit( cmd =>
+		ImmediateSubmit( VkContext.GraphicsQueue, cmd =>
 		{
 			Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 2 );
 		} );
@@ -1272,7 +1282,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			VkInvalidHandleException.ThrowIfInvalid( queryPool );
 			material.PipelineQueryPool = queryPool;
 
-			ImmediateSubmit( cmd =>
+			ImmediateSubmit( VkContext.GraphicsQueue, cmd =>
 			{
 				Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 1 );
 			} );
@@ -1339,10 +1349,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		RecreateSwapchain();
 	}
 
-	private void ImmediateSubmit( Action<CommandBuffer> cb )
+	private void ImmediateSubmit( VkQueue queue, Action<CommandBuffer> cb )
 	{
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		if ( !uploadContexts.TryGetValue( queue, out var uploadContext ) )
+			throw new VkException( $"The queue {queue} does not have an upload context" );
 
 		var cmd = uploadContext.CommandBuffer;
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
@@ -1492,7 +1505,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var vertexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
-			ImmediateSubmit( cmd =>
+			ImmediateSubmit( VkContext.TransferQueue, cmd =>
 			{
 				var copyRegion = new BufferCopy
 				{
@@ -1524,7 +1537,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var indexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
-			ImmediateSubmit( cmd =>
+			ImmediateSubmit( VkContext.TransferQueue, cmd =>
 			{
 				var copyRegion = new BufferCopy
 				{
@@ -1561,7 +1574,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		Apis.Vk.CreateImage( VkContext.LogicalDevice, imageInfo, null, out var textureImage );
 
 		var allocatedTextureImage = VkContext.AllocationManager.AllocateImage( textureImage, MemoryPropertyFlags.DeviceLocalBit );
-		ImmediateSubmit( cmd =>
+		ImmediateSubmit( VkContext.TransferQueue, cmd =>
 		{
 			var range = new ImageSubresourceRange
 			{
@@ -1685,7 +1698,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		GC.SuppressFinalize( this );
 	}
 
-	private struct UploadContext
+	private class UploadContext
 	{
 		internal Fence UploadFence;
 		internal CommandPool CommandPool;
