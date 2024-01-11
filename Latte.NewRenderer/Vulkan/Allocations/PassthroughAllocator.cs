@@ -12,10 +12,13 @@ namespace Latte.NewRenderer.Vulkan.Allocations;
 
 internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 {
+	public int AllocationCount => memoryAllocations.Count;
+
 	private bool disposed;
 
 	private readonly List<DeviceMemory> memoryAllocations;
 	private readonly Dictionary<Allocation, nint> preservedMaps = [];
+	private readonly Dictionary<uint, ulong> memoryTypeAllocationSizes = [];
 	private readonly object useLock = new();
 
 	internal PassthroughAllocator()
@@ -26,6 +29,14 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 	~PassthroughAllocator()
 	{
 		Dispose( disposing: false );
+	}
+
+	public ulong GetAllocationSize( uint memoryType )
+	{
+		if ( memoryTypeAllocationSizes.TryGetValue( memoryType, out var size ) )
+			return size;
+
+		return 0;
 	}
 
 	public unsafe AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags )
@@ -47,6 +58,8 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).AssertSuccess();
 
 			memoryAllocations.Add( memory );
+			if ( !memoryTypeAllocationSizes.TryAdd( memoryType, requirements.Size ) )
+				memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
 			return new AllocatedBuffer( buffer, new Allocation( memory, memoryType, 0, requirements.Size ) );
 		}
@@ -74,6 +87,9 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
 
 			memoryAllocations.Add( memory );
+			if ( !memoryTypeAllocationSizes.TryAdd( memoryType, requirements.Size ) )
+				memoryTypeAllocationSizes[memoryType] += requirements.Size;
+
 			return new AllocatedImage( image, new Allocation( memory, memoryType, 0, requirements.Size ) );
 		}
 		finally
@@ -129,6 +145,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 			Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocation.Memory, null );
 			memoryAllocations.Remove( allocation.Memory );
+			memoryTypeAllocationSizes[allocation.MemoryType] -= allocation.Size;
 		}
 		finally
 		{

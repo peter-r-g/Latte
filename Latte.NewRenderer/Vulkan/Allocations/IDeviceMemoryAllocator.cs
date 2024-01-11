@@ -6,6 +6,10 @@ namespace Latte.NewRenderer.Vulkan.Allocations;
 
 internal interface IDeviceMemoryAllocator : IDisposable
 {
+	int AllocationCount { get; }
+
+	ulong GetAllocationSize( uint memoryType );
+
 	AllocatedBuffer AllocateBuffer( Buffer buffer, MemoryPropertyFlags memoryFlags );
 	AllocatedImage AllocateImage( Image image, MemoryPropertyFlags memoryFlags );
 
