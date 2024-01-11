@@ -741,6 +741,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, null ) );
 		}
 
+		poolCreateInfo.Flags = CommandPoolCreateFlags.None;
+
 		foreach ( var queue in VkContext.GetAllQueues() )
 		{
 			Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolCreateInfo, null, out var uploadCommandPool ).AssertSuccess();
