@@ -96,7 +96,14 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	public unsafe void Free( Allocation allocation )
 	{
+		if ( preservedMaps.ContainsKey( allocation ) )
+		{
+			Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
+			preservedMaps.Remove( allocation );
+		}
+
 		Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocation.Memory, null );
+		memoryAllocations.Remove( allocation.Memory );
 	}
 
 	private unsafe void* RetrieveDataPointer( Allocation allocation, ulong dataSize, bool preserveMap )
@@ -139,20 +146,14 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 	private unsafe void Dispose( bool disposing )
 	{
-		if ( !disposed )
+		if ( disposed )
+			return;
+
+		if ( disposing )
 		{
-			if ( disposing )
-			{
-			}
-
-			foreach ( var (allocation, _) in preservedMaps )
-				Apis.Vk.UnmapMemory( VkContext.LogicalDevice, allocation.Memory );
-
-			foreach ( var allocatedMemory in memoryAllocations )
-				Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocatedMemory, null );
-
-			disposed = true;
 		}
+
+		disposed = true;
 	}
 
 	public void Dispose()
