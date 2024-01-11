@@ -650,6 +650,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, swapchainImageViews[index], null ), SwapchainTag );
 		}
 
+		disposalManager.Add( () => VkContext.AllocationManager.Free( this.depthImage.Allocation ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, depthImage, null ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, depthImageView, null ), SwapchainTag );
 
@@ -900,6 +901,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, frameSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, singleTextureSetLayout, null ) );
+		disposalManager.Add( () => VkContext.AllocationManager.Free( sceneParameterBuffer.Allocation ) );
 		disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, sceneParameterBuffer.Buffer, null ) );
 
 		for ( var i = 0; i < frameData.Length; i++ )
@@ -917,8 +919,11 @@ internal unsafe sealed class VkEngine : IDisposable
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
 			var index = i;
+			disposalManager.Add( () => VkContext.AllocationManager.Free( frameData[index].CameraBuffer.Allocation ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
+			disposalManager.Add( () => VkContext.AllocationManager.Free( frameData[index].ObjectBuffer.Allocation ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
+			disposalManager.Add( () => VkContext.AllocationManager.Free( frameData[index].LightBuffer.Allocation ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].LightBuffer.Buffer, null ) );
 
 			new VkDescriptorUpdater( VkContext.LogicalDevice, 4 )
@@ -1464,6 +1469,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			mesh.VertexBuffer = vertexBuffer;
 
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
+			VkContext.AllocationManager.Free( stagingBuffer.Allocation );
+			disposalManager.Add( () => VkContext.AllocationManager.Free( vertexBuffer.Allocation ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, vertexBuffer.Buffer, null ) );
 		}
 
@@ -1494,6 +1501,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			mesh.IndexBuffer = indexBuffer;
 
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
+			VkContext.AllocationManager.Free( stagingBuffer.Allocation );
+			disposalManager.Add( () => VkContext.AllocationManager.Free( indexBuffer.Allocation ) );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, indexBuffer.Buffer, null ) );
 		}
 	}
@@ -1576,6 +1585,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		texture.GpuTexture = allocatedTextureImage;
 
 		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
+		VkContext.AllocationManager.Free( stagingBuffer.Allocation );
+		disposalManager.Add( () => VkContext.AllocationManager.Free( allocatedTextureImage.Allocation ) );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, textureImage, null ) );
 	}
 

@@ -476,8 +476,10 @@ public sealed class ImGuiController : IDisposable
 		Apis.Vk.QueueWaitIdle( graphicsQueue ).AssertSuccess();
 
 		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, unallocatedStagingBuffer, default );
+		VkContext.AllocationManager.Free( stagingBuffer.Allocation );
 		Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, default );
 
+		disposalManager.Add( () => VkContext.AllocationManager.Free( fontImage.Allocation ) );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, fontImage.Image, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, fontView, null ) );
 	}
@@ -700,7 +702,10 @@ public sealed class ImGuiController : IDisposable
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		if ( allocatedBuffer.Buffer.Handle != default )
+		{
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, allocatedBuffer.Buffer, default );
+			VkContext.AllocationManager.Free( allocatedBuffer.Allocation );
+		}
 
 		var bufferInfo = VkInfo.Buffer( newSize, usage, SharingMode.Exclusive );
 		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, bufferInfo, default, out var newBuffer ).AssertSuccess();
@@ -719,12 +724,19 @@ public sealed class ImGuiController : IDisposable
 	/// </summary>
 	public unsafe void Dispose()
 	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
 		keyboard.KeyChar -= OnKeyChar;
 
 		for ( var i = 0; i < mainWindowRenderBuffers.Count; i++ )
 		{
-			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].VertexBuffer.Buffer, null );
-			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, mainWindowRenderBuffers.FrameRenderBuffers[i].IndexBuffer.Buffer, null );
+			var frameRenderBuffer = mainWindowRenderBuffers.FrameRenderBuffers[i];
+
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameRenderBuffer.VertexBuffer.Buffer, null );
+			VkContext.AllocationManager.Free( frameRenderBuffer.VertexBuffer.Allocation );
+			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameRenderBuffer.IndexBuffer.Buffer, null );
+			VkContext.AllocationManager.Free( frameRenderBuffer.IndexBuffer.Allocation );
 		}
 
 		disposalManager?.Dispose();
