@@ -12,12 +12,13 @@ namespace Latte.NewRenderer.Vulkan.Allocations;
 
 internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 {
-	public int AllocationCount => memoryAllocations.Count;
+	public int TotalAllocationCount => memoryAllocations.Count;
 
 	private bool disposed;
 
 	private readonly List<DeviceMemory> memoryAllocations;
 	private readonly Dictionary<Allocation, nint> preservedMaps = [];
+	private readonly Dictionary<uint, int> memoryTypeAllocationCounts = [];
 	private readonly Dictionary<uint, ulong> memoryTypeAllocationSizes = [];
 	private readonly object useLock = new();
 
@@ -29,6 +30,14 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 	~PassthroughAllocator()
 	{
 		Dispose( disposing: false );
+	}
+
+	public int GetAllocationCount( uint memoryType )
+	{
+		if ( memoryTypeAllocationCounts.TryGetValue( memoryType, out var count ) )
+			return count;
+
+		return 0;
 	}
 
 	public ulong GetAllocationSize( uint memoryType )
@@ -58,6 +67,9 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			Apis.Vk.BindBufferMemory( VkContext.LogicalDevice, buffer, memory, 0 ).AssertSuccess();
 
 			memoryAllocations.Add( memory );
+			if ( !memoryTypeAllocationCounts.TryAdd( memoryType, 1 ) )
+				memoryTypeAllocationCounts[memoryType]++;
+
 			if ( !memoryTypeAllocationSizes.TryAdd( memoryType, requirements.Size ) )
 				memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
@@ -87,6 +99,9 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 			Apis.Vk.BindImageMemory( VkContext.LogicalDevice, image, memory, 0 );
 
 			memoryAllocations.Add( memory );
+			if ( !memoryTypeAllocationCounts.TryAdd( memoryType, 1 ) )
+				memoryTypeAllocationCounts[memoryType]++;
+
 			if ( !memoryTypeAllocationSizes.TryAdd( memoryType, requirements.Size ) )
 				memoryTypeAllocationSizes[memoryType] += requirements.Size;
 
@@ -145,6 +160,7 @@ internal sealed class PassthroughAllocator : IDeviceMemoryAllocator
 
 			Apis.Vk.FreeMemory( VkContext.LogicalDevice, allocation.Memory, null );
 			memoryAllocations.Remove( allocation.Memory );
+			memoryTypeAllocationCounts[allocation.MemoryType]--;
 			memoryTypeAllocationSizes[allocation.MemoryType] -= allocation.Size;
 		}
 		finally

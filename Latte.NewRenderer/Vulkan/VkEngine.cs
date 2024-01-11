@@ -1478,17 +1478,22 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 
 		var typeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
-		var memoryAllocationBuilder = ImmutableArray.CreateBuilder<ulong>( (int)typeCount );
+		var memoryAllocationCountBuilder = ImmutableArray.CreateBuilder<int>( (int)typeCount );
+		var memoryAllocationSizeBuilder = ImmutableArray.CreateBuilder<ulong>( (int)typeCount );
 		for ( uint i = 0; i < typeCount; i++ )
-			memoryAllocationBuilder.Add( VkContext.AllocationManager.GetAllocationSize( i ) );
+		{
+			memoryAllocationCountBuilder.Add( VkContext.AllocationManager.GetAllocationCount( i ) );
+			memoryAllocationSizeBuilder.Add( VkContext.AllocationManager.GetAllocationSize( i ) );
+		}
 
 		Marshal.FreeHGlobal( (nint)statsStorage );
 		return new VkStatistics( initializationStageTimes,
 			cpuPerformanceTimes,
 			gpuExecuteTime,
 			materialPipelineStatistics,
-			VkContext.AllocationManager.AllocationCount,
-			memoryAllocationBuilder.MoveToImmutable() );
+			VkContext.AllocationManager.TotalAllocationCount,
+			memoryAllocationCountBuilder.MoveToImmutable(),
+			memoryAllocationSizeBuilder.MoveToImmutable() );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )

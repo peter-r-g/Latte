@@ -10,6 +10,7 @@ internal sealed class VkStatistics(
 	TimeSpan gpuExecuteTime,
 	IReadOnlyDictionary<string, VkPipelineStatistics> materialStatistics,
 	int allocationCount,
+	ImmutableArray<int> memoryTypeAllocationCounts,
 	ImmutableArray<ulong> memoryTypeAllocationSizes )
 {
 	internal readonly IReadOnlyDictionary<string, TimeSpan> InitializationTimings = initializationTimings;
@@ -18,5 +19,6 @@ internal sealed class VkStatistics(
 	internal readonly IReadOnlyDictionary<string, VkPipelineStatistics> MaterialStatistics = materialStatistics;
 
 	internal readonly int AllocationCount = allocationCount;
+	internal readonly ImmutableArray<int> MemoryTypeAllocationCounts = memoryTypeAllocationCounts;
 	internal readonly ImmutableArray<ulong> MemoryTypeAllocationSizes = memoryTypeAllocationSizes;
 }
