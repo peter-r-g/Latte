@@ -1,4 +1,5 @@
-﻿using Silk.NET.Core.Native;
+﻿using Latte.NewRenderer.Vulkan.Exceptions;
+using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using System;

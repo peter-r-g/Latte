@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿using Latte.NewRenderer.Vulkan.Exceptions;
+using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using System;
 using System.Collections.Generic;
