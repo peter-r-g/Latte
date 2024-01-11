@@ -1,4 +1,5 @@
 ﻿using Latte.NewRenderer.Input;
+using Latte.NewRenderer.Vulkan;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using Silk.NET.Windowing.Glfw;
