@@ -528,7 +528,29 @@ internal unsafe sealed class VkEngine : IDisposable
 		
 		if ( ImGuiNET.ImGui.CollapsingHeader( "Memory" ) )
 		{
-			ImGuiNET.ImGui.Text( $"{stats.AllocationCount} allocations" );
+			if ( ImGuiNET.ImGui.BeginTable( "Allocation Counts", 2, ImGuiTableFlags.Borders ) )
+			{
+				ImGuiNET.ImGui.TableSetupColumn( "Memory Type Index" );
+				ImGuiNET.ImGui.TableSetupColumn( "Allocation Count" );
+				ImGuiNET.ImGui.TableHeadersRow();
+
+				ImGuiNET.ImGui.TableNextColumn();
+
+				for ( var i = 0; i < stats.MemoryTypeAllocationCounts.Length; i++ )
+				{
+					ImGuiNET.ImGui.Text( i.ToString() );
+					ImGuiNET.ImGui.TableNextColumn();
+					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationCounts[i].ToString() );
+					ImGuiNET.ImGui.TableNextColumn();
+				}
+
+				ImGuiNET.ImGui.Text( "Total" );
+				ImGuiNET.ImGui.TableNextColumn();
+				ImGuiNET.ImGui.Text( stats.AllocationCount.ToString() );
+				ImGuiNET.ImGui.TableNextColumn();
+
+				ImGuiNET.ImGui.EndTable();
+			}
 
 			if ( ImGuiNET.ImGui.BeginTable( "Memory Usages", 2, ImGuiTableFlags.Borders ) )
 			{
