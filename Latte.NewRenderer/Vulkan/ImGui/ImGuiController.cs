@@ -313,7 +313,6 @@ public sealed class ImGuiController : IDisposable
 			.AddShaderStage( VkInfo.PipelineShaderStage( ShaderStageFlags.FragmentBit, imguiFrag.Module, (byte*)imguiFrag.EntryPointPtr ) )
 			.WithVertexInputState( VkInfo.PipelineVertexInputState( VkVertexInputDescription.GetImGuiVertexDescription() ) )
 			.WithInputAssemblyState( VkInfo.PipelineInputAssemblyState( PrimitiveTopology.TriangleList ) )
-			// FIXME: Add these options to VkInfo method.
 			.WithRasterizerState( new PipelineRasterizationStateCreateInfo
 			{
 				SType = StructureType.PipelineRasterizationStateCreateInfo,
@@ -323,7 +322,6 @@ public sealed class ImGuiController : IDisposable
 				LineWidth = 1
 			} )
 			.WithMultisamplingState( VkInfo.PipelineMultisamplingState() )
-			// FIXME: Add these options to VkInfo method.
 			.WithColorBlendAttachmentState( new PipelineColorBlendAttachmentState
 			{
 				BlendEnable = Vk.True,
@@ -368,17 +366,22 @@ public sealed class ImGuiController : IDisposable
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 		Apis.Vk.BeginCommandBuffer( commandBuffer, beginInfo ).AssertSuccess();
 
-		var imageInfo = VkInfo.Image( Format.R8G8B8A8Unorm,
-			ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit,
-			new Extent3D( (uint)width, (uint)height, 1 ) );
-		// FIXME: Add these options to VkInfo method.
-		imageInfo.ImageType = ImageType.Type2D;
-		imageInfo.MipLevels = 1;
-		imageInfo.ArrayLayers = 1;
-		imageInfo.Samples = SampleCountFlags.Count1Bit;
-		imageInfo.Tiling = ImageTiling.Optimal;
-		imageInfo.SharingMode = SharingMode.Exclusive;
-		imageInfo.InitialLayout = ImageLayout.Undefined;
+		var imageInfo = new ImageCreateInfo
+		{
+			SType = StructureType.ImageCreateInfo,
+			PNext = null,
+			Format = Format.R8G8B8A8Unorm,
+			Usage = ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit,
+			Extent = new Extent3D( (uint)width, (uint)height, 1 ),
+			ImageType = ImageType.Type2D,
+			MipLevels = 1,
+			ArrayLayers = 1,
+			Samples = SampleCountFlags.Count1Bit,
+			Tiling = ImageTiling.Optimal,
+			SharingMode = SharingMode.Exclusive,
+			InitialLayout = ImageLayout.Undefined,
+			Flags = ImageCreateFlags.None
+		};
 
 		var unallocatedFontImage = VkContext.AllocationManager.CreateImage( imageInfo, new AllocationCreateInfo
 		{
@@ -389,9 +392,6 @@ public sealed class ImGuiController : IDisposable
 		fontImage = new AllocatedImage( unallocatedFontImage, fontImageAllocation );
 
 		var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Unorm, fontImage.Image, ImageAspectFlags.ColorBit );
-		// FIXME: Add this option to VkInfo method.
-		imageViewInfo.ViewType = ImageViewType.Type2D;
-
 		Apis.Vk.CreateImageView( VkContext.LogicalDevice, &imageViewInfo, default, out fontView ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( fontView );
 
@@ -402,7 +402,6 @@ public sealed class ImGuiController : IDisposable
 
 		// Create the Upload Buffer:
 		var bufferInfo = VkInfo.Buffer( uploadSize, BufferUsageFlags.TransferSrcBit, SharingMode.Exclusive );
-
 		var unallocatedStagingBuffer = VkContext.AllocationManager.CreateBuffer( bufferInfo, new AllocationCreateInfo
 		{
 			RequiredFlags = MemoryPropertyFlags.HostVisibleBit,
