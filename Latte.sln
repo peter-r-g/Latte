@@ -21,7 +21,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{75ED2632
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.AssetCompiler", "Latte.AssetCompiler\Latte.AssetCompiler.csproj", "{4EE58561-EEE4-419D-A9ED-321D3E02A4C9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Latte.NewRenderer", "Latte.NewRenderer\Latte.NewRenderer.csproj", "{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Latte.NewRenderer", "Latte.NewRenderer\Latte.NewRenderer.csproj", "{EA5F8538-2EE4-47B9-BF67-DE87D2CC7213}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
