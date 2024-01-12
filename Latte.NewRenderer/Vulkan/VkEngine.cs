@@ -529,56 +529,55 @@ internal unsafe sealed class VkEngine : IDisposable
 		
 		if ( ImGuiNET.ImGui.CollapsingHeader( "Memory" ) )
 		{
-			if ( ImGuiNET.ImGui.BeginTable( "Allocation Counts", 2, ImGuiTableFlags.Borders ) )
+			var vmaStats = stats.VmaStats;
+			ImGuiNET.ImGui.Indent();
+
+			var heapCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryHeapCount;
+			if ( ImGuiNET.ImGui.CollapsingHeader( $"Heaps ({heapCount})" ) )
 			{
-				ImGuiNET.ImGui.TableSetupColumn( "Memory Type Index" );
-				ImGuiNET.ImGui.TableSetupColumn( "Allocation Count" );
-				ImGuiNET.ImGui.TableHeadersRow();
+				ImGuiNET.ImGui.Indent();
 
-				ImGuiNET.ImGui.TableNextColumn();
-
-				for ( var i = 0; i < stats.MemoryTypeAllocationCounts.Length; i++ )
+				for ( var i = 0; i < heapCount; i++ )
 				{
-					ImGuiNET.ImGui.Text( i.ToString() );
-					ImGuiNET.ImGui.TableNextColumn();
-					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationCounts[i].ToString() );
-					ImGuiNET.ImGui.TableNextColumn();
+					if ( !ImGuiNET.ImGui.CollapsingHeader( $"Heap {i}" ) )
+						continue;
+
+					var heapStats = vmaStats.MemoryHeap[i];
+					ImGuiNET.ImGui.Text( $"{heapStats.AllocationCount} allocations" );
+
+					var totalBytesConsumed = heapStats.UsedBytes + heapStats.UnusedBytes;
+					var heapSize = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryHeaps[i].Size;
+					var usagePercent = Math.Ceiling( (float)totalBytesConsumed / heapSize * 100 );
+					ImGuiNET.ImGui.Text( $"{totalBytesConsumed.ToDataSize( 2 )} / {heapSize.ToDataSize( 2 )} ({usagePercent}%%) used" );
 				}
 
-				ImGuiNET.ImGui.Text( "Total" );
-				ImGuiNET.ImGui.TableNextColumn();
-				ImGuiNET.ImGui.Text( stats.AllocationCount.ToString() );
-				ImGuiNET.ImGui.TableNextColumn();
-
-				ImGuiNET.ImGui.EndTable();
+				ImGuiNET.ImGui.Unindent();
 			}
 
-			if ( ImGuiNET.ImGui.BeginTable( "Memory Usages", 2, ImGuiTableFlags.Borders ) )
+			var typeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
+			if ( ImGuiNET.ImGui.CollapsingHeader( $"Types ({typeCount})" ) )
 			{
-				ImGuiNET.ImGui.TableSetupColumn( "Memory Type Index" );
-				ImGuiNET.ImGui.TableSetupColumn( "Allocated Size" );
-				ImGuiNET.ImGui.TableHeadersRow();
+				ImGuiNET.ImGui.Indent();
 
-				ImGuiNET.ImGui.TableNextColumn();
-
-				var totalSize = 0ul;
-				for ( var i = 0; i < stats.MemoryTypeAllocationSizes.Length; i++ )
+				for ( var i = 0; i < typeCount; i++ )
 				{
-					ImGuiNET.ImGui.Text( i.ToString() );
-					ImGuiNET.ImGui.TableNextColumn();
-					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationSizes[i].ToDataSize( 2 ) );
-					ImGuiNET.ImGui.TableNextColumn();
+					if ( !ImGuiNET.ImGui.CollapsingHeader( $"Type {i}" ) )
+						continue;
 
-					totalSize += stats.MemoryTypeAllocationSizes[i];
+					var typeStats = vmaStats.MemoryType[i];
+					ImGuiNET.ImGui.Text( $"{typeStats.AllocationCount} allocations" );
+					var heapIndex = (int)VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypes[i].HeapIndex;
+
+					var totalBytesConsumed = typeStats.UsedBytes + typeStats.UnusedBytes;
+					var heapSize = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryHeaps[heapIndex].Size;
+					var usagePercent = Math.Ceiling( (float)totalBytesConsumed / heapSize * 100 );
+					ImGuiNET.ImGui.Text( $"{totalBytesConsumed.ToDataSize( 2 )} / {heapSize.ToDataSize( 2 )} (Heap {heapIndex}) ({usagePercent}%%) used" );
 				}
 
-				ImGuiNET.ImGui.Text( "Total" );
-				ImGuiNET.ImGui.TableNextColumn();
-				ImGuiNET.ImGui.Text( totalSize.ToDataSize( 2 ) );
-				ImGuiNET.ImGui.TableNextColumn();
-
-				ImGuiNET.ImGui.EndTable();
+				ImGuiNET.ImGui.Unindent();
 			}
+
+			ImGuiNET.ImGui.Unindent();
 		}
 
 		ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
@@ -1514,23 +1513,12 @@ internal unsafe sealed class VkEngine : IDisposable
 				statsStorage[5] );
 		}
 
-		var typeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
-		var memoryAllocationCountBuilder = ImmutableArray.CreateBuilder<int>( (int)typeCount );
-		var memoryAllocationSizeBuilder = ImmutableArray.CreateBuilder<ulong>( (int)typeCount );
-		for ( uint i = 0; i < typeCount; i++ )
-		{
-			memoryAllocationCountBuilder.Add( 0 );
-			memoryAllocationSizeBuilder.Add( 0 );
-		}
-
 		Marshal.FreeHGlobal( (nint)statsStorage );
 		return new VkStatistics( initializationStageTimes,
 			cpuPerformanceTimes,
 			gpuExecuteTime,
 			materialPipelineStatistics,
-			0,
-			memoryAllocationCountBuilder.MoveToImmutable(),
-			memoryAllocationSizeBuilder.MoveToImmutable() );
+			VkContext.AllocationManager.CalculateStats() );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
