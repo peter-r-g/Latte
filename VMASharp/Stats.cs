@@ -38,8 +38,11 @@ namespace VMASharp {
         }
 
         internal static void PostProcessCalcStatInfo(ref StatInfo info) {
-            info.AllocationSizeAvg = info.UsedBytes / info.AllocationCount;
-            info.UnusedRangeSizeAvg = info.UnusedBytes / info.UnusedRangeCount;
+			if ( info.AllocationCount != 0 )
+				info.AllocationSizeAvg = info.UsedBytes / info.AllocationCount;
+
+			if ( info.UnusedRangeCount != 0 )
+				info.UnusedRangeSizeAvg = info.UnusedBytes / info.UnusedRangeCount;
         }
     }
 
@@ -91,4 +94,4 @@ namespace VMASharp {
 
         public int BlockCount;
     }
-}
+}}
