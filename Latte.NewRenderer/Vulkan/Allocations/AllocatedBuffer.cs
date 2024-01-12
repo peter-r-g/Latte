@@ -1,5 +1,6 @@
 ﻿using Silk.NET.Vulkan;
 using System.Diagnostics.CodeAnalysis;
+using VMASharp;
 
 namespace Latte.NewRenderer.Vulkan.Allocations;
 
