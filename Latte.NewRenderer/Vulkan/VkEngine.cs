@@ -1299,12 +1299,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			QueryCount = (uint)Materials.Count,
 			QueryType = QueryType.PipelineStatistics,
 			PipelineStatistics =
-					QueryPipelineStatisticFlags.InputAssemblyVerticesBit |
-					QueryPipelineStatisticFlags.InputAssemblyPrimitivesBit |
-					QueryPipelineStatisticFlags.VertexShaderInvocationsBit |
-					QueryPipelineStatisticFlags.FragmentShaderInvocationsBit |
-					QueryPipelineStatisticFlags.ClippingInvocationsBit |
-					QueryPipelineStatisticFlags.ClippingPrimitivesBit,
+				QueryPipelineStatisticFlags.InputAssemblyVerticesBit |
+				QueryPipelineStatisticFlags.InputAssemblyPrimitivesBit |
+				QueryPipelineStatisticFlags.VertexShaderInvocationsBit |
+				QueryPipelineStatisticFlags.FragmentShaderInvocationsBit |
+				QueryPipelineStatisticFlags.ClippingInvocationsBit |
+				QueryPipelineStatisticFlags.ClippingPrimitivesBit,
 			Flags = 0,
 		};
 
