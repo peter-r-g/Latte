@@ -4,7 +4,6 @@ using Latte.NewRenderer.Vulkan.Allocations;
 using Latte.NewRenderer.Vulkan.Builders;
 using Latte.NewRenderer.Vulkan.Exceptions;
 using Latte.NewRenderer.Vulkan.Extensions;
-using Silk.NET.Core.Native;
 using Silk.NET.Input;
 using Silk.NET.Input.Extensions;
 using Silk.NET.Vulkan;
@@ -20,9 +19,6 @@ namespace Latte.NewRenderer.Vulkan.ImGui;
 
 public sealed class ImGuiController : IDisposable
 {
-	private readonly List<char> pressedChars = [];
-	private readonly WindowRenderBuffers mainWindowRenderBuffers = new();
-
 	private VkEngine engine = null!;
 	private IInputContext input = null!;
 	private IKeyboard keyboard = null!;
@@ -38,6 +34,9 @@ public sealed class ImGuiController : IDisposable
 	private ImageView fontView;
 
 	private bool frameBegun;
+
+	private readonly List<char> pressedChars = [];
+	private readonly WindowRenderBuffers mainWindowRenderBuffers = new();
 
 	/// <summary>
 	/// Constructs a new ImGuiController.
@@ -487,7 +486,7 @@ public sealed class ImGuiController : IDisposable
 		stagingBuffer.Allocation.Dispose();
 		Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, default );
 
-		disposalManager.Add( () => fontImageAllocation.Dispose() );
+		disposalManager.Add( fontImageAllocation.Dispose );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, fontImage.Image, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, fontView, null ) );
 	}

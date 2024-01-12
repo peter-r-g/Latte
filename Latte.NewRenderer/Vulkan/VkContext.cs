@@ -1,5 +1,4 @@
-﻿using Latte.NewRenderer.Vulkan.Allocations;
-using Latte.NewRenderer.Vulkan.Builders;
+﻿using Latte.NewRenderer.Vulkan.Builders;
 using Latte.NewRenderer.Vulkan.Exceptions;
 using Latte.NewRenderer.Vulkan.Extensions;
 using Silk.NET.Core;
