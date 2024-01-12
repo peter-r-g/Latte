@@ -106,12 +106,14 @@ internal unsafe sealed class VkEngine : IDisposable
 	private readonly Dictionary<string, TimeSpan> initializationStageTimes = [];
 	private readonly Dictionary<string, TimeSpan> cpuPerformanceTimes = [];
 	private readonly Dictionary<string, VkPipelineStatistics> materialPipelineStatistics = [];
+	private QueryPool pipelineStatisticsQueryPool;
 	private QueryPool gpuExecuteQueryPool;
 	private TimeSpan gpuExecuteTime;
 
 	private readonly List<Light> Lights = [];
 	private readonly List<Renderable> Renderables = [];
 	private readonly Dictionary<string, Material> Materials = [];
+	private readonly Dictionary<Material, int> MaterialIndices = [];
 	private readonly Dictionary<string, Mesh> Meshes = [];
 	private readonly Dictionary<string, Shader> Shaders = [];
 	private readonly Dictionary<string, Texture> Textures = [];
@@ -213,15 +215,10 @@ internal unsafe sealed class VkEngine : IDisposable
 			var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 			Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).AssertSuccess();
 
+			Apis.Vk.CmdResetQueryPool( cmd, pipelineStatisticsQueryPool, 0, (uint)Materials.Count );
 			Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
 
 			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.TopOfPipeBit, gpuExecuteQueryPool, 0 );
-
-			foreach ( var (_, material) in Materials )
-			{
-				if ( material.PipelineQueryPool.IsValid() )
-					Apis.Vk.CmdResetQueryPool( cmd, material.PipelineQueryPool, 0, 1 );
-			}
 
 			var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
 
@@ -363,11 +360,10 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			if ( !ReferenceEquals( lastMaterial, material ) )
 			{
-				if ( lastMaterial?.PipelineQueryPool.IsValid() ?? false )
-					Apis.Vk.CmdEndQuery( cmd, lastMaterial.PipelineQueryPool, 0 );
+				if ( lastMaterial is not null )
+					Apis.Vk.CmdEndQuery( cmd, pipelineStatisticsQueryPool, (uint)MaterialIndices[lastMaterial] );
 
-				if ( material.PipelineQueryPool.IsValid() )
-					Apis.Vk.CmdBeginQuery( cmd, material.PipelineQueryPool, 0, QueryControlFlags.None );
+				Apis.Vk.CmdBeginQuery( cmd, pipelineStatisticsQueryPool, (uint)MaterialIndices[material], QueryControlFlags.None );
 
 				if ( lastMaterial?.Pipeline.Handle != material.Pipeline.Handle )
 				{
@@ -416,8 +412,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			i += instanceCount - 1;
 		}
 
-		if ( lastMaterial?.PipelineQueryPool.IsValid() ?? false )
-			Apis.Vk.CmdEndQuery( cmd, lastMaterial.PipelineQueryPool, 0 );
+		if ( lastMaterial is not null )
+			Apis.Vk.CmdEndQuery( cmd, pipelineStatisticsQueryPool, (uint)MaterialIndices[lastMaterial] );
 	}
 
 	internal void WaitForIdle()
@@ -1259,7 +1255,7 @@ internal unsafe sealed class VkEngine : IDisposable
 				.Update( texturedMaterial.TextureSet )
 				.Dispose();
 
-			Materials.Add( textureName, texturedMaterial );
+			AddMaterial( textureName, texturedMaterial );
 			disposalManager.Add( () => RemoveMaterial( textureName ), SwapchainTag, WireframeTag );
 		}
 
@@ -1291,40 +1287,37 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		ImmediateSubmit( VkContext.GraphicsQueue, cmd =>
 		{
-			Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 2 );
+			Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
 		} );
 
 		disposalManager.Add( () => Apis.Vk.DestroyQueryPool( VkContext.LogicalDevice, gpuExecuteQueryPool, null ), SwapchainTag, WireframeTag );
 
-		foreach ( var (_, material) in Materials )
+		var poolInfo = new QueryPoolCreateInfo
 		{
-			var poolInfo = new QueryPoolCreateInfo
-			{
-				SType = StructureType.QueryPoolCreateInfo,
-				PNext = null,
-				QueryCount = 1,
-				QueryType = QueryType.PipelineStatistics,
-				PipelineStatistics =
+			SType = StructureType.QueryPoolCreateInfo,
+			PNext = null,
+			QueryCount = (uint)Materials.Count,
+			QueryType = QueryType.PipelineStatistics,
+			PipelineStatistics =
 					QueryPipelineStatisticFlags.InputAssemblyVerticesBit |
 					QueryPipelineStatisticFlags.InputAssemblyPrimitivesBit |
 					QueryPipelineStatisticFlags.VertexShaderInvocationsBit |
 					QueryPipelineStatisticFlags.FragmentShaderInvocationsBit |
 					QueryPipelineStatisticFlags.ClippingInvocationsBit |
 					QueryPipelineStatisticFlags.ClippingPrimitivesBit,
-				Flags = 0,
-			};
+			Flags = 0,
+		};
 
-			Apis.Vk.CreateQueryPool( VkContext.LogicalDevice, poolInfo, null, out queryPool );
-			VkInvalidHandleException.ThrowIfInvalid( queryPool );
-			material.PipelineQueryPool = queryPool;
+		Apis.Vk.CreateQueryPool( VkContext.LogicalDevice, poolInfo, null, out queryPool );
+		VkInvalidHandleException.ThrowIfInvalid( queryPool );
+		pipelineStatisticsQueryPool = queryPool;
 
-			ImmediateSubmit( VkContext.GraphicsQueue, cmd =>
-			{
-				Apis.Vk.CmdResetQueryPool( cmd, queryPool, 0, 1 );
-			} );
+		ImmediateSubmit( VkContext.GraphicsQueue, cmd =>
+		{
+			Apis.Vk.CmdResetQueryPool( cmd, pipelineStatisticsQueryPool, 0, (uint)Materials.Count );
+		} );
 
-			disposalManager.Add( () => Apis.Vk.DestroyQueryPool( VkContext.LogicalDevice, material.PipelineQueryPool, null ), SwapchainTag, WireframeTag );
-		}
+		disposalManager.Add( () => Apis.Vk.DestroyQueryPool( VkContext.LogicalDevice, pipelineStatisticsQueryPool, null ), SwapchainTag, WireframeTag );
 
 		initializationProfile.Dispose();
 		if ( !initializationStageTimes.ContainsKey( initializationProfile.Name ) )
@@ -1429,6 +1422,15 @@ internal unsafe sealed class VkEngine : IDisposable
 		throw new ArgumentException( $"A shader with the name \"{name}\" does not exist", nameof( name ) );
 	}
 
+	internal void AddMaterial( string name, Material material )
+	{
+		if ( Materials.ContainsKey( name ) )
+			throw new ArgumentException( $"A material with the name \"{name}\" already exists", nameof( name ) );
+
+		Materials.Add( name, material );
+		MaterialIndices.Add( material, MaterialIndices.Count );
+	}
+
 	internal Material CreateMaterial( string name, Pipeline pipeline, PipelineLayout pipelineLayout )
 	{
 		if ( Materials.ContainsKey( name ) )
@@ -1436,15 +1438,18 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		var material = new Material( pipeline, pipelineLayout );
 		Materials.Add( name, material );
+		MaterialIndices.Add( material, MaterialIndices.Count );
 		return material;
 	}
 
 	internal void RemoveMaterial( string name )
 	{
-		if ( !Materials.ContainsKey( name ) )
+		if ( !Materials.TryGetValue( name, out var material ) )
 			throw new ArgumentException( $"No material with the name \"{name}\" exists", nameof( name ) );
 
 		Materials.Remove( name );
+		// FIXME: This will cause problems if the dictionary isn't compeltely rewritten.
+		MaterialIndices.Remove( material );
 	}
 
 	internal Material GetMaterial( string name )
@@ -1493,7 +1498,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		foreach ( var (materialName, material) in Materials )
 		{
-			result = Apis.Vk.GetQueryPoolResults( VkContext.LogicalDevice, material.PipelineQueryPool, 0, 1,
+			result = Apis.Vk.GetQueryPoolResults( VkContext.LogicalDevice, pipelineStatisticsQueryPool, (uint)MaterialIndices[material], 1,
 				6 * sizeof( ulong ),
 				statsStorage,
 				6 * sizeof( ulong ),
