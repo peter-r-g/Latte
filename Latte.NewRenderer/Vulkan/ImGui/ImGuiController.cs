@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using VMASharp;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using LatteShader = Latte.Assets.Shader;
 
@@ -20,6 +21,7 @@ namespace Latte.NewRenderer.Vulkan.ImGui;
 public sealed class ImGuiController : IDisposable
 {
 	private readonly List<char> pressedChars = [];
+	private readonly WindowRenderBuffers mainWindowRenderBuffers = new();
 
 	private VkEngine engine = null!;
 	private IInputContext input = null!;
@@ -35,8 +37,6 @@ public sealed class ImGuiController : IDisposable
 	private AllocatedImage fontImage;
 	private ImageView fontView;
 
-	private WindowRenderBuffers mainWindowRenderBuffers;
-	private GlobalMemory? frameRenderBuffers;
 	private bool frameBegun;
 
 	/// <summary>
@@ -381,9 +381,13 @@ public sealed class ImGuiController : IDisposable
 		imageInfo.SharingMode = SharingMode.Exclusive;
 		imageInfo.InitialLayout = ImageLayout.Undefined;
 
-		Apis.Vk.CreateImage( VkContext.LogicalDevice, imageInfo, default, out var unallocatedFontImage ).AssertSuccess();
+		var unallocatedFontImage = VkContext.AllocationManager.CreateImage( imageInfo, new AllocationCreateInfo
+		{
+			RequiredFlags = MemoryPropertyFlags.DeviceLocalBit,
+			Usage = MemoryUsage.GPU_Only
+		}, out var fontImageAllocation );
 		VkInvalidHandleException.ThrowIfInvalid( unallocatedFontImage );
-		fontImage = VkContext.AllocationManager.AllocateImage( unallocatedFontImage, MemoryPropertyFlags.DeviceLocalBit );
+		fontImage = new AllocatedImage( unallocatedFontImage, fontImageAllocation );
 
 		var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Unorm, fontImage.Image, ImageAspectFlags.ColorBit );
 		// FIXME: Add this option to VkInfo method.
@@ -399,11 +403,15 @@ public sealed class ImGuiController : IDisposable
 
 		// Create the Upload Buffer:
 		var bufferInfo = VkInfo.Buffer( uploadSize, BufferUsageFlags.TransferSrcBit, SharingMode.Exclusive );
-		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, bufferInfo, default, out var unallocatedStagingBuffer ).AssertSuccess();
-		VkInvalidHandleException.ThrowIfInvalid( unallocatedStagingBuffer );
 
-		var stagingBuffer = VkContext.AllocationManager.AllocateBuffer( unallocatedStagingBuffer, MemoryPropertyFlags.HostVisibleBit );
-		VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, pixels, uploadSize );
+		var unallocatedStagingBuffer = VkContext.AllocationManager.CreateBuffer( bufferInfo, new AllocationCreateInfo
+		{
+			RequiredFlags = MemoryPropertyFlags.HostVisibleBit,
+			Usage = MemoryUsage.CPU_To_GPU
+		}, out var stagingBufferAllocation );
+		VkInvalidHandleException.ThrowIfInvalid( unallocatedStagingBuffer );
+		var stagingBuffer = new AllocatedBuffer( unallocatedStagingBuffer, stagingBufferAllocation );
+		stagingBufferAllocation.SetMemory( pixels, uploadSize );
 
 		const uint VK_QUEUE_FAMILY_IGNORED = ~0U;
 
@@ -476,10 +484,10 @@ public sealed class ImGuiController : IDisposable
 		Apis.Vk.QueueWaitIdle( graphicsQueue ).AssertSuccess();
 
 		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, unallocatedStagingBuffer, default );
-		VkContext.AllocationManager.Free( stagingBuffer.Allocation );
+		stagingBuffer.Allocation.Dispose();
 		Apis.Vk.DestroyCommandPool( VkContext.LogicalDevice, commandPool, default );
 
-		disposalManager.Add( () => VkContext.AllocationManager.Free( fontImage.Allocation ) );
+		disposalManager.Add( () => fontImageAllocation.Dispose() );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, fontImage.Image, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, fontView, null ) );
 	}
@@ -566,11 +574,11 @@ public sealed class ImGuiController : IDisposable
 		{
 			mainWindowRenderBuffers.Index = 0;
 			mainWindowRenderBuffers.Count = (uint)engine.SwapchainImageCount;
-			frameRenderBuffers = GlobalMemory.Allocate( sizeof( FrameRenderBuffer ) * (int)mainWindowRenderBuffers.Count );
-			mainWindowRenderBuffers.FrameRenderBuffers = frameRenderBuffers.AsPtr<FrameRenderBuffer>();
+			mainWindowRenderBuffers.FrameRenderBuffers = new FrameRenderBuffer[(int)mainWindowRenderBuffers.Count];
 
 			for ( var i = 0; i < mainWindowRenderBuffers.Count; i++ )
 			{
+				mainWindowRenderBuffers.FrameRenderBuffers[i] = new FrameRenderBuffer();
 				mainWindowRenderBuffers.FrameRenderBuffers[i].VertexBuffer.Buffer.Handle = 0;
 				mainWindowRenderBuffers.FrameRenderBuffers[i].IndexBuffer.Buffer.Handle = 0;
 			}
@@ -582,12 +590,12 @@ public sealed class ImGuiController : IDisposable
 		if ( drawData.TotalVtxCount > 0 )
 		{
 			// Create or resize the vertex/index buffers
-			ulong vertexSize = (ulong)drawData.TotalVtxCount * (ulong)sizeof( ImDrawVert );
-			ulong indexSize = (ulong)drawData.TotalIdxCount * sizeof( ushort );
+			long vertexSize = (long)drawData.TotalVtxCount * (long)sizeof( ImDrawVert );
+			long indexSize = (long)drawData.TotalIdxCount * sizeof( ushort );
 			if ( frameRenderBuffer.VertexBuffer.Buffer.Handle == default || frameRenderBuffer.VertexBuffer.Allocation.Size < vertexSize )
-				CreateOrResizeBuffer( ref frameRenderBuffer.VertexBuffer, vertexSize, BufferUsageFlags.VertexBufferBit );
+				CreateOrResizeBuffer( ref frameRenderBuffer.VertexBuffer, (ulong)vertexSize, BufferUsageFlags.VertexBufferBit );
 			if ( frameRenderBuffer.IndexBuffer.Buffer.Handle == default || frameRenderBuffer.IndexBuffer.Allocation.Size < indexSize )
-				CreateOrResizeBuffer( ref frameRenderBuffer.IndexBuffer, indexSize, BufferUsageFlags.IndexBufferBit );
+				CreateOrResizeBuffer( ref frameRenderBuffer.IndexBuffer, (ulong)indexSize, BufferUsageFlags.IndexBufferBit );
 
 			// Upload vertex/index data into a single contiguous GPU buffer
 			uint vtxOffset = 0;
@@ -599,14 +607,12 @@ public sealed class ImGuiController : IDisposable
 				var vertexByteSize = (uint)cmdList->VtxBuffer.Size * (uint)sizeof( ImDrawVert );
 				var indexByteSize = (uint)cmdList->IdxBuffer.Size * sizeof( ushort );
 
-				VkContext.AllocationManager.SetMemory(
-					frameRenderBuffer.VertexBuffer.Allocation,
+				frameRenderBuffer.VertexBuffer.Allocation.SetMemory(
 					cmdList->VtxBuffer.Data,
 					vertexByteSize,
 					(nint)vtxOffset );
 
-				VkContext.AllocationManager.SetMemory(
-					frameRenderBuffer.IndexBuffer.Allocation,
+				frameRenderBuffer.IndexBuffer.Allocation.SetMemory(
 					cmdList->IdxBuffer.Data,
 					indexByteSize,
 					(nint)idxOffset );
@@ -704,14 +710,17 @@ public sealed class ImGuiController : IDisposable
 		if ( allocatedBuffer.Buffer.Handle != default )
 		{
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, allocatedBuffer.Buffer, default );
-			VkContext.AllocationManager.Free( allocatedBuffer.Allocation );
+			allocatedBuffer.Allocation.Dispose();
 		}
 
 		var bufferInfo = VkInfo.Buffer( newSize, usage, SharingMode.Exclusive );
-		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, bufferInfo, default, out var newBuffer ).AssertSuccess();
-		VkInvalidHandleException.ThrowIfInvalid( newBuffer );
-
-		allocatedBuffer = VkContext.AllocationManager.AllocateBuffer( newBuffer, MemoryPropertyFlags.HostVisibleBit );
+		var buffer = VkContext.AllocationManager.CreateBuffer( bufferInfo, new AllocationCreateInfo
+		{
+			RequiredFlags = MemoryPropertyFlags.HostVisibleBit,
+			Usage = MemoryUsage.CPU_To_GPU
+		}, out var bufferAllocation );
+		VkInvalidHandleException.ThrowIfInvalid( buffer );
+		allocatedBuffer = new AllocatedBuffer( buffer, bufferAllocation );
 	}
 
 	private void OnKeyChar( IKeyboard keyboard, char key )
@@ -729,14 +738,17 @@ public sealed class ImGuiController : IDisposable
 
 		keyboard.KeyChar -= OnKeyChar;
 
-		for ( var i = 0; i < mainWindowRenderBuffers.Count; i++ )
+		if ( mainWindowRenderBuffers.FrameRenderBuffers is not null )
 		{
-			var frameRenderBuffer = mainWindowRenderBuffers.FrameRenderBuffers[i];
+			for ( var i = 0; i < mainWindowRenderBuffers.Count; i++ )
+			{
+				var frameRenderBuffer = mainWindowRenderBuffers.FrameRenderBuffers[i];
 
-			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameRenderBuffer.VertexBuffer.Buffer, null );
-			VkContext.AllocationManager.Free( frameRenderBuffer.VertexBuffer.Allocation );
-			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameRenderBuffer.IndexBuffer.Buffer, null );
-			VkContext.AllocationManager.Free( frameRenderBuffer.IndexBuffer.Allocation );
+				Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameRenderBuffer.VertexBuffer.Buffer, null );
+				frameRenderBuffer.VertexBuffer.Allocation.Dispose();
+				Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameRenderBuffer.IndexBuffer.Buffer, null );
+				frameRenderBuffer.IndexBuffer.Allocation.Dispose();
+			}
 		}
 
 		disposalManager?.Dispose();
@@ -745,16 +757,16 @@ public sealed class ImGuiController : IDisposable
 		GC.SuppressFinalize( this );
 	}
 
-	private struct FrameRenderBuffer
+	private class FrameRenderBuffer
 	{
 		public AllocatedBuffer VertexBuffer;
 		public AllocatedBuffer IndexBuffer;
 	};
 
-	private unsafe struct WindowRenderBuffers
+	private sealed class WindowRenderBuffers
 	{
 		public uint Index;
 		public uint Count;
-		public FrameRenderBuffer* FrameRenderBuffers;
+		public FrameRenderBuffer[]? FrameRenderBuffers;
 	};
 }

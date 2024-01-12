@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Latte.Assets\Latte.Assets.csproj" />
+    <ProjectReference Include="..\VMASharp\VMASharp.csproj" />
   </ItemGroup>
 
 </Project>

@@ -20,6 +20,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using VMASharp;
 using LatteShader = Latte.Assets.Shader;
 using LatteTexture = Latte.Assets.Texture;
 using Mesh = Latte.NewRenderer.Vulkan.Temp.Mesh;
@@ -30,7 +31,7 @@ namespace Latte.NewRenderer.Vulkan;
 
 internal unsafe sealed class VkEngine : IDisposable
 {
-	private const int MaxFramesInFlight = 2;
+	internal const int MaxFramesInFlight = 2;
 	private const int MaxObjects = 10_000;
 	private const int MaxLights = 10;
 	private const string DefaultMeshMaterialName = "defaultmesh";
@@ -331,17 +332,17 @@ internal unsafe sealed class VkEngine : IDisposable
 			Projection = projection,
 			ViewProjection = view * projection
 		};
-		VkContext.AllocationManager.SetMemory( currentFrameData.CameraBuffer.Allocation, cameraData, true );
+		currentFrameData.CameraBuffer.Allocation.SetMemory( cameraData );
 
 		var frameIndex = frameNumber % frameData.Length;
 		sceneParameters.LightCount = Lights.Count;
-		VkContext.AllocationManager.SetMemory( sceneParameterBuffer.Allocation, sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
+		sceneParameterBuffer.Allocation.SetMemory( sceneParameters, PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ), frameIndex );
 
 		var objectData = this.objectData.AsSpan().Slice( first, count );
 		for ( var i = 0; i < count; i++ )
 			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
 
-		VkContext.AllocationManager.SetMemory( currentFrameData.ObjectBuffer.Allocation, (ReadOnlySpan<GpuObjectData>)objectData, true );
+		currentFrameData.ObjectBuffer.Allocation.SetMemory( (ReadOnlySpan<GpuObjectData>)objectData );
 
 		for ( var i = 0; i < Lights.Count; i++ )
 		{
@@ -349,7 +350,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			lightData[i] = new GpuLightData( light.Position, light.Color );
 		}
 
-		VkContext.AllocationManager.SetMemory( currentFrameData.LightBuffer.Allocation, (ReadOnlySpan<GpuLightData>)lightData, true );
+		currentFrameData.LightBuffer.Allocation.SetMemory( (ReadOnlySpan<GpuLightData>)lightData );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
@@ -528,56 +529,55 @@ internal unsafe sealed class VkEngine : IDisposable
 		
 		if ( ImGuiNET.ImGui.CollapsingHeader( "Memory" ) )
 		{
-			if ( ImGuiNET.ImGui.BeginTable( "Allocation Counts", 2, ImGuiTableFlags.Borders ) )
+			var vmaStats = stats.VmaStats;
+			ImGuiNET.ImGui.Indent();
+
+			var heapCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryHeapCount;
+			if ( ImGuiNET.ImGui.CollapsingHeader( $"Heaps ({heapCount})" ) )
 			{
-				ImGuiNET.ImGui.TableSetupColumn( "Memory Type Index" );
-				ImGuiNET.ImGui.TableSetupColumn( "Allocation Count" );
-				ImGuiNET.ImGui.TableHeadersRow();
+				ImGuiNET.ImGui.Indent();
 
-				ImGuiNET.ImGui.TableNextColumn();
-
-				for ( var i = 0; i < stats.MemoryTypeAllocationCounts.Length; i++ )
+				for ( var i = 0; i < heapCount; i++ )
 				{
-					ImGuiNET.ImGui.Text( i.ToString() );
-					ImGuiNET.ImGui.TableNextColumn();
-					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationCounts[i].ToString() );
-					ImGuiNET.ImGui.TableNextColumn();
+					if ( !ImGuiNET.ImGui.CollapsingHeader( $"Heap {i}" ) )
+						continue;
+
+					var heapStats = vmaStats.MemoryHeap[i];
+					ImGuiNET.ImGui.Text( $"{heapStats.AllocationCount} allocations" );
+
+					var totalBytesConsumed = heapStats.UsedBytes + heapStats.UnusedBytes;
+					var heapSize = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryHeaps[i].Size;
+					var usagePercent = Math.Ceiling( (float)totalBytesConsumed / heapSize * 100 );
+					ImGuiNET.ImGui.Text( $"{totalBytesConsumed.ToDataSize( 2 )} / {heapSize.ToDataSize( 2 )} ({usagePercent}%%) used" );
 				}
 
-				ImGuiNET.ImGui.Text( "Total" );
-				ImGuiNET.ImGui.TableNextColumn();
-				ImGuiNET.ImGui.Text( stats.AllocationCount.ToString() );
-				ImGuiNET.ImGui.TableNextColumn();
-
-				ImGuiNET.ImGui.EndTable();
+				ImGuiNET.ImGui.Unindent();
 			}
 
-			if ( ImGuiNET.ImGui.BeginTable( "Memory Usages", 2, ImGuiTableFlags.Borders ) )
+			var typeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
+			if ( ImGuiNET.ImGui.CollapsingHeader( $"Types ({typeCount})" ) )
 			{
-				ImGuiNET.ImGui.TableSetupColumn( "Memory Type Index" );
-				ImGuiNET.ImGui.TableSetupColumn( "Allocated Size" );
-				ImGuiNET.ImGui.TableHeadersRow();
+				ImGuiNET.ImGui.Indent();
 
-				ImGuiNET.ImGui.TableNextColumn();
-
-				var totalSize = 0ul;
-				for ( var i = 0; i < stats.MemoryTypeAllocationSizes.Length; i++ )
+				for ( var i = 0; i < typeCount; i++ )
 				{
-					ImGuiNET.ImGui.Text( i.ToString() );
-					ImGuiNET.ImGui.TableNextColumn();
-					ImGuiNET.ImGui.Text( stats.MemoryTypeAllocationSizes[i].ToDataSize( 2 ) );
-					ImGuiNET.ImGui.TableNextColumn();
+					if ( !ImGuiNET.ImGui.CollapsingHeader( $"Type {i}" ) )
+						continue;
 
-					totalSize += stats.MemoryTypeAllocationSizes[i];
+					var typeStats = vmaStats.MemoryType[i];
+					ImGuiNET.ImGui.Text( $"{typeStats.AllocationCount} allocations" );
+					var heapIndex = (int)VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypes[i].HeapIndex;
+
+					var totalBytesConsumed = typeStats.UsedBytes + typeStats.UnusedBytes;
+					var heapSize = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryHeaps[heapIndex].Size;
+					var usagePercent = Math.Ceiling( (float)totalBytesConsumed / heapSize * 100 );
+					ImGuiNET.ImGui.Text( $"{totalBytesConsumed.ToDataSize( 2 )} / {heapSize.ToDataSize( 2 )} (Heap {heapIndex}) ({usagePercent}%%) used" );
 				}
 
-				ImGuiNET.ImGui.Text( "Total" );
-				ImGuiNET.ImGui.TableNextColumn();
-				ImGuiNET.ImGui.Text( totalSize.ToDataSize( 2 ) );
-				ImGuiNET.ImGui.TableNextColumn();
-
-				ImGuiNET.ImGui.EndTable();
+				ImGuiNET.ImGui.Unindent();
 			}
+
+			ImGuiNET.ImGui.Unindent();
 		}
 
 		ImGuiNET.ImGui.SeparatorText( "Pipeline Stats" );
@@ -690,9 +690,13 @@ internal unsafe sealed class VkEngine : IDisposable
 		DepthFormat = Format.D32Sfloat;
 
 		var depthImageInfo = VkInfo.Image( DepthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
-		Apis.Vk.CreateImage( VkContext.LogicalDevice, depthImageInfo, null, out var depthImage ).AssertSuccess();
+		var depthImage = VkContext.AllocationManager.CreateImage( depthImageInfo, new AllocationCreateInfo
+		{
+			RequiredFlags = MemoryPropertyFlags.DeviceLocalBit,
+			Usage = MemoryUsage.GPU_Only
+		}, out var depthImageAllocation );
 		VkInvalidHandleException.ThrowIfInvalid( depthImage );
-		this.depthImage = VkContext.AllocationManager.AllocateImage( depthImage, MemoryPropertyFlags.DeviceLocalBit );
+		this.depthImage = new AllocatedImage( depthImage, depthImageAllocation );
 
 		var depthImageViewInfo = VkInfo.ImageView( DepthFormat, depthImage, ImageAspectFlags.DepthBit );
 		Apis.Vk.CreateImageView( VkContext.LogicalDevice, depthImageViewInfo, null, out var depthImageView ).AssertSuccess();
@@ -708,7 +712,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, swapchainImageViews[index], null ), SwapchainTag );
 		}
 
-		disposalManager.Add( () => VkContext.AllocationManager.Free( this.depthImage.Allocation ), SwapchainTag );
+		disposalManager.Add( () => this.depthImage.Allocation.Dispose(), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, depthImage, null ), SwapchainTag );
 		disposalManager.Add( () => Apis.Vk.DestroyImageView( VkContext.LogicalDevice, depthImageView, null ), SwapchainTag );
 
@@ -968,7 +972,7 @@ internal unsafe sealed class VkEngine : IDisposable
 
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, frameSetLayout, null ) );
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, singleTextureSetLayout, null ) );
-		disposalManager.Add( () => VkContext.AllocationManager.Free( sceneParameterBuffer.Allocation ) );
+		disposalManager.Add( () => sceneParameterBuffer.Allocation.Dispose() );
 		disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, sceneParameterBuffer.Buffer, null ) );
 
 		for ( var i = 0; i < frameData.Length; i++ )
@@ -986,11 +990,11 @@ internal unsafe sealed class VkEngine : IDisposable
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.DeviceLocalBit );
 
 			var index = i;
-			disposalManager.Add( () => VkContext.AllocationManager.Free( frameData[index].CameraBuffer.Allocation ) );
+			disposalManager.Add( () => frameData[index].CameraBuffer.Allocation.Dispose() );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].CameraBuffer.Buffer, null ) );
-			disposalManager.Add( () => VkContext.AllocationManager.Free( frameData[index].ObjectBuffer.Allocation ) );
+			disposalManager.Add( () => frameData[index].ObjectBuffer.Allocation.Dispose() );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].ObjectBuffer.Buffer, null ) );
-			disposalManager.Add( () => VkContext.AllocationManager.Free( frameData[index].LightBuffer.Allocation ) );
+			disposalManager.Add( () => frameData[index].LightBuffer.Allocation.Dispose() );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, frameData[index].LightBuffer.Buffer, null ) );
 
 			new VkDescriptorUpdater( VkContext.LogicalDevice, 4 )
@@ -1509,23 +1513,12 @@ internal unsafe sealed class VkEngine : IDisposable
 				statsStorage[5] );
 		}
 
-		var typeCount = VkContext.PhysicalDeviceInfo.MemoryProperties.MemoryTypeCount;
-		var memoryAllocationCountBuilder = ImmutableArray.CreateBuilder<int>( (int)typeCount );
-		var memoryAllocationSizeBuilder = ImmutableArray.CreateBuilder<ulong>( (int)typeCount );
-		for ( uint i = 0; i < typeCount; i++ )
-		{
-			memoryAllocationCountBuilder.Add( VkContext.AllocationManager.GetAllocationCount( i ) );
-			memoryAllocationSizeBuilder.Add( VkContext.AllocationManager.GetAllocationSize( i ) );
-		}
-
 		Marshal.FreeHGlobal( (nint)statsStorage );
 		return new VkStatistics( initializationStageTimes,
 			cpuPerformanceTimes,
 			gpuExecuteTime,
 			materialPipelineStatistics,
-			VkContext.AllocationManager.TotalAllocationCount,
-			memoryAllocationCountBuilder.MoveToImmutable(),
-			memoryAllocationSizeBuilder.MoveToImmutable() );
+			VkContext.AllocationManager.CalculateStats() );
 	}
 
 	private void UploadMesh( Mesh mesh, SharingMode sharingMode = SharingMode.Exclusive )
@@ -1538,7 +1531,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var bufferSize = (ulong)(mesh.Vertices.Length * Unsafe.SizeOf<Vertex>());
 
 			var stagingBuffer = CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
-			VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, mesh.Vertices.AsSpan() );
+			stagingBuffer.Allocation.SetMemory( mesh.Vertices.AsSpan() );
 			var vertexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
@@ -1557,8 +1550,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			mesh.VertexBuffer = vertexBuffer;
 
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
-			VkContext.AllocationManager.Free( stagingBuffer.Allocation );
-			disposalManager.Add( () => VkContext.AllocationManager.Free( vertexBuffer.Allocation ) );
+			stagingBuffer.Allocation.Dispose();
+			disposalManager.Add( () => vertexBuffer.Allocation.Dispose() );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, vertexBuffer.Buffer, null ) );
 		}
 
@@ -1570,7 +1563,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			var bufferSize = sizeof( uint ) * (ulong)mesh.Indices.Length;
 
 			var stagingBuffer = CreateBuffer( bufferSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
-			VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, mesh.Indices.AsSpan() );
+			stagingBuffer.Allocation.SetMemory( mesh.Indices.AsSpan() );
 			var indexBuffer = CreateBuffer( bufferSize, BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit, sharingMode );
 
@@ -1589,8 +1582,8 @@ internal unsafe sealed class VkEngine : IDisposable
 			mesh.IndexBuffer = indexBuffer;
 
 			Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
-			VkContext.AllocationManager.Free( stagingBuffer.Allocation );
-			disposalManager.Add( () => VkContext.AllocationManager.Free( indexBuffer.Allocation ) );
+			stagingBuffer.Allocation.Dispose();
+			disposalManager.Add( () => indexBuffer.Allocation.Dispose() );
 			disposalManager.Add( () => Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, indexBuffer.Buffer, null ) );
 		}
 	}
@@ -1604,13 +1597,19 @@ internal unsafe sealed class VkEngine : IDisposable
 		var imageFormat = Format.R8G8B8A8Srgb;
 
 		var stagingBuffer = CreateBuffer( imageSize, BufferUsageFlags.TransferSrcBit, MemoryPropertyFlags.HostVisibleBit );
-		VkContext.AllocationManager.SetMemory( stagingBuffer.Allocation, texture.PixelData.Span );
+		stagingBuffer.Allocation.SetMemory( texture.PixelData.Span );
 
 		var imageExtent = new Extent3D( texture.Width, texture.Height, 1 );
 		var imageInfo = VkInfo.Image( imageFormat, ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit, imageExtent );
-		Apis.Vk.CreateImage( VkContext.LogicalDevice, imageInfo, null, out var textureImage );
 
-		var allocatedTextureImage = VkContext.AllocationManager.AllocateImage( textureImage, MemoryPropertyFlags.DeviceLocalBit );
+		var textureImage = VkContext.AllocationManager.CreateImage( imageInfo, new AllocationCreateInfo
+		{
+			RequiredFlags = MemoryPropertyFlags.DeviceLocalBit,
+			Usage = MemoryUsage.GPU_Only
+		}, out var textureImageAllocation );
+		VkInvalidHandleException.ThrowIfInvalid( textureImage );
+		var allocatedTextureImage = new AllocatedImage( textureImage, textureImageAllocation );
+
 		ImmediateSubmit( VkContext.TransferQueue, cmd =>
 		{
 			var range = new ImageSubresourceRange
@@ -1673,8 +1672,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		texture.GpuTexture = allocatedTextureImage;
 
 		Apis.Vk.DestroyBuffer( VkContext.LogicalDevice, stagingBuffer.Buffer, null );
-		VkContext.AllocationManager.Free( stagingBuffer.Allocation );
-		disposalManager.Add( () => VkContext.AllocationManager.Free( allocatedTextureImage.Allocation ) );
+		stagingBuffer.Allocation.Dispose();
+		disposalManager.Add( () => allocatedTextureImage.Allocation.Dispose() );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, textureImage, null ) );
 	}
 
@@ -1685,9 +1684,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var createInfo = VkInfo.Buffer( size, usageFlags, sharingMode );
-		Apis.Vk.CreateBuffer( VkContext.LogicalDevice, createInfo, null, out var buffer );
+		var buffer = VkContext.AllocationManager.CreateBuffer( createInfo, new AllocationCreateInfo
+		{
+			RequiredFlags = memoryFlags,
+			Usage = MemoryUsage.Unknown
+		}, out var bufferAllocation );
 
-		return VkContext.AllocationManager.AllocateBuffer( buffer, memoryFlags );
+		return new AllocatedBuffer( buffer, bufferAllocation );
 	}
 
 	private static bool TryLoadShaderModule( ReadOnlySpan<byte> shaderBytes, out ShaderModule shaderModule )
