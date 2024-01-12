@@ -1,0 +1,2 @@
+Credit to sunkin351 for creating VMASharp (https://github.com/sunkin351/VMASharp)
+Credit to hYdos for this fork of the VMASharp library (https://github.com/hYdos/VMASharp)

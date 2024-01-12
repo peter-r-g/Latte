@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="hydos.VulkanMemoryAllocator" Version="1.0.0" />
     <PackageReference Include="ImGui.NET" Version="1.90.0.1" />
     <PackageReference Include="Silk.NET.Assimp" Version="2.20.0" />
     <PackageReference Include="Silk.NET.Input.Extensions" Version="2.20.0" />
@@ -19,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Latte.Assets\Latte.Assets.csproj" />
+    <ProjectReference Include="..\VMASharp\VMASharp.csproj" />
   </ItemGroup>
 
 </Project>
