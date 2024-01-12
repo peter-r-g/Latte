@@ -110,7 +110,7 @@ public sealed class ImGuiController : IDisposable
 		InitializeSampler();
 		InitializeDescriptors();
 		InitializePipeline();
-		UploadDefaultFontAtlas();
+		UploadDefaultFontAtlas( VkContext.QueueFamilyIndices.GraphicsQueue );
 	}
 
 	/// <summary>
@@ -343,7 +343,7 @@ public sealed class ImGuiController : IDisposable
 		disposalManager.Add( () => Apis.Vk.DestroyPipeline( VkContext.LogicalDevice, pipeline, null ) );
 	}
 
-	private unsafe void UploadDefaultFontAtlas()
+	private unsafe void UploadDefaultFontAtlas( uint graphicsFamilyIndex )
 	{
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
@@ -355,7 +355,7 @@ public sealed class ImGuiController : IDisposable
 		ulong uploadSize = (ulong)(width * height * 4 * sizeof( byte ));
 
 		// Submit one-time command to create the fonts texture
-		var poolInfo = VkInfo.CommandPool( VkContext.TransferQueue.QueueFamily );
+		var poolInfo = VkInfo.CommandPool( graphicsFamilyIndex );
 		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolInfo, null, out var commandPool ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( commandPool );
 
@@ -475,7 +475,7 @@ public sealed class ImGuiController : IDisposable
 		io.Fonts.SetTexID( (nint)fontImage.Image.Handle );
 
 		Apis.Vk.EndCommandBuffer( commandBuffer ).AssertSuccess();
-		Apis.Vk.GetDeviceQueue( VkContext.LogicalDevice, VkContext.TransferQueue.QueueFamily, 0, out var graphicsQueue );
+		Apis.Vk.GetDeviceQueue( VkContext.LogicalDevice, graphicsFamilyIndex, 0, out var graphicsQueue );
 
 		var submitInfo = VkInfo.SubmitInfo( new ReadOnlySpan<CommandBuffer>( ref commandBuffer ) );
 		Apis.Vk.QueueSubmit( graphicsQueue, 1, submitInfo, default ).AssertSuccess();
