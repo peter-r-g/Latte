@@ -45,7 +45,9 @@ internal static unsafe class VkContext
 	];
 
 	private static readonly string[] DefaultDeviceExtensions = [
-		KhrSwapchain.ExtensionName
+		KhrSwapchain.ExtensionName,
+		"VK_EXT_memory_priority",
+		ExtPageableDeviceLocalMemory.ExtensionName
 	];
 
 	// FIXME: Is there a way to initialize global state without a view?
