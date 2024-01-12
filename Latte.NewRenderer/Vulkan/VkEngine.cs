@@ -30,7 +30,7 @@ namespace Latte.NewRenderer.Vulkan;
 
 internal unsafe sealed class VkEngine : IDisposable
 {
-	private const int MaxFramesInFlight = 2;
+	internal const int MaxFramesInFlight = 2;
 	private const int MaxObjects = 10_000;
 	private const int MaxLights = 10;
 	private const string DefaultMeshMaterialName = "defaultmesh";

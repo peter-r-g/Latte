@@ -2,6 +2,7 @@
 using Latte.NewRenderer.Vulkan.Builders;
 using Latte.NewRenderer.Vulkan.Exceptions;
 using Latte.NewRenderer.Vulkan.Extensions;
+using Silk.NET.Core;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
@@ -9,6 +10,7 @@ using Silk.NET.Windowing;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using VMASharp;
 using Monitor = System.Threading.Monitor;
 
 namespace Latte.NewRenderer.Vulkan;
@@ -31,7 +33,7 @@ internal static unsafe class VkContext
 
 	internal static DebugUtilsMessengerEXT DebugMessenger { get; private set; }
 
-	internal static IDeviceMemoryAllocator? AllocationManager { get; private set; }
+	internal static VulkanMemoryAllocator? AllocationManager { get; private set; }
 	internal static VkExtensionContainer? Extensions { get; private set; }
 
 	private static DisposalManager? disposalManager;
@@ -119,7 +121,18 @@ internal static unsafe class VkContext
 			VkInvalidHandleException.ThrowIfInvalid( PresentQueue.Queue );
 			VkInvalidHandleException.ThrowIfInvalid( TransferQueue.Queue );
 
-			AllocationManager = new PassthroughAllocator();
+			var allocatorCreateInfo = new VulkanMemoryAllocatorCreateInfo
+			{
+				VulkanAPIObject = Apis.Vk,
+				VulkanAPIVersion = new Version32( 1, 1, 0 ),
+				Instance = Instance,
+				PhysicalDevice = PhysicalDevice,
+				LogicalDevice = LogicalDevice,
+				FrameInUseCount = VkEngine.MaxFramesInFlight,
+				Flags = 0
+			};
+
+			AllocationManager = new VulkanMemoryAllocator( allocatorCreateInfo );
 			disposalManager = new DisposalManager();
 			Extensions = new VkExtensionContainer( instanceExtensions, deviceExtensions );
 
