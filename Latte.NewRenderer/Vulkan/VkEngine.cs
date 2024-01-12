@@ -687,7 +687,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Depth = 1
 		};
 
-		DepthFormat = Format.D32Sfloat;
+		DepthFormat = Format.D16Unorm;
 
 		var depthImageInfo = VkInfo.Image( DepthFormat, ImageUsageFlags.DepthStencilAttachmentBit, depthExtent );
 		var depthImage = VkContext.AllocationManager.CreateImage( depthImageInfo, new AllocationCreateInfo
