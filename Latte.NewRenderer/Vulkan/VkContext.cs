@@ -168,6 +168,7 @@ internal static unsafe class VkContext
 
 	internal static void StartDebugLabel( CommandBuffer cmd, string label, Vector4 color )
 	{
+#if DEBUG
 		if ( !IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
@@ -184,10 +185,12 @@ internal static unsafe class VkContext
 
 		var labelBytes = Encoding.ASCII.GetBytes( label );
 		debugUtilsExtension.CmdBeginDebugUtilsLabel( cmd, VkInfo.DebugLabel( labelBytes, colorSpan ) );
+#endif
 	}
 
 	internal static void EndDebugLabel( CommandBuffer cmd )
 	{
+#if DEBUG
 		if ( !IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
@@ -195,6 +198,7 @@ internal static unsafe class VkContext
 			return;
 
 		debugUtilsExtension.CmdEndDebugUtilsLabel( cmd );
+#endif
 	}
 
 	private static void Cleanup()
