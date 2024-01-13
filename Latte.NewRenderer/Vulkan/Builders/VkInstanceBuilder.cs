@@ -17,7 +17,8 @@ internal sealed class VkInstanceBuilder
 	private string name = "Vulkan Application";
 	private Version32 version = new Version( 1, 0, 0 );
 	private IView? view;
-	private HashSet<string> extensions = [];
+	private HashSet<string> requiredExtensions = [];
+	private HashSet<string> optionalExtensions = [];
 	private Version32 requiredVersion = new( 1, 0, 0 );
 	private bool useDebugMessenger;
 	private DebugUtilsMessageSeverityFlagsEXT messageSeverityFlags;
@@ -44,7 +45,13 @@ internal sealed class VkInstanceBuilder
 
 	public VkInstanceBuilder WithExtensions( params string[] extensions )
 	{
-		this.extensions = extensions.ToHashSet();
+		this.requiredExtensions = extensions.ToHashSet();
+		return this;
+	}
+
+	public VkInstanceBuilder WithOptionalExtensions( params string[] optionalExtensions )
+	{
+		this.optionalExtensions = optionalExtensions.ToHashSet();
 		return this;
 	}
 
@@ -56,7 +63,7 @@ internal sealed class VkInstanceBuilder
 
 	public unsafe VkInstanceBuilder UseDefaultDebugMessenger()
 	{
-		extensions.Add( ExtDebugUtils.ExtensionName );
+		optionalExtensions.Add( ExtDebugUtils.ExtensionName );
 		useDebugMessenger = true;
 		messageSeverityFlags = DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt |
 			DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt |
@@ -73,7 +80,7 @@ internal sealed class VkInstanceBuilder
 		DebugUtilsMessageTypeFlagsEXT messageTypeFlags,
 		DebugUtilsMessengerCallbackFunctionEXT debugMessengerCallback )
 	{
-		extensions.Add( ExtDebugUtils.ExtensionName );
+		optionalExtensions.Add( ExtDebugUtils.ExtensionName );
 		useDebugMessenger = true;
 		this.messageSeverityFlags = messageSeverityFlags;
 		this.messageTypeFlags = messageTypeFlags;
@@ -101,13 +108,21 @@ internal sealed class VkInstanceBuilder
 			PApplicationInfo = &appInfo
 		};
 
-		var requiredExtensions = GetRequiredExtensions( view );
-		var extensions = new HashSet<string>( this.extensions.Concat( requiredExtensions ) ).ToArray();
-		if ( !ExtensionsSupported( extensions, out var unsupportedExtensions ) )
+		var viewExtensions = GetRequiredExtensions( view );
+		var requiredExtensions = new HashSet<string>( this.requiredExtensions.Concat( viewExtensions ) ).ToArray();
+		if ( !ExtensionsSupported( requiredExtensions, out var unsupportedExtensions ) )
 			throw new VkException( $"The following extensions are unsupported by this Vulkan instance: {string.Join( ',', unsupportedExtensions )}" );
 
-		createInfo.EnabledExtensionCount = (uint)extensions.Length;
-		createInfo.PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions );
+		var optionalExtensions = this.optionalExtensions.ToArray();
+		ExtensionsSupported( optionalExtensions, out var unsupportedOptionalExtensions );
+
+		var finalExtensions = requiredExtensions.Concat( optionalExtensions )
+			.Where( extension => !unsupportedOptionalExtensions.Contains( extension ) )
+			.ToHashSet()
+			.ToArray();
+
+		createInfo.EnabledExtensionCount = (uint)finalExtensions.Length;
+		createInfo.PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( finalExtensions );
 
 		if ( useDebugMessenger )
 		{

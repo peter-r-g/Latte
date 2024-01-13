@@ -3,7 +3,10 @@ using Latte.NewRenderer.Vulkan.Extensions;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
+using SixLabors.ImageSharp.Processing;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace Latte.NewRenderer.Vulkan.Builders;
@@ -16,7 +19,8 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 	private KhrSurface? surfaceExtension;
 	private PhysicalDeviceFeatures featuresRequired;
 	private VkQueueFamilyIndices queueFamilyIndices;
-	private string[] extensions = [];
+	private HashSet<string> requiredExtensions = [];
+	private HashSet<string> optionalExtensions = [];
 	private nint pNextPtr;
 	private bool disposed;
 
@@ -55,7 +59,13 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 
 	internal VkLogicalDeviceBuilder WithExtensions( params string[] extensions )
 	{
-		this.extensions = extensions;
+		this.requiredExtensions = extensions.ToHashSet();
+		return this;
+	}
+
+	public VkLogicalDeviceBuilder WithOptionalExtensions( params string[] optionalExtensions )
+	{
+		this.optionalExtensions = optionalExtensions.ToHashSet();
 		return this;
 	}
 
@@ -83,6 +93,18 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 			};
 		}
 
+		var requiredExtensions = this.requiredExtensions.ToArray();
+		if ( !ExtensionsSupported( requiredExtensions, out var unsupportedExtensions ) )
+			throw new VkException( $"The following extensions are unsupported by this device: {string.Join( ',', unsupportedExtensions )}" );
+
+		var optionalExtensions = this.optionalExtensions.ToArray();
+		ExtensionsSupported( optionalExtensions, out var unsupportedOptionalExtensions );
+
+		var finalExtensions = requiredExtensions.Concat( optionalExtensions )
+			.Where( extension => !unsupportedOptionalExtensions.Contains( extension ) )
+			.ToHashSet()
+			.ToArray();
+
 		fixed ( PhysicalDeviceFeatures* featuresRequiredPtr = &featuresRequired )
 		{
 			var createInfo = new DeviceCreateInfo
@@ -91,8 +113,8 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 				QueueCreateInfoCount = (uint)uniqueIndices.Length,
 				PQueueCreateInfos = queueCreateInfos,
 				PEnabledFeatures = featuresRequiredPtr,
-				EnabledExtensionCount = (uint)extensions.Length,
-				PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( extensions ),
+				EnabledExtensionCount = (uint)finalExtensions.Length,
+				PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr( finalExtensions ),
 				PNext = (void*)pNextPtr
 			};
 
@@ -106,6 +128,24 @@ internal unsafe sealed class VkLogicalDeviceBuilder : IDisposable
 			return new VkLogicalDeviceBuilderResult( logicalDevice, graphicsQueue, queueFamilyIndices.GraphicsQueue,
 				presentQueue, queueFamilyIndices.PresentQueue, transferQueue, queueFamilyIndices.TransferQueue );
 		}
+	}
+
+	private bool ExtensionsSupported( IReadOnlyList<string> extensions, out IReadOnlyList<string> unsupportedExtensions )
+	{
+		var extensionsSupported = true;
+		var unsupportedExtensionsBuilder = new List<string>();
+
+		for ( var i = 0; i < extensions.Count; i++ )
+		{
+			if ( Apis.Vk.IsDeviceExtensionPresent( physicalDevice, extensions[i] ) )
+				continue;
+
+			extensionsSupported = false;
+			unsupportedExtensionsBuilder.Add( extensions[i] );
+		}
+
+		unsupportedExtensions = unsupportedExtensionsBuilder;
+		return extensionsSupported;
 	}
 
 	private void Dispose( bool disposing )

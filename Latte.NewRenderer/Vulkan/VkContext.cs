@@ -42,20 +42,28 @@ internal static unsafe class VkContext
 	private static readonly object initializeLock = new();
 
 	private static readonly string[] DefaultInstanceExtensions = [
-		ExtDebugUtils.ExtensionName,
 		KhrSurface.ExtensionName
 	];
 
+	private static readonly string[] DefaultOptionalInstanceExtensions = [
+		ExtDebugUtils.ExtensionName
+	];
+
 	private static readonly string[] DefaultDeviceExtensions = [
-		KhrSwapchain.ExtensionName,
+		KhrSwapchain.ExtensionName
+	];
+
+	private static readonly string[] DefaultOptionalDeviceExtensions = [
 		"VK_EXT_memory_priority",
 		ExtPageableDeviceLocalMemory.ExtensionName
 	];
 
 	// FIXME: Is there a way to initialize global state without a view?
-	internal static unsafe SurfaceKHR Initialize( IView view ) => Initialize( view, DefaultInstanceExtensions, DefaultDeviceExtensions );
+	internal static unsafe SurfaceKHR Initialize( IView view )
+		=> Initialize( view, DefaultInstanceExtensions, DefaultDeviceExtensions, DefaultOptionalInstanceExtensions, DefaultOptionalDeviceExtensions );
 
-	internal static unsafe SurfaceKHR Initialize( IView view, string[] instanceExtensions, string[] deviceExtensions )
+	internal static unsafe SurfaceKHR Initialize( IView view, string[] instanceExtensions, string[] deviceExtensions,
+		string[] optionalInstanceExtensions, string[] optionalDeviceExtensions )
 	{
 		Monitor.Enter( initializeLock );
 		try
@@ -67,6 +75,7 @@ internal static unsafe class VkContext
 				.WithName( "Latte" )
 				.WithView( view )
 				.WithExtensions( instanceExtensions )
+				.WithOptionalExtensions( optionalInstanceExtensions )
 				.RequireVulkanVersion( 1, 1, 0 )
 				.UseDefaultDebugMessenger()
 				.Build();
@@ -101,6 +110,7 @@ internal static unsafe class VkContext
 				.WithSurface( surface, surfaceExtension )
 				.WithQueueFamilyIndices( QueueFamilyIndices )
 				.WithExtensions( deviceExtensions )
+				.WithOptionalExtensions( optionalDeviceExtensions )
 				.WithFeatures( new PhysicalDeviceFeatures
 				{
 					FillModeNonSolid = Vk.True,
