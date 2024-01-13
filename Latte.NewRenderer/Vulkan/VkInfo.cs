@@ -404,4 +404,24 @@ internal unsafe static class VkInfo
 			AddressModeW = addressMode
 		};
 	}
+
+	internal unsafe static DebugUtilsLabelEXT DebugLabel( ReadOnlySpan<byte> nameBytes, ReadOnlySpan<float> color )
+	{
+		if ( color.Length != 4 )
+			throw new ArgumentException( "Colors must be four floats", nameof( color ) );
+
+		var label = new DebugUtilsLabelEXT
+		{
+			SType = StructureType.DebugUtilsLabelExt,
+			PNext = null
+		};
+
+		fixed ( byte* nameBytesPtr = nameBytes )
+			label.PLabelName = nameBytesPtr;
+
+		for ( var i = 0; i < 4; i++ )
+			label.Color[i] = color[i];
+
+		return label;
+	}
 }

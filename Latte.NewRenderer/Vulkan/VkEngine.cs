@@ -9,6 +9,7 @@ using Latte.NewRenderer.Vulkan.Temp;
 using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
+using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System;
@@ -20,6 +21,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using VMASharp;
 using LatteShader = Latte.Assets.Shader;
 using LatteTexture = Latte.Assets.Texture;
@@ -215,10 +217,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 			Apis.Vk.BeginCommandBuffer( cmd, beginInfo ).AssertSuccess();
 
+			StartDebugLabel( cmd, "Setup", new Vector4( 1, 1, 1, 1 ) );
 			Apis.Vk.CmdResetQueryPool( cmd, pipelineStatisticsQueryPool, 0, (uint)Materials.Count );
 			Apis.Vk.CmdResetQueryPool( cmd, gpuExecuteQueryPool, 0, 2 );
 
 			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.TopOfPipeBit, gpuExecuteQueryPool, 0 );
+			EndDebugLabel( cmd );
 
 			var renderArea = new Rect2D( new Offset2D( 0, 0 ), new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
 
@@ -250,14 +254,20 @@ internal unsafe sealed class VkEngine : IDisposable
 					PClearValues = clearValuesPtr
 				};
 
+				StartDebugLabel( cmd, "Main Render Pass", new Vector4( 1, 0, 0, 1 ) );
 				Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
 			}
 
+			StartDebugLabel( cmd, "Draw Renderables", new Vector4( 0, 1, 1, 1 ) );
 			DrawObjects( cmd, 0, Renderables.Count );
+			EndDebugLabel( cmd );
 
+			StartDebugLabel( cmd, "ImGui", new Vector4( 1, 1, 0, 1 ) );
 			ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
+			EndDebugLabel( cmd );
 
 			Apis.Vk.CmdEndRenderPass( cmd );
+			EndDebugLabel( cmd );
 
 			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
 
@@ -361,8 +371,12 @@ internal unsafe sealed class VkEngine : IDisposable
 			if ( !ReferenceEquals( lastMaterial, material ) )
 			{
 				if ( lastMaterial is not null )
+				{
 					Apis.Vk.CmdEndQuery( cmd, pipelineStatisticsQueryPool, (uint)MaterialIndices[lastMaterial] );
+					EndDebugLabel( cmd );
+				}
 
+				StartDebugLabel( cmd, obj.MaterialName, new Vector4( 0, 1, 0, 1 ) );
 				Apis.Vk.CmdBeginQuery( cmd, pipelineStatisticsQueryPool, (uint)MaterialIndices[material], QueryControlFlags.None );
 
 				if ( lastMaterial?.Pipeline.Handle != material.Pipeline.Handle )
@@ -381,6 +395,11 @@ internal unsafe sealed class VkEngine : IDisposable
 
 			if ( !ReferenceEquals( lastMesh, mesh ) )
 			{
+				if ( lastMesh is not null )
+					EndDebugLabel( cmd );
+
+				StartDebugLabel( cmd, obj.MeshName, new Vector4( 0, 0, 1, 1 ) );
+
 				Apis.Vk.CmdBindVertexBuffers( cmd, 0, 1, mesh.VertexBuffer.Buffer, 0 );
 				if ( mesh.Indices.Length > 0 )
 					Apis.Vk.CmdBindIndexBuffer( cmd, mesh.IndexBuffer.Buffer, 0, IndexType.Uint32 );
@@ -412,8 +431,14 @@ internal unsafe sealed class VkEngine : IDisposable
 			i += instanceCount - 1;
 		}
 
+		if ( lastMesh is not null )
+			EndDebugLabel( cmd );
+
 		if ( lastMaterial is not null )
+		{
 			Apis.Vk.CmdEndQuery( cmd, pipelineStatisticsQueryPool, (uint)MaterialIndices[lastMaterial] );
+			EndDebugLabel( cmd );
+		}
 	}
 
 	internal void WaitForIdle()
@@ -1680,6 +1705,32 @@ internal unsafe sealed class VkEngine : IDisposable
 		stagingBuffer.Allocation.Dispose();
 		disposalManager.Add( allocatedTextureImage.Allocation.Dispose );
 		disposalManager.Add( () => Apis.Vk.DestroyImage( VkContext.LogicalDevice, textureImage, null ) );
+	}
+
+	private static void StartDebugLabel( CommandBuffer cmd, string label, Vector4 color )
+	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		ReadOnlySpan<float> colorSpan = stackalloc float[]
+		{
+			color.X,
+			color.Y,
+			color.Z,
+			color.W
+		};
+
+		if ( VkContext.Extensions.TryGetExtension<ExtDebugUtils>( out var debugUtilsExtension ) )
+			debugUtilsExtension.CmdBeginDebugUtilsLabel( cmd, VkInfo.DebugLabel( Encoding.ASCII.GetBytes( label ), colorSpan ) );
+	}
+
+	private static void EndDebugLabel( CommandBuffer cmd )
+	{
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		if ( VkContext.Extensions.TryGetExtension<ExtDebugUtils>( out var debugUtilsExtension ) )
+			debugUtilsExtension.CmdEndDebugUtilsLabel( cmd );
 	}
 
 	private static AllocatedBuffer CreateBuffer( ulong size, BufferUsageFlags usageFlags, MemoryPropertyFlags memoryFlags,
