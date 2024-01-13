@@ -9,6 +9,8 @@ using Silk.NET.Windowing;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Text;
 using VMASharp;
 using Monitor = System.Threading.Monitor;
 
@@ -35,6 +37,7 @@ internal static unsafe class VkContext
 	internal static VulkanMemoryAllocator? AllocationManager { get; private set; }
 	internal static VkExtensionContainer? Extensions { get; private set; }
 
+	private static ExtDebugUtils? debugUtilsExtension;
 	private static DisposalManager? disposalManager;
 	private static readonly object initializeLock = new();
 
@@ -70,7 +73,7 @@ internal static unsafe class VkContext
 
 			Instance = instanceBuilderResult.Instance;
 			DebugMessenger = instanceBuilderResult.DebugMessenger;
-			var debugUtilsExtension = instanceBuilderResult.DebugUtilsExtension;
+			debugUtilsExtension = instanceBuilderResult.DebugUtilsExtension;
 
 			VkInvalidHandleException.ThrowIfInvalid( Instance );
 
@@ -161,6 +164,37 @@ internal static unsafe class VkContext
 		yield return GraphicsQueue;
 		yield return PresentQueue;
 		yield return TransferQueue;
+	}
+
+	internal static void StartDebugLabel( CommandBuffer cmd, string label, Vector4 color )
+	{
+		if ( !IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		if ( debugUtilsExtension is null )
+			return;
+
+		ReadOnlySpan<float> colorSpan = stackalloc float[]
+		{
+			color.X,
+			color.Y,
+			color.Z,
+			color.W
+		};
+
+		var labelBytes = Encoding.ASCII.GetBytes( label );
+		debugUtilsExtension.CmdBeginDebugUtilsLabel( cmd, VkInfo.DebugLabel( labelBytes, colorSpan ) );
+	}
+
+	internal static void EndDebugLabel( CommandBuffer cmd )
+	{
+		if ( !IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		if ( debugUtilsExtension is null )
+			return;
+
+		debugUtilsExtension.CmdEndDebugUtilsLabel( cmd );
 	}
 
 	private static void Cleanup()
