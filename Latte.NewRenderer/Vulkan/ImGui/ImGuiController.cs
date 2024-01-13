@@ -254,6 +254,8 @@ public sealed class ImGuiController : IDisposable
 
 		Apis.Vk.CreateSampler( VkContext.LogicalDevice, info, default, out fontSampler ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( fontSampler );
+		VkContext.SetObjectName( fontSampler.Handle, ObjectType.Sampler, "ImGui Font Sampler" );
+
 		disposalManager.Add( () => Apis.Vk.DestroySampler( VkContext.LogicalDevice, fontSampler, null ) );
 	}
 
@@ -279,9 +281,11 @@ public sealed class ImGuiController : IDisposable
 
 		Apis.Vk.CreateDescriptorSetLayout( VkContext.LogicalDevice, descriptorInfo, default, out descriptorSetLayout ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( descriptorSetLayout );
+		VkContext.SetObjectName( descriptorSetLayout.Handle, ObjectType.DescriptorSetLayout, "ImGui Descriptor Set Layout" );
 
 		descriptorSet = engine.DescriptorAllocator.Allocate( new ReadOnlySpan<DescriptorSetLayout>( ref descriptorSetLayout ) );
 		VkInvalidHandleException.ThrowIfInvalid( descriptorSet );
+		VkContext.SetObjectName( descriptorSet.Handle, ObjectType.DescriptorSet, "ImGui Descriptor Set" );
 
 		disposalManager.Add( () => Apis.Vk.DestroyDescriptorSetLayout( VkContext.LogicalDevice, descriptorSetLayout, null ) );
 	}
@@ -301,6 +305,7 @@ public sealed class ImGuiController : IDisposable
 			.AddDescriptorSetLayout( descriptorSetLayout )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( pipelineLayout );
+		VkContext.SetObjectName( pipelineLayout.Handle, ObjectType.PipelineLayout, "ImGui Pipeline Layout" );
 
 		var imguiVert = engine.CreateShader( "imgui.vert", LatteShader.FromPath( "/Assets/Shaders/imgui.vert.spv" ) );
 		var imguiFrag = engine.CreateShader( "imgui.frag", LatteShader.FromPath( "/Assets/Shaders/imgui.frag.spv" ) );
@@ -336,6 +341,7 @@ public sealed class ImGuiController : IDisposable
 			.WithDepthStencilState( VkInfo.PipelineDepthStencilState( false, false, CompareOp.Never ) )
 			.Build();
 		VkInvalidHandleException.ThrowIfInvalid( pipeline );
+		VkContext.SetObjectName( pipeline.Handle, ObjectType.Pipeline, "ImGui Pipeline" );
 
 		disposalManager.Add( imguiVert.Dispose );
 		disposalManager.Add( imguiFrag.Dispose );
@@ -358,10 +364,12 @@ public sealed class ImGuiController : IDisposable
 		var poolInfo = VkInfo.CommandPool( graphicsFamilyIndex );
 		Apis.Vk.CreateCommandPool( VkContext.LogicalDevice, poolInfo, null, out var commandPool ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( commandPool );
+		VkContext.SetObjectName( commandPool.Handle, ObjectType.CommandPool, "ImGui Font Upload Command Pool" );
 
 		var allocInfo = VkInfo.AllocateCommandBuffer( commandPool, 1 );
 		Apis.Vk.AllocateCommandBuffers( VkContext.LogicalDevice, allocInfo, out var commandBuffer ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( commandBuffer );
+		VkContext.SetObjectName( commandBuffer.Handle, ObjectType.CommandBuffer, "ImGui Font Upload Command Buffer" );
 
 		var beginInfo = VkInfo.BeginCommandBuffer( CommandBufferUsageFlags.OneTimeSubmitBit );
 		Apis.Vk.BeginCommandBuffer( commandBuffer, beginInfo ).AssertSuccess();
@@ -389,11 +397,13 @@ public sealed class ImGuiController : IDisposable
 			Usage = MemoryUsage.GPU_Only
 		}, out var fontImageAllocation );
 		VkInvalidHandleException.ThrowIfInvalid( unallocatedFontImage );
+		VkContext.SetObjectName( unallocatedFontImage.Handle, ObjectType.Image, "ImGui Font Image" );
 		fontImage = new AllocatedImage( unallocatedFontImage, fontImageAllocation );
 
 		var imageViewInfo = VkInfo.ImageView( Format.R8G8B8A8Unorm, fontImage.Image, ImageAspectFlags.ColorBit );
 		Apis.Vk.CreateImageView( VkContext.LogicalDevice, &imageViewInfo, default, out fontView ).AssertSuccess();
 		VkInvalidHandleException.ThrowIfInvalid( fontView );
+		VkContext.SetObjectName( fontView.Handle, ObjectType.ImageView, "ImGui Font Image View" );
 
 		new VkDescriptorUpdater( VkContext.LogicalDevice, 1 )
 			.WriteImage( 0, DescriptorType.CombinedImageSampler, fontView, fontSampler, ImageLayout.ShaderReadOnlyOptimal )
@@ -408,6 +418,7 @@ public sealed class ImGuiController : IDisposable
 			Usage = MemoryUsage.CPU_To_GPU
 		}, out var stagingBufferAllocation );
 		VkInvalidHandleException.ThrowIfInvalid( unallocatedStagingBuffer );
+		VkContext.SetObjectName( unallocatedStagingBuffer.Handle, ObjectType.Buffer, "ImGui Font Upload Staging Buffer" );
 		var stagingBuffer = new AllocatedBuffer( unallocatedStagingBuffer, stagingBufferAllocation );
 		stagingBufferAllocation.SetMemory( pixels, uploadSize );
 
@@ -718,6 +729,7 @@ public sealed class ImGuiController : IDisposable
 			Usage = MemoryUsage.CPU_To_GPU
 		}, out var bufferAllocation );
 		VkInvalidHandleException.ThrowIfInvalid( buffer );
+		VkContext.SetObjectName( buffer.Handle, ObjectType.Buffer, $"ImGui {(usage == BufferUsageFlags.VertexBufferBit ? "Vertex" : "Index")} Buffer" );
 		allocatedBuffer = new AllocatedBuffer( buffer, bufferAllocation );
 	}
 

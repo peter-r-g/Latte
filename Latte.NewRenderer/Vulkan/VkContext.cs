@@ -148,6 +148,12 @@ internal static unsafe class VkContext
 
 			AppDomain.CurrentDomain.ProcessExit += Cleanup;
 			IsInitialized = true;
+
+			SetObjectName( PhysicalDevice.Handle, ObjectType.PhysicalDevice, PhysicalDeviceInfo.Name );
+			SetObjectName( LogicalDevice.Handle, ObjectType.Device, $"{PhysicalDeviceInfo.Name} (Logical)" );
+			SetObjectName( GraphicsQueue.Queue.Handle, ObjectType.Queue, $"Graphics Queue (Family: {GraphicsQueue.QueueFamily})" );
+			SetObjectName( PresentQueue.Queue.Handle, ObjectType.Queue, $"Present Queue (Family: {PresentQueue.QueueFamily})" );
+			SetObjectName( TransferQueue.Queue.Handle, ObjectType.Queue, $"Transfer Queue (Family: {TransferQueue.QueueFamily})" );
 			return surface;
 		}
 		finally
@@ -164,6 +170,21 @@ internal static unsafe class VkContext
 		yield return GraphicsQueue;
 		yield return PresentQueue;
 		yield return TransferQueue;
+	}
+
+	internal static void SetObjectName( nint objectHandle, ObjectType type, string name ) => SetObjectName( (ulong)objectHandle, type, name );
+	internal static void SetObjectName( ulong objectHandle, ObjectType type, string name )
+	{
+#if DEBUG
+		if ( !IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		if ( debugUtilsExtension is null )
+			return;
+
+		ReadOnlySpan<byte> nameBytes = Encoding.ASCII.GetBytes( name );
+		debugUtilsExtension.SetDebugUtilsObjectName( LogicalDevice, VkInfo.DebugObjectName( objectHandle, type, nameBytes ) ).AssertSuccess();
+#endif
 	}
 
 	internal static void StartDebugLabel( CommandBuffer cmd, string label, Vector4 color )

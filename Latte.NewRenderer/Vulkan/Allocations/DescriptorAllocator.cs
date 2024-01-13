@@ -101,6 +101,7 @@ internal sealed class DescriptorAllocator : IDisposable
 
 		var descriptorPoolInfo = VkInfo.DescriptorPool( setCount, poolSizes );
 		Apis.Vk.CreateDescriptorPool( logicalDevice, descriptorPoolInfo, null, out var descriptorPool );
+		VkContext.SetObjectName( descriptorPool.Handle, ObjectType.DescriptorPool, "Descriptor Pool (From Allocator)" );
 		return descriptorPool;
 	}
 

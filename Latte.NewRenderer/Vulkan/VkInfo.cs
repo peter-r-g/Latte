@@ -405,6 +405,21 @@ internal unsafe static class VkInfo
 		};
 	}
 
+	internal unsafe static DebugUtilsObjectNameInfoEXT DebugObjectName( ulong objectHandle, ObjectType type, ReadOnlySpan<byte> nameBytes )
+	{
+		fixed( byte* nameBytesPtr = nameBytes )
+		{
+			return new DebugUtilsObjectNameInfoEXT
+			{
+				SType = StructureType.DebugUtilsObjectNameInfoExt,
+				PNext = null,
+				ObjectHandle = objectHandle,
+				ObjectType = type,
+				PObjectName = nameBytesPtr
+			};
+		}
+	}
+
 	internal unsafe static DebugUtilsLabelEXT DebugLabel( ReadOnlySpan<byte> nameBytes, ReadOnlySpan<float> color )
 	{
 		if ( color.Length != 4 )
