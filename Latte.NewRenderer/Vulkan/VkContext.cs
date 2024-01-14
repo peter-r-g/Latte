@@ -46,7 +46,9 @@ internal static unsafe class VkContext
 	];
 
 	private static readonly string[] DefaultOptionalInstanceExtensions = [
+#if DEBUG
 		ExtDebugUtils.ExtensionName
+#endif
 	];
 
 	private static readonly string[] DefaultDeviceExtensions = [
