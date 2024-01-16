@@ -541,7 +541,7 @@ public sealed class ImGuiController : IDisposable
 		io.MouseWheel = wheel.Y;
 		io.MouseWheelH = wheel.X;
 
-		foreach ( Key key in Enum.GetValues( typeof( Key ) ) )
+		foreach ( Key key in Enum.GetValues<Key>() )
 		{
 			if ( key == Key.Unknown )
 			{
