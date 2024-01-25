@@ -14,6 +14,9 @@ internal abstract class RendererApi : IDisposable
 
 	internal abstract void Initialize();
 
+	internal abstract void StartFrame( Camera camera );
+	internal abstract void EndFrame();
+
 	internal abstract void Clear();
 
 	internal abstract void DrawIndexed( VertexArray vao, uint indexCount );

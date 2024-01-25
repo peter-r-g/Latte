@@ -9,6 +9,16 @@ internal sealed class NoneRendererApi : RendererApi
 
 	internal override Viewport Viewport { get => throw new System.NotImplementedException(); set => throw new System.NotImplementedException(); }
 
+	internal override void StartFrame( Camera camera )
+	{
+		throw new System.NotImplementedException();
+	}
+
+	internal override void EndFrame()
+	{
+		throw new System.NotImplementedException();
+	}
+
 	internal override void Clear()
 	{
 		throw new System.NotImplementedException();
