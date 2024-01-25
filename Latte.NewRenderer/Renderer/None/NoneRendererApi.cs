@@ -9,7 +9,7 @@ internal sealed class NoneRendererApi : RendererApi
 	internal override RenderMode Mode { get => throw new System.NotImplementedException(); set => throw new System.NotImplementedException(); }
 
 	internal override Vector4 ClearColor { get => throw new System.NotImplementedException(); set => throw new System.NotImplementedException(); }
-	internal override Vector4 Viewport { get => throw new System.NotImplementedException(); set => throw new System.NotImplementedException(); }
+	internal override Viewport Viewport { get => throw new System.NotImplementedException(); set => throw new System.NotImplementedException(); }
 
 	internal override void Clear()
 	{
