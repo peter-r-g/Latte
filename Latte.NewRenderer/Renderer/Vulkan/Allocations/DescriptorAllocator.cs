@@ -1,5 +1,4 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan;
-using Latte.NewRenderer.Renderer.Vulkan.Extensions;
+﻿using Latte.NewRenderer.Renderer.Vulkan.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;

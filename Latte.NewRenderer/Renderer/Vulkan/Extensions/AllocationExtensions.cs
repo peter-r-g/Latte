@@ -2,7 +2,6 @@
 using System.Runtime.InteropServices;
 using System;
 using VMASharp;
-using Latte.NewRenderer.Renderer.Vulkan;
 
 namespace Latte.NewRenderer.Renderer.Vulkan.Extensions;
 

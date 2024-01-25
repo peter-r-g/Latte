@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Latte.NewRenderer.Renderer.Abstractions;
 
 namespace Latte.NewRenderer.Renderer.Abstractions.Extensions;
 

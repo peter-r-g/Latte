@@ -1,5 +1,4 @@
 ﻿using System;
-using Latte.NewRenderer.Renderer.Abstractions;
 
 namespace Latte.NewRenderer.Renderer.Abstractions.Extensions;
 

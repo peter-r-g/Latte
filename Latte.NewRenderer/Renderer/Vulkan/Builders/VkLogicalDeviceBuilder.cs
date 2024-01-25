@@ -3,7 +3,6 @@ using Latte.NewRenderer.Renderer.Vulkan.Extensions;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
-using SixLabors.ImageSharp.Processing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
