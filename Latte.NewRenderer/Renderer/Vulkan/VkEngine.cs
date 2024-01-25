@@ -1,5 +1,6 @@
 ﻿using ImGuiNET;
 using Latte.Assets;
+using Latte.Windowing.Renderer.Abstractions;
 using Latte.Windowing.Renderer.Vulkan.Allocations;
 using Latte.Windowing.Renderer.Vulkan.Builders;
 using Latte.Windowing.Renderer.Vulkan.Exceptions;
@@ -27,10 +28,11 @@ using LatteTexture = Latte.Assets.Texture;
 using Mesh = Latte.Windowing.Renderer.Vulkan.Temp.Mesh;
 using Shader = Latte.Windowing.Renderer.Vulkan.Temp.Shader;
 using Texture = Latte.Windowing.Renderer.Vulkan.Temp.Texture;
+using Viewport = Silk.NET.Vulkan.Viewport;
 
 namespace Latte.Windowing.Renderer.Vulkan;
 
-internal unsafe sealed class VkEngine : IDisposable
+internal unsafe sealed class VkEngine : RendererApi
 {
 	internal const int MaxFramesInFlight = 3;
 	private const int MaxObjects = 10_000;
@@ -69,6 +71,8 @@ internal unsafe sealed class VkEngine : IDisposable
 	}
 	private bool vsyncEnabled = true;
 
+	internal override RenderApi Api => RenderApi.Vulkan;
+
 	internal bool IsVisible => View.Size.X != 0 && View.Size.Y != 0;
 
 	internal ImGuiController ImGuiController { get; private set; } = null!;
@@ -91,6 +95,15 @@ internal unsafe sealed class VkEngine : IDisposable
 	private FrameData CurrentFrameData => frameData[frameNumber % MaxFramesInFlight];
 
 	internal DescriptorAllocator DescriptorAllocator { get; private set; } = null!;
+
+	internal override RenderMode Mode
+	{
+		get => WireframeEnabled ? RenderMode.Wireframe : RenderMode.Solid;
+		set => WireframeEnabled = value == RenderMode.Wireframe;
+	}
+
+	internal override Abstractions.Viewport Viewport { get; set; }
+
 	private DescriptorSetLayout frameSetLayout;
 	private DescriptorSetLayout singleTextureSetLayout;
 
@@ -160,14 +173,17 @@ internal unsafe sealed class VkEngine : IDisposable
 		InitializeScene();
 	}
 
-	internal void Draw()
+	internal override void Initialize()
+	{
+		// We initialize in constructor.
+	}
+
+	internal override void StartFrame( Camera camera )
 	{
 		ObjectDisposedException.ThrowIf( disposed, this );
 
 		if ( !VkContext.IsInitialized )
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
-
-		var drawProfile = CpuProfile.New( "Total" );
 
 		if ( !IsVisible || waitingForIdle )
 			return;
@@ -208,8 +224,8 @@ internal unsafe sealed class VkEngine : IDisposable
 		}
 		cpuPerformanceTimes[acquireSwapchainImageProfile.Name] = acquireSwapchainImageProfile.Time;
 
-		var recordProfile = CpuProfile.New( "Record command buffer" );
-		using ( recordProfile )
+		var renderPassProfile = CpuProfile.New( "Start main render pass" );
+		using ( renderPassProfile )
 		{
 			Apis.Vk.ResetCommandBuffer( cmd, CommandBufferResetFlags.None ).AssertSuccess();
 
@@ -229,13 +245,13 @@ internal unsafe sealed class VkEngine : IDisposable
 			{
 				new ClearValue
 				{
-					Color = new ClearColorValue( Camera.Main.ClearColor.X, Camera.Main.ClearColor.Y, Camera.Main.ClearColor.Z )
+					Color = new ClearColorValue( camera.ClearColor.X, camera.ClearColor.Y, camera.ClearColor.Z )
 				},
 				new ClearValue
 				{
 					DepthStencil = new ClearDepthStencilValue
 					{
-						Depth = 1
+						Depth = camera.ClearDepth ? Viewport.Depth.Y : 0
 					}
 				}
 			};
@@ -256,23 +272,34 @@ internal unsafe sealed class VkEngine : IDisposable
 				VkContext.StartDebugLabel( cmd, "Main Render Pass", new Vector4( 1, 0, 0, 1 ) );
 				Apis.Vk.CmdBeginRenderPass( cmd, rpBeginInfo, SubpassContents.Inline );
 			}
-
-			VkContext.StartDebugLabel( cmd, "Draw Renderables", new Vector4( 0, 1, 1, 1 ) );
-			DrawObjects( cmd, 0, Renderables.Count );
-			VkContext.EndDebugLabel( cmd );
-
-			VkContext.StartDebugLabel( cmd, "ImGui", new Vector4( 1, 1, 0, 1 ) );
-			ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
-			VkContext.EndDebugLabel( cmd );
-
-			Apis.Vk.CmdEndRenderPass( cmd );
-			VkContext.EndDebugLabel( cmd );
-
-			Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
-
-			Apis.Vk.EndCommandBuffer( cmd ).AssertSuccess();
 		}
-		cpuPerformanceTimes[recordProfile.Name] = recordProfile.Time;
+		cpuPerformanceTimes[renderPassProfile.Name] = renderPassProfile.Time;
+
+		CurrentFrameData.Camera = camera;
+		CurrentFrameData.SwapchainImageIndex = swapchainImageIndex;
+	}
+
+	internal override void EndFrame()
+	{
+		ObjectDisposedException.ThrowIf( disposed, this );
+
+		if ( !VkContext.IsInitialized )
+			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
+
+		var swapchain = this.swapchain;
+		var currentFrameData = CurrentFrameData;
+		var renderFence = currentFrameData.RenderFence;
+		var presentSemaphore = currentFrameData.PresentSemaphore;
+		var renderSemaphore = currentFrameData.RenderSemaphore;
+		var cmd = currentFrameData.CommandBuffer;
+		var swapchainImageIndex = CurrentFrameData.SwapchainImageIndex;
+
+		Apis.Vk.CmdEndRenderPass( cmd );
+		VkContext.EndDebugLabel( cmd );
+
+		Apis.Vk.CmdWriteTimestamp( cmd, PipelineStageFlags.BottomOfPipeBit, gpuExecuteQueryPool, 1 );
+
+		Apis.Vk.EndCommandBuffer( cmd ).AssertSuccess();
 
 		var submitProfile = CpuProfile.New( "Submit" );
 		using ( submitProfile )
@@ -315,7 +342,24 @@ internal unsafe sealed class VkEngine : IDisposable
 		cpuPerformanceTimes[presentProfile.Name] = presentProfile.Time;
 
 		frameNumber++;
-		drawProfile.Dispose();
+	}
+
+	internal override void DrawIndexed( VertexArray vao, uint indexCount )
+	{
+		var cmd = CurrentFrameData.CommandBuffer;
+		var swapchainImageIndex = CurrentFrameData.SwapchainImageIndex;
+
+		var drawProfile = CpuProfile.New( "Draw" );
+		using ( drawProfile )
+		{
+			VkContext.StartDebugLabel( cmd, "Draw Renderables", new Vector4( 0, 1, 1, 1 ) );
+			DrawObjects( cmd, 0, Renderables.Count );
+			VkContext.EndDebugLabel( cmd );
+
+			VkContext.StartDebugLabel( cmd, "ImGui", new Vector4( 1, 1, 0, 1 ) );
+			ImGuiController.Render( cmd, framebuffers[(int)swapchainImageIndex], new Extent2D( (uint)View.Size.X, (uint)View.Size.Y ) );
+			VkContext.EndDebugLabel( cmd );
+		}
 		cpuPerformanceTimes[drawProfile.Name] = drawProfile.Time;
 	}
 
@@ -325,11 +369,19 @@ internal unsafe sealed class VkEngine : IDisposable
 			throw new VkException( $"{nameof( VkContext )} has not been initialized" );
 
 		var currentFrameData = CurrentFrameData;
+		var camera = currentFrameData.Camera;
+		var cameraBuffer = currentFrameData.CameraBuffer;
+		var objectBuffer = currentFrameData.ObjectBuffer;
+		var lightBuffer = currentFrameData.LightBuffer;
+		var frameDescriptor = currentFrameData.FrameDescriptor;
 
-		var view = Matrix4x4.Identity * Matrix4x4.CreateLookAt( Camera.Main.Position, Camera.Main.Position + Camera.Main.Front, Camera.Main.Up );
-		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( Camera.Main.Zoom ),
+		if ( camera is null )
+			return;
+
+		var view = Matrix4x4.Identity * Matrix4x4.CreateLookAt( camera.Position, camera.Position + camera.Front, camera.Up );
+		var projection = Matrix4x4.CreatePerspectiveFieldOfView( Scalar.DegreesToRadians( camera.Zoom ),
 			(float)View.Size.X / View.Size.Y,
-			Camera.Main.ZNear, Camera.Main.ZFar );
+			camera.ZNear, camera.ZFar );
 		projection.M22 *= -1;
 
 		var cameraData = new GpuCameraData
@@ -338,7 +390,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			Projection = projection,
 			ViewProjection = view * projection
 		};
-		currentFrameData.CameraBuffer.Allocation.SetMemory( cameraData );
+		cameraBuffer.Allocation.SetMemory( cameraData );
 
 		var frameIndex = frameNumber % frameData.Length;
 		sceneParameters.LightCount = Lights.Count;
@@ -348,7 +400,7 @@ internal unsafe sealed class VkEngine : IDisposable
 		for ( var i = 0; i < count; i++ )
 			objectData[i] = new GpuObjectData( Renderables[first + i].Transform );
 
-		currentFrameData.ObjectBuffer.Allocation.SetMemory( (ReadOnlySpan<GpuObjectData>)objectData );
+		objectBuffer.Allocation.SetMemory( (ReadOnlySpan<GpuObjectData>)objectData );
 
 		for ( var i = 0; i < Lights.Count; i++ )
 		{
@@ -356,7 +408,7 @@ internal unsafe sealed class VkEngine : IDisposable
 			lightData[i] = new GpuLightData( light.Position, light.Color );
 		}
 
-		currentFrameData.LightBuffer.Allocation.SetMemory( (ReadOnlySpan<GpuLightData>)lightData );
+		lightBuffer.Allocation.SetMemory( (ReadOnlySpan<GpuLightData>)lightData );
 
 		Mesh? lastMesh = null;
 		Material? lastMaterial = null;
@@ -383,7 +435,7 @@ internal unsafe sealed class VkEngine : IDisposable
 					Apis.Vk.CmdBindPipeline( cmd, PipelineBindPoint.Graphics, material.Pipeline );
 
 					var uniformOffset = (uint)(PadUniformBufferSize( (ulong)sizeof( GpuSceneData ) ) * (ulong)frameIndex);
-					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, currentFrameData.FrameDescriptor, 1, &uniformOffset );
+					Apis.Vk.CmdBindDescriptorSets( cmd, PipelineBindPoint.Graphics, material.PipelineLayout, 0, 1, frameDescriptor, 1, &uniformOffset );
 				}
 
 				if ( material.TextureSet.IsValid() && lastMaterial?.TextureSet.Handle != material.TextureSet.Handle )
@@ -1797,8 +1849,10 @@ internal unsafe sealed class VkEngine : IDisposable
 			return currentSize;
 	}
 
-	private void Dispose( bool disposing )
+	protected override void Dispose( bool disposing )
 	{
+		base.Dispose();
+
 		if ( disposed )
 			return;
 
@@ -1813,12 +1867,6 @@ internal unsafe sealed class VkEngine : IDisposable
 		disposalManager?.Dispose();
 
 		disposed = true;
-	}
-
-	public void Dispose()
-	{
-		Dispose( disposing: true );
-		GC.SuppressFinalize( this );
 	}
 
 	private class UploadContext

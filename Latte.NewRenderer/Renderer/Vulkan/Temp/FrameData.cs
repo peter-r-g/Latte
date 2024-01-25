@@ -16,4 +16,7 @@ internal sealed class FrameData
 	internal AllocatedBuffer ObjectBuffer;
 	internal AllocatedBuffer LightBuffer;
 	internal DescriptorSet FrameDescriptor;
+
+	internal Camera? Camera;
+	internal uint SwapchainImageIndex;
 }

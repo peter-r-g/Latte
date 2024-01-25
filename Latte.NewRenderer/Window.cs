@@ -84,7 +84,17 @@ public class Window
 
 	private void Render( double dt )
 	{
-		engine.Draw();
+		engine.Viewport = new Renderer.Abstractions.Viewport
+		{
+			Position = new Vector2( 0, 0 ),
+			Size = new Vector2( window.Size.X, window.Size.Y ),
+			Depth = new Vector2( 0, 1 )
+		};
+		engine.StartFrame( Camera.Main );
+
+		engine.DrawIndexed( null!, 0 );
+
+		engine.EndFrame();
 	}
 
 	private void UpdateCamera( double dt )
