@@ -32,4 +32,5 @@ public class Camera
 	public float ZFar { get; set; } = 10000;
 
 	public Vector3 ClearColor { get; set; } = Vector3.Zero;
+	public bool ClearDepth { get; set; } = true;
 }

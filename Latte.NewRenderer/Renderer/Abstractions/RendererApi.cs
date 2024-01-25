@@ -10,7 +10,6 @@ internal abstract class RendererApi : IDisposable
 
 	internal abstract RenderApi Api { get; }
 	internal abstract RenderMode Mode { get; set; }
-	internal abstract Vector4 ClearColor { get; set; }
 	internal abstract Viewport Viewport { get; set; }
 
 	internal abstract void Initialize();
