@@ -1,5 +1,5 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
-using Latte.NewRenderer.Renderer.Vulkan.Extensions;
+﻿using Latte.Windowing.Renderer.Vulkan.Exceptions;
+using Latte.Windowing.Renderer.Vulkan.Extensions;
 using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Builders;
+namespace Latte.Windowing.Renderer.Vulkan.Builders;
 
 internal sealed class VkInstanceBuilder
 {

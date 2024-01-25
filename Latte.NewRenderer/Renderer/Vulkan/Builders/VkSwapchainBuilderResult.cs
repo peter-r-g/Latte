@@ -2,7 +2,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Builders;
+namespace Latte.Windowing.Renderer.Vulkan.Builders;
 
 [method: SetsRequiredMembers]
 internal readonly struct VkSwapchainBuilderResult(

@@ -1,4 +1,4 @@
-﻿using Latte.NewRenderer.Extensions;
+﻿using Latte.Windowing.Extensions;
 using Silk.NET.GLFW;
 using Silk.NET.Input;
 using Silk.NET.Windowing;
@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using MouseButton = Silk.NET.Input.MouseButton;
 
-namespace Latte.NewRenderer.Input;
+namespace Latte.Windowing.Input;
 
 /// <summary>
 /// A container that wraps a <see cref="IWindow"/>s <see cref="IInputContext"/>.

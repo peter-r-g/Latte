@@ -2,7 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using VMASharp;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Allocations;
+namespace Latte.Windowing.Renderer.Vulkan.Allocations;
 
 [method: SetsRequiredMembers]
 internal struct AllocatedBuffer( Buffer buffer, Allocation allocation )

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Exceptions;
+namespace Latte.Windowing.Renderer.Vulkan.Exceptions;
 
 internal class VkException : Exception
 {

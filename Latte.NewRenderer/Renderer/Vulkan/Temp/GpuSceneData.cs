@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Temp;
+namespace Latte.Windowing.Renderer.Vulkan.Temp;
 
 internal struct GpuSceneData
 {

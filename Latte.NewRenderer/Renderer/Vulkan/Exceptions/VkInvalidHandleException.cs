@@ -1,10 +1,10 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Extensions;
+﻿using Latte.Windowing.Renderer.Vulkan.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Exceptions;
+namespace Latte.Windowing.Renderer.Vulkan.Exceptions;
 
 internal sealed class VkInvalidHandleException : VkException
 {

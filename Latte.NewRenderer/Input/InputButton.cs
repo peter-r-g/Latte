@@ -1,4 +1,4 @@
-﻿namespace Latte.NewRenderer.Input;
+﻿namespace Latte.Windowing.Input;
 
 /// <summary>
 /// Defines an input that can be triggered.

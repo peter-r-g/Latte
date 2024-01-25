@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 [method: SetsRequiredMembers]
 internal readonly struct VkPipelineStatistics(

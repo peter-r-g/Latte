@@ -1,6 +1,6 @@
 ﻿using Silk.NET.Vulkan;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Temp;
+namespace Latte.Windowing.Renderer.Vulkan.Temp;
 
 internal sealed class Material
 {

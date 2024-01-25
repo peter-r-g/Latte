@@ -1,7 +1,7 @@
 ﻿using Silk.NET.Vulkan;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Allocations;
+namespace Latte.Windowing.Renderer.Vulkan.Allocations;
 
 [method: SetsRequiredMembers]
 internal readonly struct PoolSizeRatio( DescriptorType type, float ratio )

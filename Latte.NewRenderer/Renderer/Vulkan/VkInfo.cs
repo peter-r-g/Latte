@@ -2,7 +2,7 @@
 using Silk.NET.Vulkan;
 using System;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 internal unsafe static class VkInfo
 {

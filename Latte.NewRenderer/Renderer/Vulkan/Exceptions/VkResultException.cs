@@ -1,6 +1,6 @@
 ﻿using Silk.NET.Vulkan;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Exceptions;
+namespace Latte.Windowing.Renderer.Vulkan.Exceptions;
 
 internal sealed class VkResultException : VkException
 {

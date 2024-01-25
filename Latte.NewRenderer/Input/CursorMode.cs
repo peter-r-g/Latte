@@ -1,4 +1,4 @@
-﻿namespace Latte.NewRenderer.Input;
+﻿namespace Latte.Windowing.Input;
 
 /// <summary>
 /// Defines a mode for a cursor to operate in.

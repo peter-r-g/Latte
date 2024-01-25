@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Latte.NewRenderer;
+namespace Latte.Windowing;
 
 internal sealed class CpuProfile : IDisposable
 {

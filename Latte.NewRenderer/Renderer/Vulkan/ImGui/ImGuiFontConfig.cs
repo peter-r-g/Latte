@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.ImGui;
+namespace Latte.Windowing.Renderer.Vulkan.ImGui;
 
 public readonly struct ImGuiFontConfig
 {

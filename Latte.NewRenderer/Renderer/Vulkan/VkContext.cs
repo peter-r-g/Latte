@@ -1,6 +1,6 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Builders;
-using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
-using Latte.NewRenderer.Renderer.Vulkan.Extensions;
+﻿using Latte.Windowing.Renderer.Vulkan.Builders;
+using Latte.Windowing.Renderer.Vulkan.Exceptions;
+using Latte.Windowing.Renderer.Vulkan.Extensions;
 using Silk.NET.Core;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
@@ -14,7 +14,7 @@ using System.Text;
 using VMASharp;
 using Monitor = System.Threading.Monitor;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 internal static unsafe class VkContext
 {

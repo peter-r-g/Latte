@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 
-namespace Latte.NewRenderer;
+namespace Latte.Windowing;
 
 internal static class Program
 {

@@ -2,7 +2,7 @@
 using Silk.NET.Input;
 using System;
 
-namespace Latte.NewRenderer.Extensions;
+namespace Latte.Windowing.Extensions;
 
 internal static class KeyExtensions
 {

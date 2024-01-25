@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Latte.NewRenderer.Renderer.Abstractions;
+namespace Latte.Windowing.Renderer.Abstractions;
 
 internal abstract class Buffer : IDisposable
 {

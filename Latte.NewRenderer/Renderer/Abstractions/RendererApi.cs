@@ -1,8 +1,8 @@
-﻿using Latte.NewRenderer.Renderer.None;
+﻿using Latte.Windowing.Renderer.None;
 using System;
 using System.Numerics;
 
-namespace Latte.NewRenderer.Renderer.Abstractions;
+namespace Latte.Windowing.Renderer.Abstractions;
 
 internal abstract class RendererApi : IDisposable
 {

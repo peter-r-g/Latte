@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System;
 using VMASharp;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Extensions;
+namespace Latte.Windowing.Renderer.Vulkan.Extensions;
 
 internal static class AllocationExtensions
 {

@@ -1,7 +1,7 @@
 ﻿using System.Numerics;
-using Latte.NewRenderer.Renderer.Abstractions;
+using Latte.Windowing.Renderer.Abstractions;
 
-namespace Latte.NewRenderer.Renderer.None;
+namespace Latte.Windowing.Renderer.None;
 
 internal sealed class NoneRendererApi : RendererApi
 {

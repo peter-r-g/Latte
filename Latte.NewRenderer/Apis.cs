@@ -1,7 +1,7 @@
 ﻿using Silk.NET.GLFW;
 using Silk.NET.Vulkan;
 
-namespace Latte.NewRenderer;
+namespace Latte.Windowing;
 
 internal static class Apis
 {

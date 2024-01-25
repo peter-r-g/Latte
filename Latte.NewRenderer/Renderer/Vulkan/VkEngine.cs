@@ -1,12 +1,12 @@
 ﻿using ImGuiNET;
 using Latte.Assets;
-using Latte.NewRenderer.Renderer.Vulkan.Allocations;
-using Latte.NewRenderer.Renderer.Vulkan.Builders;
-using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
-using Latte.NewRenderer.Renderer.Vulkan.Extensions;
-using Latte.NewRenderer.Renderer.Vulkan.ImGui;
-using Latte.NewRenderer.Renderer.Vulkan.Temp;
-using Latte.NewRenderer.Vulkan.Extensions;
+using Latte.Windowing.Renderer.Vulkan.Allocations;
+using Latte.Windowing.Renderer.Vulkan.Builders;
+using Latte.Windowing.Renderer.Vulkan.Exceptions;
+using Latte.Windowing.Renderer.Vulkan.Extensions;
+using Latte.Windowing.Renderer.Vulkan.ImGui;
+using Latte.Windowing.Renderer.Vulkan.Temp;
+using Latte.Windowing.Vulkan.Extensions;
 using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
@@ -24,11 +24,11 @@ using System.Runtime.InteropServices;
 using VMASharp;
 using LatteShader = Latte.Assets.Shader;
 using LatteTexture = Latte.Assets.Texture;
-using Mesh = Latte.NewRenderer.Renderer.Vulkan.Temp.Mesh;
-using Shader = Latte.NewRenderer.Renderer.Vulkan.Temp.Shader;
-using Texture = Latte.NewRenderer.Renderer.Vulkan.Temp.Texture;
+using Mesh = Latte.Windowing.Renderer.Vulkan.Temp.Mesh;
+using Shader = Latte.Windowing.Renderer.Vulkan.Temp.Shader;
+using Texture = Latte.Windowing.Renderer.Vulkan.Temp.Texture;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 internal unsafe sealed class VkEngine : IDisposable
 {

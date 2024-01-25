@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 [method: SetsRequiredMembers]
 internal readonly struct VkVertexInputDescription( VertexInputAttributeDescription[] attributes, VertexInputBindingDescription[] bindings )

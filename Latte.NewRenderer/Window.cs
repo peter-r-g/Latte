@@ -1,12 +1,12 @@
-﻿using Latte.NewRenderer.Input;
-using Latte.NewRenderer.Renderer.Vulkan;
+﻿using Latte.Windowing.Input;
+using Latte.Windowing.Renderer.Vulkan;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using Silk.NET.Windowing.Glfw;
 using System;
 using System.Numerics;
 
-namespace Latte.NewRenderer;
+namespace Latte.Windowing;
 
 public class Window
 {
@@ -64,7 +64,7 @@ public class Window
 	{
 		engine.ImGuiController.Update( (float)dt );
 
-		window.Title = $"Latte.NewRenderer ({(int)(1 / dt)} FPS)";
+		window.Title = $"Latte.Windowing ({(int)(1 / dt)} FPS)";
 
 		UpdateCamera( dt );
 

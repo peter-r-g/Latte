@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using VMASharp;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 internal sealed class VkStatistics(
 	IReadOnlyDictionary<string, TimeSpan> initializationTimings,

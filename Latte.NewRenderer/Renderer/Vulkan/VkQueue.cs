@@ -1,4 +1,4 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
+﻿using Latte.Windowing.Renderer.Vulkan.Exceptions;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using System;
@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 internal sealed class VkQueue : IDisposable
 {

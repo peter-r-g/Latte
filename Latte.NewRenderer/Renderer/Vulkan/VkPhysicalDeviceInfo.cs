@@ -1,9 +1,9 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
+﻿using Latte.Windowing.Renderer.Vulkan.Exceptions;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Latte.NewRenderer.Renderer.Vulkan;
+namespace Latte.Windowing.Renderer.Vulkan;
 
 internal readonly struct VkPhysicalDeviceInfo
 {

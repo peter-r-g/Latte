@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Latte.NewRenderer.Renderer.Abstractions.Extensions;
+namespace Latte.Windowing.Renderer.Abstractions.Extensions;
 
 internal static class BufferExtensions
 {

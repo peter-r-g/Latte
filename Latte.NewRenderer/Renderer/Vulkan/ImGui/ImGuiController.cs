@@ -1,9 +1,9 @@
 ﻿using ImGuiNET;
-using Latte.NewRenderer.Extensions;
-using Latte.NewRenderer.Renderer.Vulkan.Allocations;
-using Latte.NewRenderer.Renderer.Vulkan.Builders;
-using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
-using Latte.NewRenderer.Renderer.Vulkan.Extensions;
+using Latte.Windowing.Extensions;
+using Latte.Windowing.Renderer.Vulkan.Allocations;
+using Latte.Windowing.Renderer.Vulkan.Builders;
+using Latte.Windowing.Renderer.Vulkan.Exceptions;
+using Latte.Windowing.Renderer.Vulkan.Extensions;
 using Silk.NET.Input;
 using Silk.NET.Input.Extensions;
 using Silk.NET.Vulkan;
@@ -15,7 +15,7 @@ using VMASharp;
 using Buffer = Silk.NET.Vulkan.Buffer;
 using LatteShader = Latte.Assets.Shader;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.ImGui;
+namespace Latte.Windowing.Renderer.Vulkan.ImGui;
 
 public sealed class ImGuiController : IDisposable
 {

@@ -1,10 +1,10 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Exceptions;
+﻿using Latte.Windowing.Renderer.Vulkan.Exceptions;
 using Silk.NET.Vulkan;
 using System;
 using System.Runtime.InteropServices;
 using Buffer = Silk.NET.Vulkan.Buffer;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Builders;
+namespace Latte.Windowing.Renderer.Vulkan.Builders;
 
 internal unsafe sealed class VkDescriptorUpdater : IDisposable
 {

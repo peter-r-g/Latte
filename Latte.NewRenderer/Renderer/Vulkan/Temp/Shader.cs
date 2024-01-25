@@ -2,7 +2,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Temp;
+namespace Latte.Windowing.Renderer.Vulkan.Temp;
 
 internal unsafe sealed class Shader : IDisposable
 {

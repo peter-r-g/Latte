@@ -1,8 +1,8 @@
-﻿using Latte.NewRenderer.Input;
+﻿using Latte.Windowing.Input;
 using Silk.NET.GLFW;
 using System;
 
-namespace Latte.NewRenderer.Extensions;
+namespace Latte.Windowing.Extensions;
 
 /// <summary>
 /// Contains extension methods for <see cref="CursorModeValue"/>.

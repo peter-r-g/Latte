@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Numerics;
 
-namespace Latte.NewRenderer;
+namespace Latte.Windowing;
 
 /// <summary>
 /// Contains data to modify the current view into the scene.

@@ -1,10 +1,10 @@
-﻿using Latte.NewRenderer.Renderer.Vulkan.Extensions;
+﻿using Latte.Windowing.Renderer.Vulkan.Extensions;
 using Silk.NET.Vulkan;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-namespace Latte.NewRenderer.Renderer.Vulkan.Allocations;
+namespace Latte.Windowing.Renderer.Vulkan.Allocations;
 
 internal sealed class DescriptorAllocator : IDisposable
 {

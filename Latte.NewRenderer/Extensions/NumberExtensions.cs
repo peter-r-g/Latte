@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Latte.NewRenderer.Vulkan.Extensions;
+namespace Latte.Windowing.Vulkan.Extensions;
 
 // Credit to https://stackoverflow.com/a/14488941 for the method.
 internal static class NumberExtensions

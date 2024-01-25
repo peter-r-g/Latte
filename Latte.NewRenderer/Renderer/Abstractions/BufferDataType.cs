@@ -1,4 +1,4 @@
-﻿namespace Latte.NewRenderer.Renderer.Abstractions;
+﻿namespace Latte.Windowing.Renderer.Abstractions;
 
 internal enum BufferDataType : byte
 {
