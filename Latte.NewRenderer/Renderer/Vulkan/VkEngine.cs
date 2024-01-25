@@ -1851,7 +1851,7 @@ internal unsafe sealed class VkEngine : RendererApi
 
 	protected override void Dispose( bool disposing )
 	{
-		base.Dispose();
+		base.Dispose( disposing );
 
 		if ( disposed )
 			return;
