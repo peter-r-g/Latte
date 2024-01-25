@@ -17,4 +17,11 @@ internal abstract class Buffer : IDisposable
 		Dispose( disposing: true );
 		GC.SuppressFinalize( this );
 	}
+
+	internal static Buffer Create( RendererApi rendererApi ) => rendererApi.Api switch
+	{
+		RenderApi.None => throw new NotImplementedException(),
+		RenderApi.Vulkan => throw new NotImplementedException(),
+		_ => throw new InvalidOperationException( "" )
+	};
 }
