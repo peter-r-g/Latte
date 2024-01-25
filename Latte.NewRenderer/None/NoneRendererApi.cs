@@ -16,11 +16,6 @@ internal sealed class NoneRendererApi : RendererApi
 		throw new System.NotImplementedException();
 	}
 
-	internal override void DrawIndexed( VertexArray vao )
-	{
-		throw new System.NotImplementedException();
-	}
-
 	internal override void DrawIndexed( VertexArray vao, uint indexCount )
 	{
 		throw new System.NotImplementedException();
