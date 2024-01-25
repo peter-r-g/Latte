@@ -13,7 +13,7 @@ internal abstract class VertexArray
 
 	internal abstract void AddVertexBuffer( VertexBuffer vbo );
 
-	internal static VertexArray Create() => RendererApi.Current.Api switch
+	internal static VertexArray Create( RendererApi rendererApi ) => rendererApi.Api switch
 	{
 		RenderApi.None => throw new NotImplementedException(),
 		RenderApi.Vulkan => throw new NotImplementedException(),

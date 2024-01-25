@@ -1,6 +1,0 @@
-﻿namespace Latte.Windowing.Renderer.Abstractions;
-
-internal static class RenderCommand
-{
-	internal static void DrawIndexed( VertexArray vao, uint indexCount ) => RendererApi.Current.DrawIndexed( vao, indexCount );
-}

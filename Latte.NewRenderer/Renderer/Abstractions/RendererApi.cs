@@ -1,13 +1,9 @@
-﻿using Latte.Windowing.Renderer.None;
-using System;
-using System.Numerics;
+﻿using System;
 
 namespace Latte.Windowing.Renderer.Abstractions;
 
 internal abstract class RendererApi : IDisposable
 {
-	internal static RendererApi Current { get; set; } = new NoneRendererApi();
-
 	internal abstract RenderApi Api { get; }
 	internal abstract RenderMode Mode { get; set; }
 	internal abstract Viewport Viewport { get; set; }
