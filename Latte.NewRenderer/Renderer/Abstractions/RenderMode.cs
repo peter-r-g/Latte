@@ -1,4 +1,4 @@
-﻿namespace Latte.NewRenderer.Renderer;
+﻿namespace Latte.NewRenderer.Renderer.Abstractions;
 
 internal enum RenderMode : byte
 {

@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Latte.NewRenderer.Renderer;
+namespace Latte.NewRenderer.Renderer.Abstractions;
 
 [method: SetsRequiredMembers]
 internal struct BufferElement( string name, BufferDataType type )

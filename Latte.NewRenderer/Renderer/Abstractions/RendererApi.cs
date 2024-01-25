@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Numerics;
 
-namespace Latte.NewRenderer.Renderer;
+namespace Latte.NewRenderer.Renderer.Abstractions;
 
 internal abstract class RendererApi : IDisposable
 {

@@ -1,6 +1,6 @@
-﻿namespace Latte.NewRenderer.Renderer;
+﻿namespace Latte.NewRenderer.Renderer.Abstractions;
 
-internal abstract class IndexBuffer
+internal abstract class VertexBuffer
 {
 	internal abstract uint Count { get; }
 

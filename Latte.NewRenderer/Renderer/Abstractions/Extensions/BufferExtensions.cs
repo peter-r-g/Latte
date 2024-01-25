@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Latte.NewRenderer.Renderer.Abstractions;
 
-namespace Latte.NewRenderer.Renderer.Extensions;
+namespace Latte.NewRenderer.Renderer.Abstractions.Extensions;
 
 internal static class BufferExtensions
 {
@@ -22,7 +23,7 @@ internal static class BufferExtensions
 		var size = Unsafe.SizeOf<T>();
 		var ptr = Marshal.AllocHGlobal( size );
 		for ( var i = 0; i < data.Length; i++ )
-			Unsafe.Copy( (void*)(ptr + (size * i)), in data[i] );
+			Unsafe.Copy( (void*)(ptr + size * i), in data[i] );
 
 		buffer.SetData( (void*)ptr, (ulong)size );
 

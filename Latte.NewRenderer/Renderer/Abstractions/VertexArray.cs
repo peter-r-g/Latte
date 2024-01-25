@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Latte.NewRenderer.Renderer;
+namespace Latte.NewRenderer.Renderer.Abstractions;
 
 internal abstract class VertexArray
 {

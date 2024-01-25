@@ -1,7 +1,7 @@
-﻿using Latte.NewRenderer.Renderer.Extensions;
+﻿using Latte.NewRenderer.Renderer.Abstractions.Extensions;
 using System.Collections.Immutable;
 
-namespace Latte.NewRenderer.Renderer;
+namespace Latte.NewRenderer.Renderer.Abstractions;
 
 internal sealed class BufferLayout
 {

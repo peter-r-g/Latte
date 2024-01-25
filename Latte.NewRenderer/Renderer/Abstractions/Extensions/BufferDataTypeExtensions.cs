@@ -1,6 +1,7 @@
 ﻿using System;
+using Latte.NewRenderer.Renderer.Abstractions;
 
-namespace Latte.NewRenderer.Renderer.Extensions;
+namespace Latte.NewRenderer.Renderer.Abstractions.Extensions;
 
 internal static class BufferDataTypeExtensions
 {
