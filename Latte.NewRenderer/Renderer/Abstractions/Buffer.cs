@@ -4,7 +4,8 @@ namespace Latte.Windowing.Renderer.Abstractions;
 
 internal abstract class Buffer : IDisposable
 {
-	internal abstract BufferLayout Layout { get; init; }
+	internal required abstract BufferLayout Layout { get; init; }
+	internal required abstract BufferUsage Usage { get; init; }
 
 	internal unsafe abstract void SetData( void* dataPtr, ulong size );
 

@@ -6,7 +6,7 @@ namespace Latte.Windowing.Renderer.Abstractions;
 internal abstract class VertexArray
 {
 	internal abstract IEnumerable<VertexBuffer> VertexBuffers { get; }
-	internal abstract IndexBuffer IndexBuffer { get; set; }
+	internal abstract IndexBuffer? IndexBuffer { get; set; }
 
 	internal abstract void Bind();
 	internal abstract void Unbind();

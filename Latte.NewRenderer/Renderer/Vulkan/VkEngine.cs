@@ -34,6 +34,8 @@ namespace Latte.Windowing.Renderer.Vulkan;
 
 internal unsafe sealed class VkEngine : RendererApi
 {
+	internal static VkEngine Instance { get; private set; } = null!;
+
 	internal const int MaxFramesInFlight = 3;
 	private const int MaxObjects = 10_000;
 	private const int MaxLights = 10;
@@ -102,7 +104,7 @@ internal unsafe sealed class VkEngine : RendererApi
 		set => WireframeEnabled = value == RenderMode.Wireframe;
 	}
 
-	internal override Abstractions.Viewport Viewport { get; set; }
+	internal override Renderer.Abstractions.Viewport Viewport { get; set; }
 
 	private DescriptorSetLayout frameSetLayout;
 	private DescriptorSetLayout singleTextureSetLayout;
@@ -140,6 +142,9 @@ internal unsafe sealed class VkEngine : RendererApi
 
 	internal VkEngine( IView view, IInputContext input )
 	{
+		// TODO: Support multiple engines before abstraction merge.
+		Instance = this;
+
 		Initialize( view, input );
 	}
 
